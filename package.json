@@ -1,0 +1,25 @@
+{
+  "name": "study-app",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev:api": "npm run dev -w @study/api",
+    "dev:mobile": "npm run start -w @study/mobile",
+    "db:generate": "npm run db:generate -w @study/api",
+    "db:migrate": "npm run db:migrate -w @study/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "ai:check": "npm run ai:check -w @study/api",
+    "transcription:check": "npm run transcription:check -w @study/api --",
+    "analytics:report": "npm run analytics:report -w @study/api --",
+    "owner:check": "npm run owner:check -w @study/api --"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

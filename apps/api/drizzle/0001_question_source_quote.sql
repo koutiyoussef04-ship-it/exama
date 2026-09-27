@@ -1,0 +1,1 @@
+ALTER TABLE "questions" ADD COLUMN "source_quote" text DEFAULT '' NOT NULL;

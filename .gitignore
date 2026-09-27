@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env*.local
+*.tsbuildinfo
+.DS_Store
+
+# API local file storage (uploaded PDFs)
+apps/api/storage/
+
+# Store credentials (Google Play service account, App Store Connect keys) — never commit
+*service-account*.json
+*.p8
