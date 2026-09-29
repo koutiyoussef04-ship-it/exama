@@ -338,7 +338,7 @@ test('basic: no audio/video lectures (refused before any transcription); extra P
 
 // ---------------------------------------------------------------- the Free plan's single lecture
 
-test('free: exactly one lecture per account, up to 45 minutes, minutes reserved before processing', async () => {
+test('free: exactly one lecture per account, 45 minutes, minutes reserved before processing', async () => {
   const { token, id: userId } = await newUser(undefined, null);
   const e = await status(token);
   assert.deepEqual(
@@ -347,22 +347,16 @@ test('free: exactly one lecture per account, up to 45 minutes, minutes reserved 
   );
   const doc = await readyCourse(token);
 
-  // Too long: refused before anything is stored, reserved or transcribed.
-  const long = await upload(token, doc.id, wav(46));
-  assert.deepEqual([long.status, long.body.code, long.body.feature, long.body.limit, long.body.requested, long.body.tier], [402, 'premium_required', 'media_length', 45, 46, 'free']);
-  assert.match(long.body.error, /free lecture/);
-  assert.deepEqual([(await status(token)).usage.mediaUploadsThisMonth, (await status(token)).usage.mediaMinutesThisMonth], [0, 0], 'nothing reserved');
-  assert.equal((await sql`select count(*)::int as n from course_materials where user_id = ${userId}`)[0].n, 0);
-
-  // Exactly 45 minutes: accepted; the lecture and its 45 minutes are reserved before processing starts.
+  // Exactly 45 minutes: the whole lecture; the lecture and its 45 minutes are reserved before processing starts.
   const ok = await upload(token, doc.id, wav(45));
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.deepEqual([ok.body.partial, ok.body.processedMinutes, ok.body.fullDurationSeconds], [false, 45, 2700]);
   const reserved = await status(token);
   assert.deepEqual([reserved.usage.mediaUploadsThisMonth, reserved.usage.mediaMinutesThisMonth], [1, 45]);
   const m = await processed(token, doc.id, ok.body.id);
   assert.equal(m.status, 'ready');
   const started = (await events(userId)).find((x) => x.name === 'material_processing_started');
-  assert.deepEqual([started?.properties.reserved_minutes, started?.properties.lecture_allowance], [45, 'once']);
+  assert.deepEqual([started?.properties.reserved_minutes, started?.properties.lecture_allowance, started?.properties.partial], [45, 'once', undefined]);
 
   // Used up: a second lecture — even a 1-minute one — opens the Student paywall.
   const second = await upload(token, doc.id, wav(1));
@@ -371,6 +365,57 @@ test('free: exactly one lecture per account, up to 45 minutes, minutes reserved 
   // PDFs still work for Free.
   assert.equal((await upload(token, doc.id, new Uint8Array(pdf), { type: 'application/pdf', title: 'more.pdf' })).status, 201);
   await materialJobs.idle();
+});
+
+test('free: a longer lecture is not refused — its first 45 minutes are processed, never more', async () => {
+  // 60 min → the first 45 are transcribed and charged; the rest is never sent to the transcription service.
+  const a = await newUser(undefined, null);
+  const docA = await readyCourse(a.token);
+  const long = await upload(a.token, docA.id, wav(60));
+  assert.equal(long.status, 201, JSON.stringify(long.body));
+  assert.deepEqual([long.body.partial, long.body.processedMinutes, long.body.fullDurationSeconds], [true, 45, 3600]);
+  assert.deepEqual([(await status(a.token)).usage.mediaUploadsThisMonth, (await status(a.token)).usage.mediaMinutesThisMonth], [1, 45], '45 reserved, not 60');
+  const done = await processed(a.token, docA.id, long.body.id);
+  assert.equal(done.status, 'ready');
+  assert.deepEqual([done.partial, done.processedMinutes, done.fullDurationSeconds, done.durationSeconds], [true, 45, 3600, 2700], 'transcribed up to 45:00 only');
+  assert.equal((await status(a.token)).usage.mediaMinutesThisMonth, 45);
+  const started = (await events(a.id)).find((x) => x.name === 'material_processing_started');
+  assert.deepEqual([started?.properties.reserved_minutes, started?.properties.partial], [45, true]);
+  // Still one lecture per account.
+  assert.equal((await upload(a.token, docA.id, wav(1))).body.feature, 'media_uploads');
+
+  // Boundaries around 45:00.
+  for (const [minutes, partial, processedMinutes] of [
+    [44 + 59 / 60, false, 45], // 44:59 → whole lecture (rounded up to 45 min)
+    [45 + 1 / 60, true, 45], // 45:01 → first 45 min
+    [240, true, 45], // server-wide maximum length → still first 45 min
+  ] as const) {
+    const u = await newUser(undefined, null);
+    const d = await readyCourse(u.token);
+    const r = await upload(u.token, d.id, wav(minutes));
+    assert.equal(r.status, 201, `${minutes} min: ${JSON.stringify(r.body)}`);
+    assert.deepEqual([r.body.partial, r.body.processedMinutes], [partial, processedMinutes], `${minutes} min`);
+    assert.equal((await status(u.token)).usage.mediaMinutesThisMonth, 45);
+  }
+  await materialJobs.idle();
+
+  // A failed long lecture: retrying re-reserves only 45 minutes; a new upload is still refused.
+  const b = await newUser(undefined, null);
+  const docB = await readyCourse(b.token);
+  const failing = await upload(b.token, docB.id, wav(90, 'EXAMA-MOCK:FAIL'));
+  assert.equal(failing.status, 201);
+  const failed = await processed(b.token, docB.id, failing.body.id);
+  assert.equal(failed.status, 'failed');
+  assert.equal((await status(b.token)).usage.mediaMinutesThisMonth, 0, 'minutes released after the outage');
+  const [row] = await sql`select file_key from course_materials where id = ${failing.body.id}`;
+  await writeFile(storagePath(row.file_key), wav(90)); // the service works again
+  const retry = await call<Res>(`/documents/${docB.id}/materials/${failing.body.id}/retry`, send('POST', {}, b.token));
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.deepEqual([retry.body.partial, retry.body.processedMinutes], [true, 45]);
+  const retried = await processed(b.token, docB.id, failing.body.id);
+  assert.deepEqual([retried.status, retried.durationSeconds, retried.fullDurationSeconds], ['ready', 2700, 5400]);
+  assert.equal((await status(b.token)).usage.mediaMinutesThisMonth, 45);
+  assert.equal((await upload(b.token, docB.id, wav(1))).body.feature, 'media_uploads');
 });
 
 test('free lecture cannot be bypassed: same file again, deleting the course, next month, parallel uploads, retries', async () => {
@@ -449,17 +494,17 @@ test('downgrading Student → Basic stops new lectures; upgrading Basic → Stud
   assert.equal((await upload(token, doc.id, wav(2))).body.feature, 'lectures');
 });
 
-test('trial: one lecture of up to 30 minutes for the whole trial', async () => {
+test('trial: one lecture for the whole trial — its first 45 minutes, like Free', async () => {
   const { token } = await newUser(undefined, null);
   await purchase(token, 'student_monthly', true);
   const doc = await readyCourse(token);
-  const tooLong = await upload(token, doc.id, wav(31));
-  assert.deepEqual([tooLong.status, tooLong.body.feature, tooLong.body.limit, tooLong.body.tier], [402, 'media_length', 30, 'trial']);
-  assert.match(tooLong.body.error, /free trial/);
-  assert.equal((await upload(token, doc.id, wav(30))).status, 201);
+  const long = await upload(token, doc.id, wav(60));
+  assert.equal(long.status, 201, JSON.stringify(long.body));
+  assert.deepEqual([long.body.partial, long.body.processedMinutes], [true, 45]);
   await materialJobs.idle();
   const again = await upload(token, doc.id, wav(1));
   assert.deepEqual([again.status, again.body.feature, again.body.tier], [402, 'media_uploads', 'trial']);
+  assert.match(again.body.error, /free trial/);
 });
 
 test('student: lectures up to 120 minutes, 300 minutes per month (minutes are the cost cap)', async () => {

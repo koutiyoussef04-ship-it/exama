@@ -48,6 +48,36 @@ const envSchema = z
     PLAN_FEATURES_OVERRIDE: z.string().optional(),
     // iOS bundle id; Apple transactions for any other app are rejected.
     APPLE_BUNDLE_ID: z.string().trim().min(1).default('com.exama.app'),
+    // ---- App Store (iOS) ----
+    // true = accept App Store purchases, verified with Apple's certificates (certs/apple).
+    APPLE_IAP_ENABLED: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v === 'true'),
+    // The app's numeric Apple ID (App Store Connect → App Information → Apple ID). Needed to accept
+    // Production purchases; without it only Sandbox (TestFlight / App Review) purchases are accepted.
+    APPLE_APP_APPLE_ID: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? Number(v) : undefined))
+      .pipe(z.number().int().positive().optional()),
+    // Accept Sandbox purchases (TestFlight, App Review, sandbox testers). App Review needs this on.
+    APPLE_ALLOW_SANDBOX: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v !== 'false'),
+    // Check Apple's certificates for revocation (OCSP, outbound HTTPS to Apple). Keep on in production.
+    APPLE_ONLINE_CHECKS: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v !== 'false'),
+    // Directory with Apple's root certificates (.cer). Default: apps/api/certs/apple.
+    APPLE_ROOT_CERTS_DIR: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
     // ---- Google Play Billing (Android) ----
     // Android package name; Play purchases for any other app are rejected.
     GOOGLE_PLAY_PACKAGE_NAME: z.string().trim().min(1).default('com.exama.app'),
@@ -67,6 +97,21 @@ const envSchema = z
       .optional()
       .transform((v) => v || undefined),
     GOOGLE_PUBSUB_SERVICE_ACCOUNT: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
+    // ---- Email (password-reset codes) ----
+    // log = print emails to the server log (development only); resend = send with Resend (resend.com);
+    // disabled = no email (password reset can't work). Unset: log in development, disabled in production.
+    EMAIL_PROVIDER: z.enum(['log', 'resend', 'disabled']).optional(),
+    RESEND_API_KEY: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
+    // Sender, e.g. "Exama <no-reply@your-domain.com>" (the domain must be verified with the provider).
+    EMAIL_FROM: z
       .string()
       .trim()
       .optional()
@@ -140,6 +185,19 @@ const envSchema = z
         message: 'TRANSCRIPTION_PROVIDER=assemblyai but ASSEMBLYAI_API_KEY is empty. Put your key in apps/api/.env, or set TRANSCRIPTION_PROVIDER=mock.',
       });
     }
+    if (production && e.EMAIL_PROVIDER === 'log') {
+      ctx.addIssue({ code: 'custom', path: ['EMAIL_PROVIDER'], message: 'EMAIL_PROVIDER=log is not allowed when NODE_ENV=production (reset codes would only reach the server log).' });
+    }
+    if (e.EMAIL_PROVIDER === 'resend' && (!e.RESEND_API_KEY || !e.EMAIL_FROM)) {
+      ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'EMAIL_PROVIDER=resend needs RESEND_API_KEY and EMAIL_FROM.' });
+    }
+    if (production && e.APPLE_IAP_ENABLED && !e.APPLE_APP_APPLE_ID) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['APPLE_APP_APPLE_ID'],
+        message: 'APPLE_IAP_ENABLED=true in production needs APPLE_APP_APPLE_ID (App Store Connect → App Information → Apple ID).',
+      });
+    }
     if (e.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON && !parseServiceAccount(e.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)) {
       ctx.addIssue({
         code: 'custom',
@@ -187,7 +245,11 @@ function loadConfig() {
       | 'mock'
       | 'assemblyai'
       | 'disabled',
+    EMAIL_PROVIDER: (parsed.data.EMAIL_PROVIDER ?? (parsed.data.NODE_ENV === 'production' ? 'disabled' : 'log')) as 'log' | 'resend' | 'disabled',
   };
+  if (cfg.EMAIL_PROVIDER === 'disabled') {
+    console.warn('⚠ EMAIL_PROVIDER is disabled: password-reset emails are not sent. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.');
+  }
   if (cfg.ANTHROPIC_API_KEY && !cfg.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
     console.warn('⚠ ANTHROPIC_API_KEY does not start with "sk-ant-" — double-check you copied the whole key.');
   }

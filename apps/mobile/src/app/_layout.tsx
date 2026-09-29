@@ -11,6 +11,7 @@ import { API_CONFIG_ERROR } from '@/lib/api';
 import { platform, track } from '@/lib/analytics';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PreferencesProvider, usePreferences } from '@/lib/preferences';
+import { clearReminders, syncReminders, useReminderTaps } from '@/lib/reminders';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -18,6 +19,7 @@ function RootNavigator() {
   const { t } = useTranslation();
   const { user, isLoading } = useAuth();
   useAppOpenedTracking(isLoading ? null : !!user);
+  useStudyReminders(isLoading ? null : !!user);
 
   useEffect(() => {
     if (!isLoading) void SplashScreen.hideAsync().catch(() => {});
@@ -39,6 +41,7 @@ function RootNavigator() {
       <Stack.Protected guard={!user}>
         <Stack.Screen name="sign-in" options={{ title: t('nav.signIn'), headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ title: t('nav.createAccount') }} />
+        <Stack.Screen name="forgot-password" options={{ title: t('nav.forgotPassword') }} />
       </Stack.Protected>
       <Stack.Protected guard={!!user}>
         <Stack.Screen name="index" options={{ title: t('nav.courses') }} />
@@ -70,6 +73,24 @@ if (Platform.OS !== 'web') {
     const sub = AppState.addEventListener('change', (state) => setFocused(state === 'active'));
     return () => sub.remove();
   });
+}
+
+/**
+ * Daily study reminders (iOS/Android): rebuilt from the student's plans on launch and whenever the
+ * app comes back to the foreground; removed on sign-out. Taps open the plan or course.
+ */
+function useStudyReminders(signedIn: boolean | null) {
+  useReminderTaps(signedIn === true);
+  useEffect(() => {
+    if (signedIn === null) return;
+    if (!signedIn) {
+      void clearReminders();
+      return;
+    }
+    void syncReminders();
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && void syncReminders());
+    return () => sub.remove();
+  }, [signedIn]);
 }
 
 /** app_opened on launch (once the session is restored) and whenever the app returns from the background. */

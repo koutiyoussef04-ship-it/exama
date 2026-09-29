@@ -89,6 +89,12 @@ export default function SignIn() {
           returnKeyType="go"
           onSubmitEditing={submit}
         />
+        <Link
+          href={{ pathname: '/forgot-password', params: email.trim() ? { email: email.trim() } : {} }}
+          style={{ color: colors.primary, fontSize: 14, fontWeight: '600', alignSelf: 'flex-end', paddingVertical: space(1) }}
+        >
+          {t('auth.forgotPassword')}
+        </Link>
         <ErrorText error={error} />
         <Button title={t('auth.signIn')} onPress={submit} loading={loading} disabled={!canSubmit} />
         <Link href="/sign-up" style={{ color: colors.primary, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: space(3) }}>

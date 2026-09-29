@@ -62,15 +62,18 @@ export const formatDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 export const formatNumber = (n: number) => new Intl.NumberFormat(locale()).format(n);
 
-/** "1 course • 1 exam • 5 practice questions" — built from the server's trial limits. */
+/** "1 course · 3 exams · 30 practice questions · 1 lecture (audio or video) up to 45 min" — from the server's trial limits. */
 export function trialAllowance(l: Limits): string {
   const t = i18n.t.bind(i18n);
   return [
     t('paywall.courses', { count: l.courses ?? 0 }),
     t('paywall.exams', { count: l.examGenerationsPerMonth ?? 0 }),
     t('paywall.practice', { count: l.practiceQuestionsPerMonth ?? 0 }),
-  ].join(' • ');
+    ...(l.mediaUploadsPerMonth ? [trialLecture(l)] : []),
+  ].join(' · ');
 }
+/** "1 lecture (audio or video) up to 45 min" */
+export const trialLecture = (l: Limits) => i18n.t('paywall.lectureAllowance', { count: l.mediaUploadsPerMonth ?? 0, minutes: l.maxMediaMinutesPerFile });
 
 /** Allowance left before the paywall, or null when unlimited. */
 export const remaining = (limit: number | null, used: number) => (limit === null ? null : Math.max(0, limit - used));

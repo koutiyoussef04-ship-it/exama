@@ -30,6 +30,13 @@ if (APP_ENV !== 'development') {
   // Fail the build instead of shipping an app that calls localhost or plain http.
   const api = validateReleaseApiUrl(process.env.EXPO_PUBLIC_API_URL);
   if (!api.ok) throw new Error(`[app.config] APP_ENV=${APP_ENV}: ${api.error}`);
+  // Legal/support details: without them the Privacy, Terms and Support screens show [placeholders].
+  const missing = ['EXPO_PUBLIC_SUPPORT_EMAIL', 'EXPO_PUBLIC_PRIVACY_URL', 'EXPO_PUBLIC_TERMS_URL', 'EXPO_PUBLIC_COMPANY_NAME', 'EXPO_PUBLIC_COMPANY_ADDRESS'].filter(
+    (k) => !process.env[k]?.trim(),
+  );
+  if (missing.length) {
+    console.warn(`⚠ [app.config] APP_ENV=${APP_ENV}: ${missing.join(', ')} not set — the legal and support screens will show placeholders. Set them in the EAS environment before a store release.`);
+  }
 }
 
 /**
@@ -99,7 +106,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       predictiveBackGestureEnabled: false,
       // The app only needs the network and Google Play Billing. PDFs, PowerPoints and audio come from the
       // system document picker (Storage Access Framework), lecture videos from the Android Photo Picker:
-      // no storage or media permission.
+      // no storage or media permission. expo-notifications adds POST_NOTIFICATIONS (asked only when the
+      // student turns on study reminders) and RECEIVE_BOOT_COMPLETED (keeps reminders after a restart).
       permissions: ['android.permission.INTERNET', 'com.android.vending.BILLING'],
       blockedPermissions: [
         'android.permission.READ_EXTERNAL_STORAGE',
@@ -130,6 +138,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       // Lecture videos come from Photos (iOS PHPicker) / the Gallery (Android Photo Picker): neither
       // asks for a permission. The app never uses the camera or microphone: no usage strings, and
       // CAMERA / RECORD_AUDIO stay blocked on Android. iOS still needs the photo-library purpose string.
+      // Daily study reminders: local notifications only (no push server). Android: a white icon + brand tint.
+      ['expo-notifications', { icon: './assets/images/android-icon-monochrome.png', color: BRAND.primary }],
       [
         'expo-image-picker',
         {
@@ -142,6 +152,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     experiments: { typedRoutes: true },
     extra: {
       appEnv: APP_ENV,
+      // For store links on the web (the web build has no android.package).
+      androidPackage: BUNDLE_ID,
       // Lets Expo Go honour right-to-left layouts (dev builds get it from the expo-localization plugin).
       supportsRTL: true,
       ...(process.env.EAS_PROJECT_ID ? { eas: { projectId: process.env.EAS_PROJECT_ID } } : {}),

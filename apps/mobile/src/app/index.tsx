@@ -1,13 +1,12 @@
-import { DOCUMENT_PICKER_TYPES, type DocumentSummary } from '@study/shared';
+import type { DocumentSummary } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, router, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Badge, Body, Button, Card, Chevron, colors, EmptyState, ErrorState, ErrorText, Loading, Screen, space, Title } from '@/components/ui';
+import { Badge, Body, Button, Card, Chevron, colors, EmptyState, ErrorState, Loading, Screen, space, Title } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { openPaywall, planSummary, remaining, useEntitlement } from '@/lib/billing';
-import { courseCapReached, useCourseUpload } from '@/lib/courses';
 
 const STATUS_TONE: Record<DocumentSummary['status'], 'primary' | 'success' | 'danger'> = {
   processing: 'primary',
@@ -29,12 +28,8 @@ export default function Courses() {
   const statusLabel = (s: DocumentSummary['status']) =>
     s === 'processing' ? t('home.statusProcessing') : s === 'ready' ? t('home.statusReady') : t('home.statusFailed');
 
-  const upload = useCourseUpload();
   const hasDocs = !!docs.data?.length;
   const e = entitlement.data;
-  const startUpload = () => {
-    if (!courseCapReached(e)) upload.mutate(DOCUMENT_PICKER_TYPES);
-  };
 
   const bannerDetail = () => {
     if (!e) return '';
@@ -64,15 +59,9 @@ export default function Courses() {
         <Body muted>{hasDocs ? t('home.subtitleReturning') : t('home.subtitleNew')}</Body>
       </View>
 
-      {/* One entry for everything a course learns from: PDF, PowerPoint, audio, video (the same selector as the course screen). */}
-      {hasDocs ? (
-        <Button title={t('home.addMaterial')} onPress={() => router.push('/add-material')} />
-      ) : (
-        <>
-          <Button title={upload.isPending ? t('home.uploading') : t('home.upload')} onPress={startUpload} loading={upload.isPending} />
-          <ErrorText error={upload.error} />
-        </>
-      )}
+      {/* One entry for everything a course learns from — PDF, PowerPoint, audio, video — on web, iOS and
+          Android alike (the same selector as the course screen). */}
+      <Button title={t('home.addMaterial')} onPress={() => router.push('/add-material')} />
 
       {e && !e.isPremium && (
         <Pressable onPress={() => openPaywall(e.trialEnded ? 'trial_ended' : 'courses_banner')} accessibilityRole="button">

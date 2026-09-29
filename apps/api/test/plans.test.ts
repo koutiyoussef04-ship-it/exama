@@ -177,12 +177,14 @@ test('limits: Basic has no audio/video; Student meaningful; Pro substantially hi
     if (!k.startsWith('media')) assert.ok(b[k]! >= LIMITS.free[k]!, `basic.${k} ≥ free.${k}`);
   }
   assert.ok(p.maxQuestionsPerExam > s.maxQuestionsPerExam && s.maxQuestionsPerExam > b.maxQuestionsPerExam);
-  // Free: one lecture per account (never renewed); the trial keeps its own small lecture allowance.
+  // Free: one lecture per account (never renewed); the trial: one lecture for the whole trial, same length.
   assert.deepEqual(
     [LIMITS.free.mediaUploadsPerMonth, LIMITS.free.mediaMinutesPerMonth, LIMITS.free.maxMediaMinutesPerFile, LIMITS.trial.mediaUploadsPerMonth, LIMITS.trial.mediaMinutesPerMonth],
-    [1, 45, 45, 1, 30],
-    'Free: one 45-minute lecture per account; trial: one 30-minute lecture',
+    [1, 45, 45, 1, 45],
+    'Free: one 45-minute lecture per account; trial: one 45-minute lecture',
   );
+  // Basic: 3 courses at once (Student 15, Pro 50).
+  assert.deepEqual([LIMITS.free.courses, LIMITS.basic.courses, LIMITS.student.courses, LIMITS.pro.courses], [1, 3, 15, 50]);
 });
 
 test('trial: the full experience (every feature) under the restricted trial caps', async () => {

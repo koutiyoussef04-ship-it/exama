@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { WEAK_TOPIC_THRESHOLD, type DocumentProgress } from '@study/shared';
 import { getEntitlement } from '../billing/entitlements.js';
 import { db } from '../db/client.js';
@@ -111,13 +111,14 @@ export async function getProgress(userId: string, documentId: string): Promise<D
       .from(topicMastery)
       .where(and(eq(topicMastery.userId, userId), eq(topicMastery.documentId, documentId)))
       .orderBy(asc(topicMastery.mastery)),
+    // Exams with their question counts. (A correlated raw-SQL subquery here once rendered unqualified
+    // column names — `exam_id = id` inside the subquery — and counted 0 questions for every exam.)
     db
-      .select({
-        exam: exams,
-        questionCount: sql<number>`(select count(*)::int from ${questions} where ${questions.examId} = ${exams.id})`,
-      })
+      .select({ exam: exams, questionCount: count(questions.id) })
       .from(exams)
+      .leftJoin(questions, eq(questions.examId, exams.id))
       .where(and(eq(exams.userId, userId), eq(exams.documentId, documentId)))
+      .groupBy(exams.id)
       .orderBy(desc(exams.createdAt)),
   ]);
   const topics = mastery.filter((m) => current.has(m.topic)).map((m) => ({

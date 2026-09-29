@@ -1,6 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import type { BillingPlatform, BillingProviderId } from '@study/shared';
 import { config, parseServiceAccount } from '../config.js';
 import { createAppleProvider, type AppleVerifier } from './providers/apple.js';
+import { createAppleVerifier, loadRootCertificates } from './providers/apple-verifier.js';
 import { createGoogleProvider } from './providers/google.js';
 import { createPlayApi, type GooglePlayApi } from './providers/google-play-api.js';
 import { mockProvider } from './providers/mock.js';
@@ -16,10 +18,18 @@ import type { BillingProvider } from './providers/types.js';
  */
 
 /**
- * Verifies Apple-signed data. null until implemented with @apple/app-store-server-library
- * (see docs/app-store/apple-subscriptions.md) — Apple purchases are refused until then.
+ * Verifies Apple-signed data (StoreKit 2 JWS) against Apple's root certificates. null unless
+ * APPLE_IAP_ENABLED=true — App Store purchases are refused (503) until then.
  */
-export const appleVerifier: AppleVerifier | null = null;
+export const appleVerifier: AppleVerifier | null = config.APPLE_IAP_ENABLED
+  ? createAppleVerifier({
+      rootCertificates: loadRootCertificates(config.APPLE_ROOT_CERTS_DIR ?? fileURLToPath(new URL('../../certs/apple/', import.meta.url))),
+      bundleId: config.APPLE_BUNDLE_ID,
+      appAppleId: config.APPLE_APP_APPLE_ID,
+      allowSandbox: config.APPLE_ALLOW_SANDBOX,
+      onlineChecks: config.APPLE_ONLINE_CHECKS,
+    })
+  : null;
 
 /** Play Developer API client; null until GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is set. */
 export const googlePlayApi: GooglePlayApi | null = config.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON

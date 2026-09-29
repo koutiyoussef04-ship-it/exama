@@ -1,4 +1,4 @@
-import type { LoginInput, RegisterInput, User } from '@study/shared';
+import type { LoginInput, PasswordResetConfirmInput, RegisterInput, User } from '@study/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, setAuthToken, setUnauthorizedHandler } from './api';
@@ -9,6 +9,8 @@ type AuthState = {
   isLoading: boolean;
   signIn: (input: LoginInput) => Promise<void>;
   signUp: (input: RegisterInput) => Promise<void>;
+  /** Password reset: the new password is set and the student is signed in with a fresh session. */
+  resetPassword: (input: PasswordResetConfirmInput) => Promise<void>;
   signOut: () => Promise<void>;
   /** True after the server rejected the saved session (expired token, deleted account). */
   sessionExpired: boolean;
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     signIn: async (input) => finish(await api.login(input)),
     signUp: async (input) => finish(await api.register(input)),
+    resetPassword: async (input) => finish(await api.confirmPasswordReset(input)),
     signOut,
     sessionExpired,
   };

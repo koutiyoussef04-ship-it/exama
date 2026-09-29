@@ -22,6 +22,13 @@ export function limitMessage(body: LimitErrorBody): string {
   return t(key, { count: body.limit, plan, requested: body.requested ?? 0, left: Math.max(0, body.limit - body.used) });
 }
 
+/**
+ * Processing failures a retry can't fix: the file itself (no text, unreadable, old .ppt, wrong type,
+ * too large). Everything else (AI busy, server trouble) is worth another try.
+ */
+const FILE_PROBLEMS = new Set(['pdf_no_text', 'pptx_no_text', 'pdf_unreadable', 'pptx_unreadable', 'ppt_legacy', 'unsupported_format', 'not_pdf', 'file_too_large', 'file_missing']);
+export const isRetryableDocumentError = (code: string | null | undefined) => !code || !FILE_PROBLEMS.has(code);
+
 /** Translated processing-failure message for a document's errorCode. */
 export function documentErrorMessage(code: string | null, fallback: string | null): string {
   if (code && i18n.exists(`errors.codes.${code}`)) return t(`errors.codes.${code}` as 'errors.codes.processing_failed');

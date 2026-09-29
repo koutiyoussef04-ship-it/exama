@@ -1,7 +1,7 @@
 /**
  * Apple StoreKit 2 boundary: transaction → subscription mapping, account association,
- * notification handling. JWS verification is stubbed with a fake verifier here; in production it
- * must be Apple's SignedDataVerifier (not implemented yet → purchases refused with 503).
+ * notification handling. JWS verification is stubbed with a fake verifier here; the real verifier
+ * (Apple's SignedDataVerifier) is tested in apple-verifier.test.ts.
  */
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
@@ -150,7 +150,7 @@ test('App Store Server Notifications: renewal converts the trial, refund expires
   assert.equal(otherApp.handled, false);
 });
 
-test('until Apple verification is configured, the server refuses Apple data and purchases', async () => {
+test('with APPLE_IAP_ENABLED off, the server refuses Apple data and purchases', async () => {
   const r = await app.request('/billing/apple/notifications', { method: 'POST', body: JSON.stringify({ signedPayload: 'x' }), headers: { 'Content-Type': 'application/json' } });
   assert.equal(r.status, 503);
   assert.equal(((await r.json()) as { code: string }).code, 'apple_not_configured');

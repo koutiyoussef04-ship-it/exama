@@ -9,7 +9,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --env-file=.env --test test/flow.test.ts test/anthropic.test.ts test/anthropic-flow.test.ts test/config.test.ts test/analytics.test.ts test/billing.test.ts test/account.test.ts test/multilingual.test.ts test/apple.test.ts test/google-billing.test.ts test/plans.test.ts test/pptx.test.ts test/planner.test.ts test/study-plan.test.ts test/materials.test.ts test/media.test.ts test/assemblyai.test.ts",
+    "test": "tsx --env-file=.env --test test/flow.test.ts test/anthropic.test.ts test/anthropic-flow.test.ts test/config.test.ts test/analytics.test.ts test/billing.test.ts test/account.test.ts test/multilingual.test.ts test/apple.test.ts test/apple-verifier.test.ts test/password-reset.test.ts test/google-billing.test.ts test/plans.test.ts test/pptx.test.ts test/planner.test.ts test/study-plan.test.ts test/materials.test.ts test/media.test.ts test/assemblyai.test.ts",
     "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
     "transcription:check": "tsx --env-file=.env scripts/transcription-check.ts",
     "analytics:report": "tsx --env-file=.env scripts/analytics-report.ts",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@apple/app-store-server-library": "^3.1.0",
     "@hono/node-server": "^2.1.1",
     "@study/shared": "*",
     "bcryptjs": "^3.0.3",

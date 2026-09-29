@@ -47,7 +47,7 @@ study-app/
 │        ├─ app/               screens (file-based routes)
 │        │  ├─ _layout.tsx     providers + auth-guarded stack
 │        │  ├─ sign-in.tsx, sign-up.tsx
-│        │  ├─ index.tsx       course list + PDF upload
+│        │  ├─ index.tsx       course list + "Add material"
 │        │  ├─ documents/[id].tsx  summary, topics, mastery, start exam / weak-area practice
 │        │  └─ exams/[id].tsx  one-question-per-screen exam + results
 │        ├─ (account, paywall, language, delete-account, support, legal/[doc]).tsx
@@ -71,6 +71,7 @@ study-app/
 
 ```
 POST /auth/register · POST /auth/login · GET /auth/me · DELETE /auth/me { password }   (account deletion)
+POST /auth/password-reset/request { email, language? } → 202 always · POST /auth/password-reset/confirm { email, code, password } → signed in
 GET  /documents · POST /documents (multipart "file", optional "title", "language") · GET/DELETE /documents/:id · POST /documents/:id/reprocess
 GET  /documents/:id/progress        topic mastery, weak topics, exam history
 POST /documents/:id/exams           { kind: "standard" | "follow_up", questionCount, language? }
@@ -165,28 +166,29 @@ AI failures return JSON `{ error, code }`: `ai_auth` (bad key, 502), `ai_rate_li
 | Price | €0 | €9.99/month · €79.99/year | €14.99/month · €119.99/year | €24.99/month · €199.99/year |
 | In one line | try it | PDFs + PowerPoints | All materials + personalized learning | Maximum AI usage |
 | PDFs and PowerPoints (.pptx), course understanding, exams, practice | ✓ | ✓ | ✓ | ✓ |
-| Audio/video lectures | 1 lecture (≤ 45 min), once per account | — | ✓ | ✓ |
+| Courses at once | 1 | 3 | 15 | 50 |
+| Audio/video lectures | 1 lecture (first 45 min), once per account | — | ✓ | ✓ |
 | Practice | across course topics | across course topics | adaptive (weak topics, your mistakes) | adaptive |
 | Weak-topic analysis | — | — | ✓ | ✓ |
 | Study planner | even | even | adaptive (priorities + re-plans on results) | adaptive |
 
-Plus the **7-day trial** (once per account: every feature, restricted trial caps) and the **owner** account (unlimited, free, server config only). Features per tier live in `apps/api/src/billing/features.ts` (override: `PLAN_FEATURES_OVERRIDE`) and are enforced by the API (`GET /billing/status` → `features`, `accessPlan`).
+Plus the **7-day trial** (once per account: Student features; 1 course · 3 exams · 30 practice questions · 1 lecture up to 45 min — never below Free) and the **owner** account (unlimited, free, server config only). Features per tier live in `apps/api/src/billing/features.ts` (override: `PLAN_FEATURES_OVERRIDE`) and are enforced by the API (`GET /billing/status` → `features`, `accessPlan`).
 
 **Access is decided only by the API** (`GET /billing/status`): owner config → subscription state → plan features and limits → usage (this month, or the whole trial). The resolver's states: `free`, `trial`, `basic_monthly`, `basic_yearly`, `student_monthly`, `student_yearly`, `pro_monthly`, `pro_yearly`, `expired`, `owner` (reported to apps as `complimentary`, so the owner bypass is never revealed). The app just displays it; a 402 response (`code: limit_reached | premium_required`) opens the paywall.
 
 | Limit | Free (per month) | **Trial (whole 7 days)** | Basic (per month) | Student (per month) | Pro (per month) |
 |---|---|---|---|---|---|
-| Courses at once | 1 | 1 | 8 | 15 | 50 |
-| PDF / PowerPoint uploads | 3 | 1 | 10 | 30 | 100 |
-| Exams generated | 3 | 1 | 15 | 40 | 150 |
-| Practice questions | 12 | 5 | 120 | 300 | 1200 |
+| Courses at once | 1 | 1 | 3 | 15 | 50 |
+| PDF / PowerPoint uploads | 3 | 3 | 10 | 30 | 100 |
+| Exams generated | 3 | 3 | 15 | 40 | 150 |
+| Practice questions | 12 | 30 | 120 | 300 | 1200 |
 | Max questions per exam | 8 | 8 | 12 | 15 | 20 |
 | AI study plans (create / rebuild) | 1 | 1 | 3 | 10 | 30 |
 | Lecture uploads (audio/video) | **1 per account** | 1 | — | 30 | 80 |
-| Lecture minutes | **45 per account** | 30 | — | 300 | 720 |
-| Longest lecture | 45 min | 30 min | — | 120 min | 180 min |
+| Lecture minutes | **45 per account** | 45 | — | 300 | 720 |
+| Longest lecture processed | 45 min (first 45 of a longer one) | 45 min (first 45) | — | 120 min | 180 min |
 
-**Free's lecture is once per account, not per month** (`lectureAllowance: 'once'` in `GET /billing/status`): for the `free` tier the lecture counters cover the account's whole history, so deleting the course, uploading the same file again, retrying, or a lecture already used during a trial or an earlier subscription never gives it back. The 45-minute limit is checked and the minutes reserved before the file is stored or transcribed (transcription is capped at the reserved minutes). Retrying the *same* failed lecture is allowed; a new one gets 402 and the app opens the Student paywall (`free_lecture_used`). Basic stays without audio/video (`lectureAllowance: 'none'`).
+**Free's lecture is once per account, not per month** (`lectureAllowance: 'once'` in `GET /billing/status`): for the `free` tier the lecture counters cover the account's whole history, so deleting the course, uploading the same file again, retrying, or a lecture already used during a trial or an earlier subscription never gives it back. A longer lecture is accepted and only its **first 45 minutes** are transcribed and used (`minutesToReserve` in `billing/entitlements.ts`; AssemblyAI `audio_end_at`); the material keeps its full length (`original_duration_seconds`, migration `0009`) and the app explains it ("This lecture is 60 minutes. Free includes the first 45 minutes.") with a link to Student for complete lectures. Minutes are reserved before the file is stored or transcribed, so there is no way to get more than 45 minutes processed. The trial works the same way. Retrying the *same* failed lecture is allowed; a new one gets 402 and the app opens the Student paywall (`free_lecture_used`). Basic stays without audio/video (`lectureAllowance: 'none'`).
 
 **The trial is its own tier (`trial`)** — the full feature set, but it never gets paid limits, including after cancelling (it keeps trial limits until it ends). Its counters cover the whole trial and never reset. When the trial ends the account falls back to Free (`trialEnded: true` drives the "trial ended" upsell); converting to a paid plan switches to that plan's monthly limits.
 
@@ -198,9 +200,9 @@ Tune in `apps/api/src/billing/limits.ts`, or without a deploy via `PLAN_LIMITS_O
 
 **Providers:** billing is behind `BillingProvider` (`apps/api/src/billing/providers/`). Every provider emits a normalized `SubscriptionUpdate`; `applySubscriptionUpdate` is the only writer and also records the monetization analytics.
 - `mock` (development only, `BILLING_MOCK_ENABLED=true`): trials/subscriptions/cancel/restore without payment, plus a state switcher on the Account screen. Refused when `NODE_ENV=production`.
-- `apple` (iOS): app side connected with expo-iap; server mapping, account association and notifications tested. Apple's JWS signature verification is still to implement, so Apple purchases are refused and the iOS paywall shows "coming soon". See [docs/app-store/apple-subscriptions.md](docs/app-store/apple-subscriptions.md).
+- `apple` (iOS): expo-iap in the app; the server verifies every signed transaction, renewal info and App Store Server Notification V2 with Apple's `SignedDataVerifier` (certificate chain to Apple Root CA G3 in `apps/api/certs/apple/`, bundle id, App Apple ID, environment; `apps/api/src/billing/providers/apple-verifier.ts`) and handles renewals, expiry, cancellation (auto-renew off), refunds and revocations. Off until `APPLE_IAP_ENABLED=true` (production also needs `APPLE_APP_APPLE_ID`); until then Apple purchases are refused and the iOS paywall shows "coming soon". Tested with a local test certificate chain — not yet against real App Store / sandbox purchases. See [docs/app-store/apple-subscriptions.md](docs/app-store/apple-subscriptions.md).
 - `google` (Android): Play Billing via expo-iap + Play Developer API verification, server-side acknowledgement, plan changes as replacements, real-time notifications. Tested against a fake Google API; enabled by `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`. See [docs/google-play/google-play-billing.md](docs/google-play/google-play-billing.md).
-- **Web** has no in-app purchases: the paywall says to subscribe in the iOS/Android app, and a subscription from either store works there. A subscription can only be bought in one store at a time (409 `subscribed_elsewhere`); the paywall shows where it's managed.
+- **Web** has no in-app purchases: the paywall explains how to subscribe in the iOS/Android app (Account → Upgrade; store links from `EXPO_PUBLIC_APP_STORE_URL` / `EXPO_PUBLIC_PLAY_STORE_URL`, the Play link falls back to the package name), and a subscription from either store works there. A subscription can only be bought in one store at a time (409 `subscribed_elsewhere`); the paywall shows where it's managed.
 - In release builds the app never shows test-mode controls, and a production server refuses to start with mock billing.
 
 API: `GET /billing/plans` (public) · `GET /billing/status` · `POST /billing/purchase` · `POST /billing/restore` · `POST /billing/cancel` (mock) · `POST /billing/mock/state` (mock).
@@ -215,6 +217,23 @@ Course → **Create study plan**: exam date (+ optional time), minutes per day (
 - **Readiness** (shown once there are results) = importance-weighted mastery (85 %) + plan progress (15 %) — an internal indicator, labelled as such, not a probability.
 - Data: `study_plans` (one per course, preferences + AI topic notes) and `study_tasks` (date, topic, activity, phase, minutes, reason, status, timestamps, linked exam). Migration `0005_study_planner`. Course content is not copied.
 - Tests: `apps/api/test/planner.test.ts` (scheduler) and `apps/api/test/study-plan.test.ts` (API, ownership, limits, adaptation, missed days, languages).
+
+## Password reset
+
+Sign in → **Forgot password?** → email → a 6-digit code by email → code + new password → signed in.
+- Codes are random, stored only as an HMAC (keyed with `JWT_SECRET`), valid **30 minutes**, **single use**, **5 wrong tries** at most; a new request cancels older codes (`password_reset_codes`, migration `0008`).
+- **No account enumeration:** `/request` always answers 202 with the same body, whether the email exists or not.
+- **Rate limits:** 10 requests and 20 confirmations per IP per 15 min, 3 emails per account per hour.
+- A reset sets `users.password_changed_at`; every token issued before it stops working (`pwc` claim).
+- Email: `EMAIL_PROVIDER=log` (development: the email is written to the API log), `resend` (`RESEND_API_KEY`, `EMAIL_FROM`), or `disabled` (production default until configured — reset emails are then not sent). Emails in the student's app language (en/es/fr/ar). Code: `apps/api/src/services/password-reset.ts`, `apps/api/src/lib/mailer.ts`; tests `apps/api/test/password-reset.test.ts`.
+
+## Daily study reminders
+
+Account → **Study reminders** (off by default), or the one-time offer on the study-plan screen. On/off and a time (30-minute steps, default 18:00, device time zone). Permission is asked only when the student turns reminders on; if it's refused the app works normally and shows how to allow it.
+- **Local notifications** (`expo-notifications`), no server push: at most one per day, only on days with something to do — the day's study-plan tasks (nearest exam first; "exam coming up" in the last 3 days), or without a plan a single nudge when an unfinished set or weak topics are waiting. Nothing is sent when there's nothing to do. Scheduled a week ahead and rebuilt when the app opens, a plan changes or the student signs out (cleared).
+- Tapping opens the plan or the course. Web: not available (the Account screen says so).
+- Analytics: `reminder_enabled`, `reminder_disabled`, `reminder_time_changed` (platform + hour only) and `reminder_opened` (platform + kind) — never course names or content.
+- Code: `apps/mobile/src/lib/reminders-core.ts` (pure, tested in `apps/mobile/test/reminders.test.ts`), `reminders.ts`, `components/reminders.tsx`.
 
 ## Lecture audio & video (course materials)
 
@@ -275,13 +294,12 @@ npm run transcription:check   # real AssemblyAI smoke test (needs ASSEMBLYAI_API
 - **Background processing** runs in-process (fire-and-forget + status column; resumed on restart) → move to a job queue (pg-boss) when volume grows.
 - **Context selection** uses page chunks + keyword matching → add embeddings (pgvector) when documents get large.
 - **Local disk storage** → use a persistent volume or add an S3/R2 driver before deploying.
-- **Stateless 30-day JWT, no refresh/reset flows** → add password reset + refresh tokens, or adopt a hosted auth provider.
+- **Stateless 30-day JWT, no refresh tokens** → add refresh tokens or adopt a hosted auth provider. (Password reset exists; changing the password invalidates older tokens.)
 - **Scanned (image-only) PDFs** aren't supported yet → OCR later.
-- **No email verification / rate limiting** on sign-up and login yet → add before a public launch (limits abuse of the free plan).
+- **No email verification / rate limiting** on sign-up and login yet (password reset is rate-limited) → add before a public launch (limits abuse of the free plan).
 - **Lecture processing** runs in the API process (see above) → a separate worker/queue when volume grows. Burst limits are per process (in memory).
 - **Transcript-only video understanding:** slides/diagrams on screen aren't read. The `KnowledgeTopic.basis` field and pipeline stages leave room for a later frame-sampling + vision step.
 - **Uploads keep going only while the app is open:** on iOS a short trip to the background is fine; Android may stop an upload when the app is backgrounded (the app then shows the upload as failed; pick the file again). Processing itself runs on the server, and screens refresh when the app comes back to the foreground.
-- **No push notifications** (e.g. "your lecture is ready", planner reminders) → add `expo-notifications` + a push service later; the app currently shows status when opened.
+- **No push notifications from the server** (e.g. "your lecture is ready") → the app shows status when opened. Daily study reminders exist, but they are local notifications scheduled on the device.
 - **PowerPoint:** `.pptx` is supported (slide text, tables and speaker notes; no dependency, parsed on the server). Old binary `.ppt` files and image-only slides aren't: save as `.pptx`/PDF.
-- **Videos from the Photos library:** the picker opens Files (iCloud Drive, Downloads, Voice Memos exports; on Android the system file picker, which also lists Downloads and media). Picking straight from Photos needs `expo-image-picker` (a new dependency and permission).
 - No social features — by design.

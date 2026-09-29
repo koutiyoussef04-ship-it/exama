@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "1b690d03-5137-41dc-8b8b-43bc9c543dbe"
+      }
+    },
+    "android": {
+      "package": "com.youssefkouti.studyapp"
+    },
+    "ios": {
+      "bundleIdentifier": "com.youssefkouti.studyapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

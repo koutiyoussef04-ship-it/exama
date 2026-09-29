@@ -66,9 +66,15 @@ test('core study loop', async () => {
     questionId: q.id,
     answer: i === 0 && q.options ? q.options[0] : 'no idea',
   }));
+  // Regression: the course's exam history once showed "0 questions" for every exam.
+  const beforeSubmit = await call<DocumentProgress>(`/documents/${doc.id}/progress`);
+  assert.deepEqual(beforeSubmit.body.exams.map((e) => [e.id, e.status, e.questionCount]), [[exam.body.id, 'in_progress', 5]], 'history: in-progress exam');
+  assert.equal((await call<Exam>(`/exams/${exam.body.id}`)).body.questionCount, 5, 'exam detail');
+
   const graded = await call<Exam>(`/exams/${exam.body.id}/submit`, json({ answers }));
   assert.equal(graded.status, 200);
   assert.equal(graded.body.status, 'graded');
+  assert.equal(graded.body.questionCount, 5, 'results');
   assert.ok((graded.body.questions as GradedQuestion[]).every((q) => typeof q.feedback === 'string'));
   assert.equal((await call(`/exams/${exam.body.id}/submit`, json({ answers }))).status, 409);
 
@@ -77,12 +83,15 @@ test('core study loop', async () => {
   assert.equal(progress.status, 200);
   assert.ok(progress.body.weakTopics.length > 0);
   assert.equal(progress.body.exams.length, 1);
+  assert.equal(progress.body.exams[0]!.questionCount, 5, 'history: graded exam keeps its question count');
 
   // Personalized follow-up targets only weak topics
   const follow = await call<Exam>(`/documents/${doc.id}/exams`, json({ kind: 'follow_up', questionCount: 4 }));
   assert.equal(follow.status, 201);
   assert.equal(follow.body.kind, 'follow_up');
   for (const q of follow.body.questions) assert.ok(progress.body.weakTopics.includes(q.topic), q.topic);
+  const history = (await call<DocumentProgress>(`/documents/${doc.id}/progress`)).body.exams;
+  assert.deepEqual(history.map((e) => [e.kind, e.questionCount]), [['follow_up', follow.body.questions.length], ['standard', 5]], 'history: newest first, each with its own count');
 
   // Ownership: another user cannot see this document
   const other = await call<AuthResponse>('/auth/register', json({ email: `other-${Date.now()}@example.com`, password: 'password123', name: 'Other' }));

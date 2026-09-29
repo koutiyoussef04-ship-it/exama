@@ -5,14 +5,16 @@
 import type { StudyPlan, StudyTask, TaskActivity } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import { isRtlLanguage } from '@study/shared';
 import { Badge, Body, Button, Card, Chevron, colors, ContentDirection, pct, ProgressBar, SectionLabel, space, TextButton } from '@/components/ui';
 import { formattingLocale, isLanguage } from '@/i18n/languages';
 import { api } from '@/lib/api';
-import { useEntitlement } from '@/lib/billing';
+import { remaining, useEntitlement } from '@/lib/billing';
+import { kv } from '@/lib/storage';
 import { formatIso, formatTime, monthGrid, monthTitle, weekdayNames, weekOrder } from '@/lib/plan-dates';
 
 /** Locale for dates in the current UI language (Arabic with Western digits). */
@@ -205,7 +207,7 @@ export function Calendar({ mode, selected, onToggle, minDate, maxDate, marked }:
 
 // ------------------------------------------------------------------ countdown
 
-type TFn = ReturnType<typeof useTranslation>['t'];
+type TFn = TFunction;
 
 export function countdownText(t: TFn, plan: Pick<StudyPlan, 'daysUntilExam'>) {
   if (plan.daysUntilExam < 0) return t('planner.examPassed');
@@ -405,5 +407,44 @@ export function StudyPlanCard({ documentId }: { documentId: string }) {
         </View>
       </Countdown>
     </Pressable>
+  );
+}
+
+/**
+ * After an exam: asks — once per course, optionally — when the student's real exam is, and opens
+ * the plan setup with it. Hidden when the course already has a plan, when the plan allowance is used
+ * up (no paywall ambush), or after "Not now".
+ */
+export function ExamDatePrompt({ documentId }: { documentId: string }) {
+  const { t } = useTranslation();
+  const plan = useQuery({ queryKey: ['study-plan', documentId], queryFn: () => api.getStudyPlan(documentId) });
+  const e = useEntitlement().data;
+  const key = `exam_date_prompt_${documentId}`;
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    void kv.get(key).then((v) => live && setDismissed(v === 'dismissed'));
+    return () => {
+      live = false;
+    };
+  }, [key]);
+  if (dismissed !== false || plan.isLoading || plan.error || plan.data || !e) return null;
+  if (remaining(e.limits.studyPlansPerMonth, e.usage.studyPlansThisMonth) === 0) return null;
+
+  return (
+    <Card style={{ gap: space(2.5), borderColor: colors.primarySoft, borderWidth: 2 }}>
+      <SectionLabel>{t('nav.studyPlan')}</SectionLabel>
+      <Text style={{ fontSize: 19, fontWeight: '800', color: colors.text, lineHeight: 25 }}>{t('planner.promptTitle')}</Text>
+      <Body muted style={{ fontSize: 15, lineHeight: 21 }}>{e.features.adaptivePlanner ? t('planner.promptBody') : t('planner.promptBodyEven')}</Body>
+      <Button title={t('planner.promptCta')} onPress={() => router.push({ pathname: '/plan/setup', params: { id: documentId, from: 'results' } })} />
+      <TextButton
+        title={t('common.notNow')}
+        tone="muted"
+        onPress={() => {
+          setDismissed(true);
+          void kv.set(key, 'dismissed');
+        }}
+      />
+    </Card>
   );
 }

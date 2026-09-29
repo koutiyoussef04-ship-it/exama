@@ -31,7 +31,7 @@ import { api } from '@/lib/api';
 import { trackOnce } from '@/lib/analytics';
 import { formatDate, handleLimitError, openPaywall, useEntitlement } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
-import { documentErrorMessage } from '@/lib/errors';
+import { documentErrorMessage, isRetryableDocumentError } from '@/lib/errors';
 import { usePreferences } from '@/lib/preferences';
 
 const EXAM_LENGTH = 8;
@@ -124,6 +124,18 @@ export default function CourseScreen() {
   const analysisLocked = !!p?.analysisLocked;
   const e = entitlement.data;
   const focus = Math.min(weak.length, MAX_FOCUS);
+  // A new student (no exam yet, none in progress): the first-visit layout, one primary action.
+  const firstVisit = !!p && !hasTakenExam && !inProgress;
+  const retryable = isRetryableDocumentError(d.errorCode);
+  const examsLeft =
+    e && !e.isPremium && e.limits.examGenerationsPerMonth !== null ? (
+      <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
+        {t(e.usagePeriod === 'trial' ? 'course.examsLeftTrial' : 'course.examsLeftMonth', {
+          left: Math.max(0, e.limits.examGenerationsPerMonth - e.usage.examGenerationsThisMonth),
+          count: e.limits.examGenerationsPerMonth,
+        })}
+      </Body>
+    ) : null;
   const languageLine =
     d.summaryLanguage && d.sourceLanguage && d.summaryLanguage !== d.sourceLanguage
       ? t('course.languages', { summary: languageName(d.summaryLanguage), source: languageName(d.sourceLanguage) })
@@ -147,12 +159,57 @@ export default function CourseScreen() {
         <Card style={{ gap: space(3) }}>
           <Badge label={t('course.failedBadge')} tone="danger" />
           <Body muted>{documentErrorMessage(d.errorCode, d.error)}</Body>
-          <Button variant="secondary" title={t('common.tryAgain')} onPress={() => retry.mutate()} loading={retry.isPending} />
+          {/* Retrying only helps with temporary problems (AI busy, server error) — not with the file itself. */}
+          {retryable && <Button variant="secondary" title={t('common.tryAgain')} onPress={() => retry.mutate()} loading={retry.isPending} />}
+          <Body muted style={{ fontSize: 14 }}>{retryable ? t('course.failedNextRetry') : t('course.failedNextFile')}</Body>
+          <Button variant={retryable ? 'secondary' : 'primary'} title={t('course.failedDelete')} onPress={askDelete} loading={remove.isPending} />
           <ErrorText error={retry.error} />
         </Card>
       )}
 
-      {d.status === 'ready' && (
+      {d.status === 'ready' && !p && (progress.error ? <ErrorState error={progress.error} onRetry={() => progress.refetch()} /> : <Loading />)}
+
+      {d.status === 'ready' && firstVisit && (
+        <>
+          {/* First visit: show what Exama understood, then one clear next step. */}
+          <Card style={{ gap: space(3) }}>
+            <SectionLabel>{t('course.understoodTitle')}</SectionLabel>
+            <Body style={{ fontWeight: '600' }}>{t('course.understoodTopics', { count: d.topics.length })}</Body>
+            <ContentDirection language={d.summaryLanguage} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+              {d.topics.map((x) => (
+                <Badge key={x} label={x} tone="primary" />
+              ))}
+            </ContentDirection>
+            {!!d.summary && (
+              <>
+                <ContentDirection language={d.summaryLanguage}>
+                  <Body muted numberOfLines={summaryOpen ? undefined : 3}>{d.summary}</Body>
+                </ContentDirection>
+                {d.summary.length > 160 && (
+                  <Pressable onPress={() => setSummaryOpen((o) => !o)} hitSlop={8} accessibilityRole="button">
+                    <Text style={{ color: colors.primary, fontWeight: '600' }}>{summaryOpen ? t('course.showLess') : t('course.readMore')}</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
+            {!!languageLine && <Body muted style={{ fontSize: 13 }}>{languageLine}</Body>}
+          </Card>
+
+          {generating ? (
+            <WorkingCard title={t('course.writingExam')} detail={t('course.generatingDetail')} />
+          ) : (
+            <Button title={t('course.startFirstExam', { count: EXAM_LENGTH })} onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })} />
+          )}
+          <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('course.firstExamHint')}</Body>
+          <ErrorText error={createExam.error} />
+          {examsLeft}
+
+          <StudyPlanCard documentId={d.id} />
+          <MaterialsCard documentId={d.id} />
+        </>
+      )}
+
+      {d.status === 'ready' && p && !firstVisit && (
         <>
           {/* Study plan: countdown + what to do today (or create one) */}
           <StudyPlanCard documentId={d.id} />
@@ -170,25 +227,18 @@ export default function CourseScreen() {
               )}
               <Button
                 variant={inProgress ? 'secondary' : 'primary'}
-                title={hasTakenExam ? t('course.newExam', { count: EXAM_LENGTH }) : t('course.startExam', { count: EXAM_LENGTH })}
+                title={hasTakenExam ? t('course.newExam', { count: EXAM_LENGTH }) : t('course.startFirstExam', { count: EXAM_LENGTH })}
                 onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })}
               />
             </View>
           )}
           <ErrorText error={createExam.error} />
-          {e && !e.isPremium && e.limits.examGenerationsPerMonth !== null && (
-            <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
-              {t(e.usagePeriod === 'trial' ? 'course.examsLeftTrial' : 'course.examsLeftMonth', {
-                left: Math.max(0, e.limits.examGenerationsPerMonth - e.usage.examGenerationsThisMonth),
-                count: e.limits.examGenerationsPerMonth,
-              })}
-            </Body>
-          )}
+          {examsLeft}
 
-          {/* Basic/Free: practice spread over the course, and the weak-topic analysis as an upgrade. */}
-          {p && analysisLocked && (
+          {/* Free/Basic: practice across the course; targeting weak topics is what Student adds. */}
+          {p && analysisLocked && hasTakenExam && (
             <Card style={{ gap: space(3) }}>
-              <SectionLabel>{t('course.focusAreas')}</SectionLabel>
+              <SectionLabel>{t('course.practiceTitle')}</SectionLabel>
               <Body muted>{t('course.practiseCourseHint')}</Body>
               <Button
                 variant="secondary"
@@ -196,8 +246,11 @@ export default function CourseScreen() {
                 onPress={() => createExam.mutate({ kind: 'follow_up', questionCount: PRACTICE_LENGTH })}
                 disabled={generating}
               />
-              <Body muted style={{ fontSize: 13 }}>{t('course.lockedWeak')}</Body>
-              <TextButton title={t('course.seePlans')} onPress={() => openPaywall('locked_weak_topics', t('paywall.lockedWeakTopics'))} />
+              <View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, padding: space(3), gap: space(1) }}>
+                <Body style={{ fontSize: 14, fontWeight: '600' }}>{t('course.upgradeTargetedTitle')}</Body>
+                <Body muted style={{ fontSize: 14 }}>{t('course.upgradeTargeted')}</Body>
+                <TextButton title={t('course.seeStudent')} onPress={() => openPaywall('locked_weak_topics', t('paywall.lockedWeakTopics'))} />
+              </View>
             </Card>
           )}
 
@@ -249,14 +302,11 @@ export default function CourseScreen() {
                 })}
               </ContentDirection>
             ) : (
-              <>
-                <ContentDirection language={d.summaryLanguage} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
-                  {d.topics.map((x) => (
-                    <Badge key={x} label={x} tone="primary" />
-                  ))}
-                </ContentDirection>
-                {!hasTakenExam && <Body muted style={{ fontSize: 14 }}>{t('course.takeFirstExam')}</Body>}
-              </>
+              <ContentDirection language={d.summaryLanguage} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                {d.topics.map((x) => (
+                  <Badge key={x} label={x} tone="primary" />
+                ))}
+              </ContentDirection>
             )}
           </Card>
 

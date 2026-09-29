@@ -8,20 +8,21 @@ import { Calendar, Chips, examDateText, useDateLocale, WeekdayPicker } from '@/c
 import { Body, Button, Card, colors, ErrorText, Loading, Screen, SectionLabel, space, TextButton, Title, WorkingCard } from '@/components/ui';
 import { platform, track } from '@/lib/analytics';
 import { api } from '@/lib/api';
+import { syncReminders } from '@/lib/reminders';
 import { handleLimitError } from '@/lib/billing';
 import { addDaysIso, deviceTimeZone, formatTime, stepTime, todayIso } from '@/lib/plan-dates';
 import { usePreferences } from '@/lib/preferences';
 
 /** Plan setup: a few quick questions. Also used to edit an existing plan (no AI call when editing). */
 export default function PlanSetup() {
-  const { id, edit } = useLocalSearchParams<{ id: string; edit?: string }>();
+  const { id, edit, from } = useLocalSearchParams<{ id: string; edit?: string; from?: string }>();
   const editing = edit === '1';
   const existing = useQuery({ queryKey: ['study-plan', id], queryFn: () => api.getStudyPlan(id), enabled: editing });
   if (editing && existing.isLoading) return <Loading />;
-  return <SetupForm documentId={id} plan={editing ? (existing.data ?? null) : null} />;
+  return <SetupForm documentId={id} plan={editing ? (existing.data ?? null) : null} fromResults={from === 'results'} />;
 }
 
-function SetupForm({ documentId, plan }: { documentId: string; plan: StudyPlan | null }) {
+function SetupForm({ documentId, plan, fromResults = false }: { documentId: string; plan: StudyPlan | null; fromResults?: boolean }) {
   const { t } = useTranslation();
   const locale = useDateLocale();
   const qc = useQueryClient();
@@ -39,7 +40,7 @@ function SetupForm({ documentId, plan }: { documentId: string; plan: StudyPlan |
   useEffect(() => {
     if (tracked.current) return;
     tracked.current = true;
-    track('study_plan_setup_started', { platform, document_id: documentId, editing: !!plan });
+    track('study_plan_setup_started', { platform, document_id: documentId, editing: !!plan, ...(fromResults ? { entry: 'results' as const } : {}) });
   }, [documentId, plan]);
 
   const save = useMutation({
@@ -60,6 +61,7 @@ function SetupForm({ documentId, plan }: { documentId: string; plan: StudyPlan |
     onSuccess: (saved) => {
       qc.setQueryData(['study-plan', documentId], saved);
       qc.invalidateQueries({ queryKey: ['entitlement'] });
+      void syncReminders();
       if (plan) router.back();
       else router.replace({ pathname: '/plan/[id]', params: { id: documentId } });
     },

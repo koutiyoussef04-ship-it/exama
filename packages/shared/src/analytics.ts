@@ -84,9 +84,15 @@ export const clientEventSchema = z.discriminatedUnion('name', [
     properties: z.strictObject({ platform, plan_id: planIdSchema, tier: z.enum(PAID_TIERS), period: billingPeriod, with_trial: z.boolean(), trigger: paywallTrigger }),
   }),
   // Study planner (the plan text itself is never sent).
+  // Daily study reminders: on/off, the chosen hour, taps — never plan contents or topics.
+  z.object({ name: z.literal('reminder_enabled'), properties: z.strictObject({ platform, hour: z.number().int().min(0).max(23) }) }),
+  z.object({ name: z.literal('reminder_disabled'), properties: z.strictObject({ platform }) }),
+  z.object({ name: z.literal('reminder_time_changed'), properties: z.strictObject({ platform, hour: z.number().int().min(0).max(23) }) }),
+  z.object({ name: z.literal('reminder_opened'), properties: z.strictObject({ platform, kind: z.enum(['plan', 'exam_soon', 'practice']) }) }),
   z.object({
     name: z.literal('study_plan_setup_started'),
-    properties: z.strictObject({ platform, document_id: z.uuid(), editing: z.boolean() }),
+    // entry: where it started — the course's plan card, or the "When is your real exam?" question after an exam.
+    properties: z.strictObject({ platform, document_id: z.uuid(), editing: z.boolean(), entry: z.enum(['course', 'results']).optional() }),
   }),
   z.object({
     name: z.literal('study_plan_opened'),
@@ -131,6 +137,9 @@ export type TrackEventsInput = z.infer<typeof trackEventsSchema>;
 export type ServerEvents = {
   signup_completed: Record<string, never>;
   login_completed: Record<string, never>;
+  /** A reset code was emailed to an existing account (never recorded for unknown emails). */
+  password_reset_requested: Record<string, never>;
+  password_reset_completed: Record<string, never>;
   upload_succeeded: { document_id: string; file_size_kb: number; ai_language: AiLanguage };
   document_processing_completed: {
     document_id: string;
@@ -184,6 +193,8 @@ export type ServerEvents = {
     reserved_minutes?: number;
     attempt: number;
     lecture_allowance?: 'once' | 'trial' | 'monthly' | 'unlimited';
+    /** Only the first part of a longer recording is processed (Free/trial allowance). */
+    partial?: boolean;
   };
   material_transcription_completed: MaterialProps & {
     success: boolean;

@@ -4,7 +4,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { useMaterialKindLabel, useMaterialTitle } from '@/components/materials';
+import { PartialLectureNotice, useMaterialKindLabel, useMaterialTitle } from '@/components/materials';
 import { Badge, Body, Button, Card, colors, ContentDirection, ErrorState, ErrorText, Loading, Screen, SectionLabel, space, TextButton, Title } from '@/components/ui';
 import { platform, track } from '@/lib/analytics';
 import { api } from '@/lib/api';
@@ -69,7 +69,7 @@ export default function MaterialScreen() {
     );
   }
 
-  const meta = [kindLabel(m), m.durationSeconds ? formatDuration(m.durationSeconds) : m.pageCount ? t(m.format === 'pptx' ? 'home.slides' : 'home.pages', { count: m.pageCount }) : null]
+  const meta = [kindLabel(m), m.fullDurationSeconds ? formatDuration(m.fullDurationSeconds) : m.durationSeconds ? formatDuration(m.durationSeconds) : m.pageCount ? t(m.format === 'pptx' ? 'home.slides' : 'home.pages', { count: m.pageCount }) : null]
     .filter(Boolean)
     .join(' · ');
 
@@ -80,6 +80,8 @@ export default function MaterialScreen() {
         <Title>{titleOf(m)}</Title>
         <Body muted>{meta}</Body>
       </View>
+
+      <PartialLectureNotice material={m} />
 
       {isActive(m) && <Steps material={m} />}
 

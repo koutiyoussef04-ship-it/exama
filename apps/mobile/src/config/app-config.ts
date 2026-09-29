@@ -28,3 +28,14 @@ export const legalConfig = {
   privacyUrl: opt(process.env.EXPO_PUBLIC_PRIVACY_URL),
   termsUrl: opt(process.env.EXPO_PUBLIC_TERMS_URL),
 };
+
+/**
+ * Store listings, linked from the web paywall (subscriptions are bought in the apps).
+ * Google Play's listing URL follows from the package name; the App Store's needs the app's numeric
+ * id, known once the app exists in App Store Connect (EXPO_PUBLIC_APP_STORE_URL).
+ */
+const androidPackage = (Constants.expoConfig?.extra?.androidPackage as string | undefined) ?? Constants.expoConfig?.android?.package;
+export const storeLinks = {
+  appStore: opt(process.env.EXPO_PUBLIC_APP_STORE_URL),
+  googlePlay: opt(process.env.EXPO_PUBLIC_PLAY_STORE_URL) ?? (androidPackage ? `https://play.google.com/store/apps/details?id=${androidPackage}` : null),
+};

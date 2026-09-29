@@ -8,6 +8,8 @@ Audited against the code on 2026-09-27 (updated for lecture audio/video and Goog
 |---|---|---|---|---|
 | Email, first name | sign-up form | `users` (Postgres) | account, sign-in, support | account deletion |
 | Password | sign-up form | `users.password_hash` — **bcrypt hash only** (cost 12) | sign-in | account deletion |
+| Password reset codes | API (sent by email) | `password_reset_codes` — **HMAC of the 6-digit code only**, expiry (30 min), attempts, used time | resetting a forgotten password | used/expired codes are replaced by the next request; account deletion (cascade) |
+| Password change time | API | `users.password_changed_at` | invalidating older sessions after a reset | account deletion |
 | Session token (JWT, 30 days) | API | device Keychain/Keystore (`expo-secure-store`); not stored on the server | stay signed in | sign-out / account deletion (server rejects tokens of deleted accounts) |
 | Uploaded PDFs and PowerPoint files (.pptx) | user | server file storage `STORAGE_DIR/<userId>/<docId>.pdf` / `.pptx` | processing | course deletion / account deletion (whole user folder) |
 | Extracted text chunks (PDF pages / slides incl. speaker notes), summary, topics, detected material language | PDF/PPTX + AI | `documents`, `document_chunks` | exams, practice, grounding checks | course / account deletion (cascade) |
@@ -19,10 +21,11 @@ Audited against the code on 2026-09-27 (updated for lecture audio/video and Goog
 | Usage ledger (counts of uploads/exams/practice questions/lecture uploads, lecture minutes) | API | `usage_ledger` | plan limits; deleting a course does **not** refund usage | account deletion (cascade) |
 | Product analytics events | app + API | `analytics_events` | product improvement, funnel, monetization reporting | on account deletion: `user_id` and the install id are removed (events stay anonymous) |
 | Language preferences (app language, study language), RTL flag | user | device only (Keychain/Keystore; localStorage on web) | UI language, AI output language | uninstall |
+| Study reminder settings (on/off, time) and the scheduled local notifications (course name + topic of the day) | user + app | device only (`expo-notifications`, app storage); nothing on the server | daily study reminders | turning reminders off, sign-out, uninstall |
 | Random install id (UUID) | app | device only (+ sent with analytics events) | group signed-out events | uninstall; unlinked on account deletion |
 | Unsent exam answers (draft) | user | app memory only | resume an exam in the same session | app restart / submit |
 
-**Not collected:** location, contacts, photo library access, camera, microphone recording in the app (students pick existing recordings from Files), advertising identifier (IDFA), device fingerprint, IP address in the database, payment card data (Apple or Google handles payment), health, browsing history. No third-party analytics/ads SDKs. No tracking across apps/websites (ATT prompt not needed; `NSPrivacyTracking = false`).
+**Not collected:** location, contacts, photo library browsing (a lecture video is chosen by the student in the system photo picker; only that file is uploaded), camera, microphone recording in the app (students pick existing recordings from Files), push tokens (reminders are local notifications), advertising identifier (IDFA), device fingerprint, IP address in the database, payment card data (Apple or Google handles payment), health, browsing history. No third-party analytics/ads SDKs. No tracking across apps/websites (ATT prompt not needed; `NSPrivacyTracking = false`).
 
 ## 2. Analytics — exactly what is sent
 
@@ -43,6 +46,7 @@ Contract: `packages/shared/src/analytics.ts` (strict allowlist; unknown events/p
 | AssemblyAI (speech-to-text) | the lecture recordings students add (audio, or video whose audio track it extracts) | server-side only; key never in the app. We request deletion of each transcript once received (`DELETE /v2/transcript/:id`). **Check how long AssemblyAI keeps uploaded media files, and its training terms, for your account; choose the EU endpoint (`ASSEMBLYAI_BASE_URL`) for EU data residency; sign its DPA.** |
 | Apple (App Store, StoreKit) | purchases on iOS (Apple is the seller of record) | we receive signed transactions only; no card data. The app passes the Exama user id (a random UUID) as `appAccountToken`. |
 | Google (Google Play Billing, Play Developer API, Cloud Pub/Sub) | purchases on Android (Google is the merchant of record) | we receive purchase tokens and subscription state only; no card data. The app passes the Exama user id (a random UUID, no email) as `obfuscatedAccountId`; the server calls the Play Developer API with a service account. |
+| Email provider (Resend, if `EMAIL_PROVIDER=resend`) | the student's email address, app language and the password-reset code | only when a student asks for a password reset. **Sign its DPA and name it in the Privacy Policy** (or name the provider you choose instead). |
 | Hosting / database / file storage | everything in section 1 | **to be chosen** — name them and the region in the Privacy Policy |
 | Expo / EAS | build service only; no runtime data | no Expo analytics/updates SDK is used |
 
@@ -82,5 +86,6 @@ Same data as §4. Collected: **Personal info** (name, email), **Audio** (lecture
 - [ ] Anthropic data-retention terms for your account.
 - [ ] AssemblyAI: retention of uploaded media, training terms, DPA, region (US/EU).
 - [ ] Hosting provider and region.
+- [ ] Email provider for password reset (e.g. Resend): DPA, region, and a verified sender domain (`EMAIL_FROM`).
 - [ ] Google Play: public account-deletion URL (Data safety form).
 - [ ] Legal review of Privacy Policy and Terms (EU consumer law if selling in the EU).

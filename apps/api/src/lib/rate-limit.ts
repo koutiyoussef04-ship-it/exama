@@ -10,6 +10,7 @@ export class RateLimiter {
   constructor(
     private max: number,
     private windowMs: number,
+    private message = 'Too many uploads. Please wait a little and try again.',
   ) {}
 
   /** Throws 429 if `key` already made `max` requests in the window; otherwise records this one. */
@@ -17,11 +18,21 @@ export class RateLimiter {
     const recent = (this.hits.get(key) ?? []).filter((t) => now - t < this.windowMs);
     if (recent.length >= this.max) {
       const retryAfterS = Math.ceil((this.windowMs - (now - recent[0])) / 1000);
-      throw new HttpError(429, 'Too many uploads. Please wait a little and try again.', 'too_many_requests', { retryAfterS });
+      throw new HttpError(429, this.message, 'too_many_requests', { retryAfterS });
     }
     recent.push(now);
     this.hits.set(key, recent);
     if (this.hits.size > 10_000) this.prune(now);
+  }
+
+  /** Like take(), but returns false instead of throwing. */
+  tryTake(key: string, now = Date.now()): boolean {
+    try {
+      this.take(key, now);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   reset(): void {

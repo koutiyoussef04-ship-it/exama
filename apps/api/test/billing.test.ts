@@ -98,7 +98,7 @@ test('catalog: public, with prices, trial and per-tier limits', async () => {
   assert.equal(r.body.purchasesAvailable, true);
   assert.equal(r.body.testMode, true);
   assert.equal(r.body.limits.free.courses, 1);
-  assert.deepEqual(r.body.limits.trial, { courses: 1, courseUploadsPerMonth: 1, examGenerationsPerMonth: 1, practiceQuestionsPerMonth: 5, maxQuestionsPerExam: 8, studyPlansPerMonth: 1, mediaUploadsPerMonth: 1, mediaMinutesPerMonth: 30, maxMediaMinutesPerFile: 30 });
+  assert.deepEqual(r.body.limits.trial, { courses: 1, courseUploadsPerMonth: 3, examGenerationsPerMonth: 3, practiceQuestionsPerMonth: 30, maxQuestionsPerExam: 8, studyPlansPerMonth: 1, mediaUploadsPerMonth: 1, mediaMinutesPerMonth: 45, maxMediaMinutesPerFile: 45 });
   assert.ok(JSON.stringify(r.body).toLowerCase().indexOf('owner') === -1, 'catalog must not mention owner access');
 });
 
@@ -173,7 +173,7 @@ test('trial: its own tier and limits (never Student/Pro), 7 days, once per accou
   assert.deepEqual([r.body.status, r.body.tier, r.body.isPremium, r.body.trialEligible, r.body.usagePeriod], ['trialing', 'trial', false, false, 'trial']);
   const days = (new Date(r.body.trialEndsAt!).getTime() - Date.now()) / 86_400_000;
   assert.ok(days > 6.9 && days <= 7, `trial length ${days}`);
-  assert.deepEqual(r.body.limits, { courses: 1, courseUploadsPerMonth: 1, examGenerationsPerMonth: 1, practiceQuestionsPerMonth: 5, maxQuestionsPerExam: 8, studyPlansPerMonth: 1, mediaUploadsPerMonth: 1, mediaMinutesPerMonth: 30, maxMediaMinutesPerFile: 30 });
+  assert.deepEqual(r.body.limits, { courses: 1, courseUploadsPerMonth: 3, examGenerationsPerMonth: 3, practiceQuestionsPerMonth: 30, maxQuestionsPerExam: 8, studyPlansPerMonth: 1, mediaUploadsPerMonth: 1, mediaMinutesPerMonth: 45, maxMediaMinutesPerFile: 45 });
   assert.deepEqual(r.body.limits, LIMITS.trial);
   assert.notDeepEqual(r.body.limits, LIMITS.student);
   assert.equal(r.body.usageResetsAt, r.body.trialEndsAt, 'trial usage never resets during the trial');
@@ -188,11 +188,23 @@ test('trial: its own tier and limits (never Student/Pro), 7 days, once per accou
   assert.equal(ev.find((e) => e.name === 'subscription_started')?.properties.from_trial, true);
 });
 
-test('trial: exactly 1 upload, 1 exam of ≤ 8 questions, 5 practice questions — then 402 (paywall)', async () => {
+test('trial: never below Free on any limit, with Student-level features', () => {
+  for (const [k, v] of Object.entries(LIMITS.free) as [keyof typeof LIMITS.free, number | null][]) {
+    const t = LIMITS.trial[k];
+    assert.ok(t === null || (v !== null && t >= v), `trial.${k} (${t}) ≥ free.${k} (${v})`);
+  }
+  assert.deepEqual(
+    [LIMITS.trial.courses, LIMITS.trial.examGenerationsPerMonth, LIMITS.trial.practiceQuestionsPerMonth, LIMITS.trial.mediaUploadsPerMonth, LIMITS.trial.maxMediaMinutesPerFile],
+    [1, 3, 30, 1, 45],
+    '1 course · 3 exams · 30 practice questions · 1 lecture up to 45 min',
+  );
+});
+
+test('trial: 1 course, 3 uploads, 3 exams of ≤ 8 questions, 30 practice questions — then 402 (paywall)', async () => {
   const { token, id, email } = await newUser();
   await purchase(token, 'student_monthly', true);
 
-  // 1 course / 1 upload.
+  // 1 course at a time.
   const docId = await readyCourse(token);
   const second = await upload(token);
   assert.equal(second.status, 402);
@@ -204,38 +216,47 @@ test('trial: exactly 1 upload, 1 exam of ≤ 8 questions, 5 practice questions �
   assert.equal(tooLong.status, 402);
   assert.deepEqual([tooLong.body.code, tooLong.body.feature, tooLong.body.limit, tooLong.body.tier], ['premium_required', 'exam_length', 8, 'trial']);
 
-  // Exactly 1 exam (of 8 questions).
+  // Exactly 3 exams (of 8 questions).
   const first = await exam(token, docId, 8);
   assert.equal(first.status, 201, JSON.stringify(first.body));
   assert.equal(first.body.questions.length, 8);
+  for (let i = 0; i < 2; i++) assert.equal((await exam(token, docId, 8)).status, 201);
   const again = await exam(token, docId, 3);
   assert.equal(again.status, 402);
-  assert.deepEqual([again.body.feature, again.body.limit, again.body.used, again.body.tier], ['exam_generations', 1, 1, 'trial']);
+  assert.deepEqual([again.body.feature, again.body.limit, again.body.used, again.body.tier], ['exam_generations', 3, 3, 'trial']);
 
-  // Exactly 5 practice questions: the app asks for 6 and gets 5; then nothing more.
+  // Exactly 30 practice questions: sets of 8, 8, 8, then 6 (trimmed to what's left); then nothing more.
   await failExam(token, first.body);
-  const practice = await exam(token, docId, 6, 'follow_up');
-  assert.equal(practice.status, 201, JSON.stringify(practice.body));
-  assert.equal(practice.body.questions.length, 5);
+  const sizes = [];
+  for (let i = 0; i < 4; i++) {
+    const p = await exam(token, docId, 8, 'follow_up');
+    assert.equal(p.status, 201, JSON.stringify(p.body));
+    sizes.push(p.body.questions.length);
+  }
+  assert.deepEqual(sizes, [8, 8, 8, 6]);
   const morePractice = await exam(token, docId, 3, 'follow_up');
   assert.equal(morePractice.status, 402);
-  assert.deepEqual([morePractice.body.feature, morePractice.body.limit, morePractice.body.used], ['practice_questions', 5, 5]);
+  assert.deepEqual([morePractice.body.feature, morePractice.body.limit, morePractice.body.used], ['practice_questions', 30, 30]);
 
   const s = await status(token);
   assert.deepEqual(
     [s.usage.courses, s.usage.courseUploadsThisMonth, s.usage.examGenerationsThisMonth, s.usage.practiceQuestionsThisMonth],
-    [1, 1, 1, 5],
+    [1, 1, 3, 30],
   );
 
-  // Deleting the course gives nothing back: no new upload, and usage is unchanged.
+  // Deleting a course frees the course slot, but uploads stay counted: 3 in total for the trial.
   assert.equal((await del(token, docId)).status, 204);
-  const reupload = await upload(token);
-  assert.equal(reupload.status, 402);
-  assert.deepEqual([reupload.body.feature, reupload.body.used], ['course_uploads', 1]);
+  for (let i = 0; i < 2; i++) {
+    const again = await readyCourse(token);
+    assert.equal((await del(token, again)).status, 204);
+  }
+  const fourth = await upload(token);
+  assert.equal(fourth.status, 402);
+  assert.deepEqual([fourth.body.feature, fourth.body.used], ['course_uploads', 3]);
   const afterDelete = await status(token);
   assert.deepEqual(
     [afterDelete.usage.courses, afterDelete.usage.courseUploadsThisMonth, afterDelete.usage.examGenerationsThisMonth, afterDelete.usage.practiceQuestionsThisMonth],
-    [0, 1, 1, 5],
+    [0, 3, 3, 30],
   );
 
   // Signing in again (new session/token, e.g. after reinstalling the app) changes nothing.
@@ -244,14 +265,14 @@ test('trial: exactly 1 upload, 1 exam of ≤ 8 questions, 5 practice questions �
   assert.deepEqual([relogged.tier, relogged.status, relogged.usage, relogged.trialEndsAt], ['trial', 'trialing', afterDelete.usage, afterDelete.trialEndsAt]);
   assert.equal((await upload(token2)).status, 402);
 
-  // Cancelling keeps the trial's (small) limits until it ends — it never unlocks a paid tier.
+  // Cancelling keeps the trial's limits until it ends — it never unlocks a paid tier.
   const cancelled = (await call<Entitlement>('/billing/cancel', post({}, token2))).body;
   assert.deepEqual([cancelled.status, cancelled.tier, cancelled.limits, cancelled.usagePeriod], ['cancelled', 'trial', LIMITS.trial, 'trial']);
   assert.equal((await purchase(token2, 'student_monthly', true)).status, 409, 'no new trial after cancelling');
 
   // Server-side ledger holds the usage: exactly what the trial allows.
   const ledger = await sql`select kind, sum(amount)::int as total from usage_ledger where user_id = ${id} group by kind order by kind`;
-  assert.deepEqual(ledger.map((r) => [r.kind, r.total]), [['course_upload', 1], ['exam_generation', 1], ['practice_questions', 5]]);
+  assert.deepEqual(ledger.map((r) => [r.kind, r.total]), [['course_upload', 3], ['exam_generation', 3], ['practice_questions', 30]]);
 });
 
 test('trial: parallel requests cannot slip past a limit', async () => {
@@ -263,13 +284,13 @@ test('trial: parallel requests cannot slip past a limit', async () => {
   for (let i = 0; i < 50 && (await call<DocumentDetail>(`/documents/${docId}`, { token })).body.status !== 'ready'; i++) {
     await new Promise((r) => setTimeout(r, 100));
   }
-  const exams = await Promise.all([exam(token, docId, 8), exam(token, docId, 8), exam(token, docId, 8)]);
-  assert.deepEqual(exams.map((e) => e.status).sort(), [201, 402, 402]);
+  const exams = await Promise.all(Array.from({ length: 5 }, () => exam(token, docId, 8)));
+  assert.deepEqual(exams.map((e) => e.status).sort(), [201, 201, 201, 402, 402]);
   await failExam(token, exams.find((e) => e.status === 201)!.body);
-  const practice = await Promise.all([exam(token, docId, 5, 'follow_up'), exam(token, docId, 5, 'follow_up'), exam(token, docId, 5, 'follow_up')]);
-  assert.deepEqual(practice.map((p) => p.status).sort(), [201, 402, 402]);
+  const practice = await Promise.all(Array.from({ length: 6 }, () => exam(token, docId, 8, 'follow_up')));
+  assert.deepEqual(practice.map((p) => p.status).sort(), [201, 201, 201, 201, 402, 402]);
   const [{ total }] = await sql`select coalesce(sum(amount), 0)::int as total from usage_ledger where user_id = ${id} and kind = 'practice_questions'`;
-  assert.equal(total, 5);
+  assert.equal(total, 30);
 });
 
 test('trial: expiry ends trial access; the trial can never be started again', async () => {
@@ -288,8 +309,20 @@ test('trial: expiry ends trial access; the trial can never be started again', as
   assert.deepEqual([paid.status, paid.tier, paid.limits, paid.trialEnded], ['active', 'student', LIMITS.student, false]);
 });
 
+test('basic: 3 courses at once — the 4th opens the paywall; deleting one frees a slot', async () => {
+  const { token } = await newUser();
+  assert.equal((await purchase(token, 'basic_monthly')).status, 200);
+  const ids = [];
+  for (let i = 0; i < 3; i++) ids.push(await readyCourse(token));
+  const fourth = await upload(token);
+  assert.equal(fourth.status, 402);
+  assert.deepEqual([fourth.body.code, fourth.body.feature, fourth.body.limit, fourth.body.used, fourth.body.tier], ['limit_reached', 'courses', 3, 3, 'basic']);
+  assert.equal((await del(token, ids[0]!)).status, 204);
+  assert.equal((await upload(token)).status, 201);
+});
+
 test('paid Basic, Student and Pro limits are unchanged by the trial', () => {
-  assert.deepEqual(DEFAULT_LIMITS.basic, { courses: 8, courseUploadsPerMonth: 10, examGenerationsPerMonth: 15, practiceQuestionsPerMonth: 120, maxQuestionsPerExam: 12, studyPlansPerMonth: 3, mediaUploadsPerMonth: 0, mediaMinutesPerMonth: 0, maxMediaMinutesPerFile: 0 });
+  assert.deepEqual(DEFAULT_LIMITS.basic, { courses: 3, courseUploadsPerMonth: 10, examGenerationsPerMonth: 15, practiceQuestionsPerMonth: 120, maxQuestionsPerExam: 12, studyPlansPerMonth: 3, mediaUploadsPerMonth: 0, mediaMinutesPerMonth: 0, maxMediaMinutesPerFile: 0 });
   assert.deepEqual(DEFAULT_LIMITS.student, { courses: 15, courseUploadsPerMonth: 30, examGenerationsPerMonth: 40, practiceQuestionsPerMonth: 300, maxQuestionsPerExam: 15, studyPlansPerMonth: 10, mediaUploadsPerMonth: 30, mediaMinutesPerMonth: 300, maxMediaMinutesPerFile: 120 });
   assert.deepEqual(DEFAULT_LIMITS.pro, { courses: 50, courseUploadsPerMonth: 100, examGenerationsPerMonth: 150, practiceQuestionsPerMonth: 1200, maxQuestionsPerExam: 20, studyPlansPerMonth: 30, mediaUploadsPerMonth: 80, mediaMinutesPerMonth: 720, maxMediaMinutesPerFile: 180 });
   assert.deepEqual(LIMITS.basic, DEFAULT_LIMITS.basic);

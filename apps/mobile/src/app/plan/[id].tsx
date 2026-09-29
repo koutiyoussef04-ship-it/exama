@@ -7,7 +7,9 @@ import { Text, View } from 'react-native';
 import { Countdown, PlanStats, TaskCard, TaskLine, useDateLocale } from '@/components/planner';
 import { Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, SectionLabel, space, TextButton, WorkingCard } from '@/components/ui';
 import { platform, track } from '@/lib/analytics';
+import { ReminderOffer } from '@/components/reminders';
 import { api } from '@/lib/api';
+import { syncReminders } from '@/lib/reminders';
 import { handleLimitError } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { addDaysIso, formatIso } from '@/lib/plan-dates';
@@ -32,7 +34,10 @@ export default function PlanScreen() {
     track('study_plan_opened', { platform, document_id: id, days_until_exam: plan.data.daysUntilExam });
   }, [id, plan.data]);
 
-  const setPlan = (p: StudyPlan) => qc.setQueryData(['study-plan', id], p);
+  const setPlan = (p: StudyPlan) => {
+    qc.setQueryData(['study-plan', id], p);
+    void syncReminders(); // tomorrow's reminder follows the updated plan
+  };
   const complete = useMutation({ mutationFn: (taskId: string) => api.completeStudyTask(id, taskId), onSuccess: setPlan });
   const skip = useMutation({ mutationFn: (taskId: string) => api.skipStudyTask(id, taskId), onSuccess: setPlan });
   const rebuild = useMutation({
@@ -47,6 +52,7 @@ export default function PlanScreen() {
     mutationFn: () => api.deleteStudyPlan(id),
     onSuccess: () => {
       qc.setQueryData(['study-plan', id], null);
+      void syncReminders();
       router.back();
     },
   });
@@ -118,6 +124,7 @@ export default function PlanScreen() {
       <Countdown plan={p}>
         <PlanStats plan={p} />
       </Countdown>
+      {p.daysUntilExam > 0 && <ReminderOffer />}
 
       <Notices plan={p} />
       {p.notices.includes('new_material') && <NewMaterialNotice documentId={id} onUpdated={setPlan} />}

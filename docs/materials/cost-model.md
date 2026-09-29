@@ -44,13 +44,13 @@ Lecture cost when a student uses the **whole** monthly allowance in 60-minute le
 
 | Plan | Lecture limit | Cost at the limit (audio – video) | Share of net revenue, 15% commission (monthly / yearly) |
 |---|---|---|---|
-| Free | **1 lecture per account**, ≤ 45 min, never renewed | ≈ €0.21, once | — (acquisition cost) |
+| Free | **1 lecture per account**, its first 45 min, never renewed | ≈ €0.21, once | — (acquisition cost) |
 | Basic | **none** (PDFs and PowerPoints only) | €0 | 0% |
-| Trial | 1 lecture, ≤ 30 min, whole trial | ≈ €0.14 | — (acquisition cost) |
+| Trial | 1 lecture, its first 45 min, whole trial | ≈ €0.21 | — (acquisition cost) |
 | Student | 30 lectures, **300 min**, ≤ 120 min each | €1.32 – €1.50 | 12–14% / 19–21% |
 | Pro | 80 lectures, **720 min**, ≤ 180 min each | €3.17 – €3.60 | 18–20% / 27–31% |
 
-Free's lecture is a one-time allowance, not a monthly one: for the `free` tier the API counts lecture uploads and minutes over the account's whole history (the ledger is append-only), so deleting the course, re-uploading the same file or waiting a month gives nothing back. The 45 minutes are checked and reserved before transcription, and the transcription provider is capped at them.
+Free's lecture is a one-time allowance, not a monthly one: for the `free` tier the API counts lecture uploads and minutes over the account's whole history (the ledger is append-only), so deleting the course, re-uploading the same file or waiting a month gives nothing back. A longer lecture is accepted, but only its first 45 minutes are reserved and transcribed (the transcription request is cut at `audio_end_at`), so the cost never exceeds the 45-minute row. The trial works the same way.
 
 These are the default limits in `apps/api/src/billing/limits.ts`. You can change them without a deploy using `PLAN_LIMITS_OVERRIDE` (and which tiers may upload lectures at all with `PLAN_FEATURES_OVERRIDE`).
 

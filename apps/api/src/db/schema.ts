@@ -28,7 +28,27 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
   createdAt: createdAt(),
+  /** Set when the password changes (reset): sessions issued before it stop working. */
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
 });
+
+/**
+ * One-time password-reset codes. Only a keyed hash of the code is stored. A code works once, for
+ * 30 minutes and at most 5 attempts; asking for a new code invalidates the older ones.
+ */
+export const passwordResetCodes = pgTable(
+  'password_reset_codes',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('password_reset_codes_user_idx').on(t.userId)],
+);
 
 /** An uploaded piece of course material (a PDF for now). */
 export const documents = pgTable(
@@ -93,6 +113,8 @@ export const courseMaterials = pgTable(
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     durationSeconds: integer('duration_seconds'),
+    /** Length of the uploaded recording. Free/trial lectures longer than their allowance are processed up to it only. */
+    originalDurationSeconds: integer('original_duration_seconds'),
     pageCount: integer('page_count'),
     /** Minutes reserved in the usage ledger for transcription (settled to the real length). */
     billedMinutes: integer('billed_minutes').notNull().default(0),

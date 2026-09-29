@@ -89,6 +89,14 @@ export type CourseMaterial = {
   status: MaterialStatus;
   sizeBytes: number;
   durationSeconds: number | null;
+  /**
+   * Audio/video: the length of the uploaded recording, and whether only its beginning is used
+   * (Free/trial lecture longer than the allowance → the first 45 min). `processedMinutes` = what was
+   * (or will be) transcribed.
+   */
+  fullDurationSeconds: number | null;
+  partial: boolean;
+  processedMinutes: number | null;
   pageCount: number | null;
   /** Detected spoken/written language of the material (ISO 639-1). */
   sourceLanguage: string | null;

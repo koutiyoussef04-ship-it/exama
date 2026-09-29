@@ -91,14 +91,14 @@ test('Arabic has the six CLDR plural categories and i18next picks the right one'
 
 test('i18next renders every language, with interpolation and fallbacks', async () => {
   const cases: Record<string, string> = {
-    en: 'Start exam · 8 questions',
-    es: 'Empezar examen · 8 preguntas',
-    fr: 'Commencer l’examen · 8 questions',
-    ar: 'ابدأ الاختبار · 8 أسئلة',
+    en: 'Start your first exam · 8 questions',
+    es: 'Hacer tu primer examen · 8 preguntas',
+    fr: 'Passer votre premier examen · 8 questions',
+    ar: 'ابدأ اختبارك الأول · 8 أسئلة',
   };
   for (const [lang, expected] of Object.entries(cases)) {
     await initI18n(lang as 'en');
-    assert.equal(i18n.t('course.startExam', { count: 8 }), expected);
+    assert.equal(i18n.t('course.startFirstExam', { count: 8 }), expected);
     assert.ok(!i18n.t('paywall.trialSubtitle').includes('paywall.'), 'no raw keys');
   }
   // Spanish/French "many" (millions) falls back to the "other" form instead of a raw key.

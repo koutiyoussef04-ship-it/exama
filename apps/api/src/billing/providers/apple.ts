@@ -9,10 +9,10 @@
  *  - App Store Server Notifications V2 → which change it represents (analytics reason)
  *  - purchase / restore / notification handlers built on an `AppleVerifier`
  *
- * What is deliberately NOT implemented: JWS signature verification. `AppleVerifier` must be
- * backed by Apple's `@apple/app-store-server-library` (SignedDataVerifier with Apple's root
- * certificates, bundle id, app Apple ID and environment). Until then `appleVerifier` is null in
- * billing/index.ts, Apple purchases are refused (503) and nothing is ever trusted unverified.
+ * JWS verification lives in apple-verifier.ts (Apple's SignedDataVerifier: certificate chain to
+ * Apple's root, Apple OIDs, ES256 signature, bundle id / App Apple ID / environment). It is switched
+ * on with APPLE_IAP_ENABLED; until then `appleVerifier` is null in billing/index.ts and Apple
+ * purchases are refused (503). Nothing is ever trusted unverified.
  * See docs/app-store/apple-subscriptions.md.
  */
 import { and, eq, ne } from 'drizzle-orm';
@@ -57,7 +57,7 @@ export type AppleNotification = {
   data?: { bundleId?: string; environment?: string; signedTransactionInfo?: string; signedRenewalInfo?: string };
 };
 
-/** Verifies Apple-signed JWS values. Implement with @apple/app-store-server-library. */
+/** Verifies Apple-signed JWS values (implemented in apple-verifier.ts with @apple/app-store-server-library). */
 export interface AppleVerifier {
   verifyTransaction(signedTransaction: string): Promise<AppleTransaction>;
   verifyRenewalInfo(signedRenewalInfo: string): Promise<AppleRenewalInfo>;

@@ -28,6 +28,14 @@ function loadConfigWith(overrides: Record<string, string | undefined>, file = sc
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: undefined,
     GOOGLE_PUBSUB_AUDIENCE: undefined,
     GOOGLE_PUBSUB_SERVICE_ACCOUNT: undefined,
+    APPLE_IAP_ENABLED: undefined,
+    APPLE_APP_APPLE_ID: undefined,
+    APPLE_ALLOW_SANDBOX: undefined,
+    APPLE_ONLINE_CHECKS: undefined,
+    APPLE_ROOT_CERTS_DIR: undefined,
+    EMAIL_PROVIDER: undefined,
+    RESEND_API_KEY: undefined,
+    EMAIL_FROM: undefined,
     DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
     JWT_SECRET: 'x'.repeat(40),
     ...overrides,
@@ -155,7 +163,7 @@ test('billing: plan limits are configurable server-side and validated', () => {
   assert.equal(limits.free.courses, 1, 'untouched values keep their defaults');
   assert.equal(limits.pro.courses, null);
   assert.equal(limits.trial.practiceQuestionsPerMonth, 10, 'trial limits are configurable too');
-  assert.equal(limits.trial.examGenerationsPerMonth, 1);
+  assert.equal(limits.trial.examGenerationsPerMonth, 3);
   const bad = loadConfigWith({ PLAN_LIMITS_OVERRIDE: '{"free":{"coursez":2}}' }, billingScript);
   assert.notEqual(bad.code, 0);
   assert.match(bad.err, /unknown limit "free.coursez"/);
@@ -165,7 +173,7 @@ test('production: refuses mock AI, mock billing and the template JWT secret; a r
   const prod = { NODE_ENV: 'production', AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test', JWT_SECRET: 'p'.repeat(48) };
   const ok = loadConfigWith(prod, billingScript);
   assert.equal(ok.code, 0, ok.err);
-  assert.equal(JSON.parse(ok.out).provider, null, 'no purchases until Apple verification exists — never the mock');
+  assert.equal(JSON.parse(ok.out).provider, null, 'no App Store purchases until APPLE_IAP_ENABLED=true — never the mock');
 
   const mockAi = loadConfigWith({ ...prod, AI_PROVIDER: 'mock' });
   assert.equal(mockAi.code, 1);
@@ -206,4 +214,29 @@ test('lecture transcription: mock in development, never in production; a real pr
   const capped = loadConfigWith({ MEDIA_MAX_MINUTES_PER_FILE: '90', PLAN_LIMITS_OVERRIDE: '{"pro":{"maxMediaMinutesPerFile":500}}' }, billingScript);
   assert.equal(capped.code, 0, capped.err);
   assert.equal(JSON.parse(capped.out).limits.pro.maxMediaMinutesPerFile, 90, 'no plan can exceed the server-wide lecture cap');
+});
+
+test('App Store: needs APPLE_APP_APPLE_ID in production; once set, iOS purchases go to Apple', () => {
+  const prod = { NODE_ENV: 'production', AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test', JWT_SECRET: 'p'.repeat(48), APPLE_IAP_ENABLED: 'true' };
+  const missing = loadConfigWith(prod, billingScript);
+  assert.equal(missing.code, 1);
+  assert.match(missing.err, /APPLE_APP_APPLE_ID/);
+  const ok = loadConfigWith({ ...prod, APPLE_APP_APPLE_ID: '1234567890' }, billingScript);
+  assert.equal(ok.code, 0, ok.err);
+  assert.deepEqual(JSON.parse(ok.out).platforms, { ios: 'apple', android: null, web: null });
+  const bad = loadConfigWith({ ...prod, APPLE_APP_APPLE_ID: 'abc' }, billingScript);
+  assert.notEqual(bad.code, 0);
+});
+
+test('email: log provider refused in production; resend needs a key and a sender', () => {
+  const prod = { NODE_ENV: 'production', AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test', JWT_SECRET: 'p'.repeat(48) };
+  const log = loadConfigWith({ ...prod, EMAIL_PROVIDER: 'log' });
+  assert.equal(log.code, 1);
+  assert.match(log.err, /EMAIL_PROVIDER=log is not allowed/);
+  const resend = loadConfigWith({ EMAIL_PROVIDER: 'resend' });
+  assert.equal(resend.code, 1);
+  assert.match(resend.err, /RESEND_API_KEY and EMAIL_FROM/);
+  const unset = loadConfigWith(prod);
+  assert.equal(unset.code, 0, unset.err);
+  assert.match(unset.err, /EMAIL_PROVIDER is disabled/, 'production without email warns loudly');
 });

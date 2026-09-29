@@ -1,17 +1,27 @@
-import { PAID_TIERS, RECOMMENDED_PLAN_ID, planById, type BillingPeriod, type PaidTier, type PaywallTrigger, type Plan } from '@study/shared';
+import { isRtlLanguage, PAID_TIERS, RECOMMENDED_PLAN_ID, planById, type BillingPeriod, type Entitlement, type PaidTier, type PaywallTrigger, type Plan } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, space, TextButton, Title } from '@/components/ui';
-import { isReleaseBuild } from '@/config/app-config';
+import { isReleaseBuild, storeLinks } from '@/config/app-config';
 import { platform, track } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth';
-import { formatDate, formatPrice, monthlyEquivalent, openManageSubscriptions, tierName, trialAllowance, useCatalog, useEntitlement, useStorePrices } from '@/lib/billing';
+import { formatDate, formatPrice, monthlyEquivalent, openManageSubscriptions, tierName, trialAllowance, trialLecture, useCatalog, useEntitlement, useStorePrices } from '@/lib/billing';
 import { getStoreClient, isStoreProvider, storeName } from '@/lib/store';
 
 const LECTURE_TRIGGERS: PaywallTrigger[] = ['free_lecture_used', 'locked_lectures'];
+
+/** Headline + subline by what the student was doing: weak topics / lectures → Student; more usage → Pro. */
+function upgradeContext(trigger: PaywallTrigger, tier: Entitlement['tier'], t: TFunction) {
+  if (trigger === 'locked_weak_topics') return { headline: t('paywall.headlineWeakTopics'), subline: t('paywall.sublineWeakTopics') };
+  if (trigger === 'free_lecture_used' || trigger === 'locked_lectures' || trigger === 'limit_media_length')
+    return { headline: t('paywall.headlineLectures'), subline: t('paywall.sublineLectures') };
+  if (tier === 'student' && trigger.startsWith('limit_')) return { headline: t('paywall.headlineMoreUsage'), subline: t('paywall.sublineMoreUsage') };
+  return { headline: t('paywall.headlineDefault'), subline: t('paywall.sublineDefault') };
+}
 
 export default function Paywall() {
   const { t } = useTranslation();
@@ -24,7 +34,12 @@ export default function Paywall() {
   // Pre-selected: the recommended plan (Student monthly), unless the user already has a paid plan.
   const current = planById(entitlement.data?.isPremium && entitlement.data.planId ? entitlement.data.planId : (catalog.data?.recommendedPlanId ?? RECOMMENDED_PLAN_ID));
   // Asked for lectures (free lecture used, or audio/video on Basic): Student, the first plan with them.
-  const initial = LECTURE_TRIGGERS.includes(trigger) && current.tier === 'basic' ? planById(`student_${current.period}`) : current;
+  const initial =
+    current.tier === 'basic' && (LECTURE_TRIGGERS.includes(trigger) || trigger === 'locked_weak_topics' || trigger.startsWith('limit_'))
+      ? planById(`student_${current.period}`) // Basic asking for more: Student is the next step
+      : entitlement.data?.tier === 'student' && trigger.startsWith('limit_')
+        ? planById(`pro_${current.period}`) // a Student at a limit: Pro is what gives more
+        : current;
   const [period, setPeriod] = useState<BillingPeriod>(initial.period);
   const [tier, setTier] = useState<PaidTier>(initial.tier);
 
@@ -107,6 +122,9 @@ export default function Paywall() {
   const onTrial = e.tier === 'trial';
   const per = (p: Plan) => (p.period === 'yearly' ? t('paywall.perYear') : t('paywall.perMonth'));
 
+  // What the student gains, for what they just tried to do (never just "locked").
+  const context = upgradeContext(trigger, e.tier, t);
+
   // Never promise "unlimited": plans have generous but finite AI allowances.
   const headline = onTrial
     ? params.message
@@ -114,16 +132,14 @@ export default function Paywall() {
       : t('paywall.headlineKeepStudying')
     : e.trialEnded
       ? t('paywall.headlineTrialEnded')
-      : trigger === 'free_lecture_used'
-        ? t('paywall.headlineFreeLecture')
-        : t('paywall.headlineDefault');
+      : context.headline;
   const subline = onTrial
     ? params.message
       ? t('paywall.sublineKept', { message: params.message })
       : t('paywall.sublineTrialEnds', { date: formatDate(e.trialEndsAt) })
     : e.trialEnded
       ? [params.message, t('paywall.sublineTrialEnded')].filter(Boolean).join(' ')
-      : (params.message ?? t('paywall.sublineDefault'));
+      : (params.message ?? context.subline);
 
   const cta = !plan
     ? ''
@@ -176,7 +192,7 @@ export default function Paywall() {
         <View style={{ gap: space(2.5) }}>
           {!!params.message && <Body muted>{params.message}</Body>}
           <Title style={{ fontSize: 26, lineHeight: 32 }}>{t('paywall.trialTitle', { days: trialDays })}</Title>
-          <Body>{t('paywall.trialSubtitle')}</Body>
+          <Body>{t('paywall.trialSubtitle', { days: trialDays })}</Body>
           <View style={{ backgroundColor: colors.successSoft, borderRadius: 12, padding: space(3.5), gap: 2 }}>
             <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{t('paywall.trialIncluded', { allowance: trialAllowance(tl) })}</Text>
             <Text style={{ color: colors.muted, fontSize: 13 }}>{t('paywall.subscribeAnytime')}</Text>
@@ -272,6 +288,7 @@ export default function Paywall() {
                 exams: t('paywall.exams', { count: tl.examGenerationsPerMonth ?? 0 }),
                 length: tl.maxQuestionsPerExam,
                 practice: t('paywall.practice', { count: tl.practiceQuestionsPerMonth ?? 0 }),
+                lecture: trialLecture(tl),
               })}
             </Body>
           )}
@@ -284,10 +301,7 @@ export default function Paywall() {
         <Card>
           {Platform.OS === 'web' ? (
             // No purchases on the web: subscriptions are bought in the iOS/Android app and work here too.
-            <>
-              <Body style={{ fontWeight: '600' }}>{t('paywall.webTitle')}</Body>
-              <Body muted>{t('paywall.webBody')}</Body>
-            </>
+            <WebStorePath />
           ) : catalog.data.purchasesAvailable ? (
             // The server sells here but this build can't reach the store (Expo Go / no native module).
             <>
@@ -314,5 +328,36 @@ export default function Paywall() {
       </View>
       <TextButton title={t('common.notNow')} tone="muted" onPress={() => router.back()} />
     </Screen>
+  );
+}
+
+/**
+ * Web: no purchases here (no fake web checkout). Explain the path through the stores and link to
+ * the listings: Google Play's URL follows from the package name; the App Store's needs the app's id
+ * (EXPO_PUBLIC_APP_STORE_URL) — without it, the student is told what to search for.
+ */
+function WebStorePath() {
+  const { t, i18n } = useTranslation();
+  const link = { color: colors.primary, fontWeight: '700' as const, fontSize: 15 };
+  return (
+    <View style={{ gap: space(2) }}>
+      <Body style={{ fontWeight: '600' }}>{t('paywall.webTitle')}</Body>
+      <Body muted>{t('paywall.webBody')}</Body>
+      <Body muted style={{ fontSize: 14 }}>{t('paywall.webSteps', { path: [t('nav.account'), t('account.upgrade')].join(isRtlLanguage(i18n.language) ? ' ← ' : ' → ') })}</Body>
+      {storeLinks.appStore ? (
+        <Text accessibilityRole="link" style={link} onPress={() => void Linking.openURL(storeLinks.appStore!)}>
+          {t('paywall.webIphone')} {t('common.chevron')}
+        </Text>
+      ) : (
+        <Body muted style={{ fontSize: 14 }}>{t('paywall.webSearchApple')}</Body>
+      )}
+      {storeLinks.googlePlay ? (
+        <Text accessibilityRole="link" style={link} onPress={() => void Linking.openURL(storeLinks.googlePlay!)}>
+          {t('paywall.webAndroid')} {t('common.chevron')}
+        </Text>
+      ) : (
+        <Body muted style={{ fontSize: 14 }}>{t('paywall.webSearchGoogle')}</Body>
+      )}
+    </View>
   );
 }

@@ -44,22 +44,24 @@ export const DEFAULT_LIMITS: Record<Tier, Limits> = {
     mediaMinutesPerMonth: 45,
     maxMediaMinutesPerFile: 45,
   },
-  // Free trial — the full experience with totals for the whole trial: 1 course, 1 PDF/PowerPoint,
-  // 1 exam of ≤ 8 questions, 5 practice questions, 1 study plan, 1 lecture ≤ 30 min.
+  // Free trial — Student-level features with totals for the whole 7 days. Never below Free on any
+  // limit (a trial must not look worse than not starting it): 1 course, 3 PDF/PowerPoint uploads,
+  // 3 exams of ≤ 8 questions, 30 practice questions, 1 study plan, 1 lecture (its first 45 min).
   trial: {
     courses: 1,
-    courseUploadsPerMonth: 1,
-    examGenerationsPerMonth: 1,
-    practiceQuestionsPerMonth: 5,
+    courseUploadsPerMonth: 3,
+    examGenerationsPerMonth: 3,
+    practiceQuestionsPerMonth: 30,
     maxQuestionsPerExam: 8,
     studyPlansPerMonth: 1,
     mediaUploadsPerMonth: 1,
-    mediaMinutesPerMonth: 30,
-    maxMediaMinutesPerFile: 30,
+    mediaMinutesPerMonth: 45,
+    maxMediaMinutesPerFile: 45,
   },
-  // Basic — PDFs and PowerPoints only.
+  // Basic — PDFs and PowerPoints for up to 3 courses at once; even study planner; no weak-topic
+  // targeting, no audio/video (those are what Student adds).
   basic: {
-    courses: 8,
+    courses: 3,
     courseUploadsPerMonth: 10,
     examGenerationsPerMonth: 15,
     practiceQuestionsPerMonth: 120,

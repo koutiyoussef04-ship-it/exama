@@ -6,6 +6,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, ListRow, Loading, ProgressBar, Screen, SectionLabel, space, TextButton, Title } from '@/components/ui';
 import { appVersion, isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
+import { ReminderSettingsCard } from '@/components/reminders';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, openManageSubscriptions, openPaywall, planSummary, useCatalog, useEntitlement } from '@/lib/billing';
@@ -133,6 +134,8 @@ export default function Account() {
           {e.usagePeriod === 'trial' ? t('account.trialTotals', { date: formatDate(e.usageResetsAt) }) : t('account.resetsOn', { date: formatDate(e.usageResetsAt) })}
         </Body>
       </Card>
+
+      <ReminderSettingsCard />
 
       <Card style={{ gap: 0 }}>
         <SectionLabel>{t('account.settings')}</SectionLabel>

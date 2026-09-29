@@ -4,7 +4,7 @@
  * responses are plain TypeScript types.
  */
 import { z } from 'zod';
-import { aiLanguageSchema } from './languages';
+import { aiLanguageSchema, languageSchema } from './languages';
 
 // ---------- Auth ----------
 
@@ -23,6 +23,27 @@ export type LoginInput = z.input<typeof loginSchema>;
 
 export type User = { id: string; email: string; name: string };
 export type AuthResponse = { token: string; user: User };
+
+/**
+ * Password reset: the API emails a short one-time code (valid 30 min, 5 attempts, single use).
+ * `request` always answers 202 — whether the email has an account is never revealed.
+ */
+export const PASSWORD_RESET_CODE_LENGTH = 6;
+export const passwordResetRequestSchema = z.object({
+  email: z.email().transform((e) => e.toLowerCase()),
+  /** App language, for the email. */
+  language: languageSchema.optional(),
+});
+export type PasswordResetRequestInput = z.input<typeof passwordResetRequestSchema>;
+export const passwordResetConfirmSchema = z.object({
+  email: z.email().transform((e) => e.toLowerCase()),
+  code: z
+    .string()
+    .trim()
+    .regex(new RegExp(`^\\d{${PASSWORD_RESET_CODE_LENGTH}}$`), 'Enter the code from the email'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+export type PasswordResetConfirmInput = z.input<typeof passwordResetConfirmSchema>;
 
 /** Account deletion requires the current password, so a stolen or forgotten-open session can't do it alone. */
 export const deleteAccountSchema = z.object({ password: z.string().min(1) });

@@ -21,12 +21,14 @@ import {
   scoreColor,
   SectionLabel,
   space,
+  TextButton,
   Title,
   WorkingCard,
 } from '@/components/ui';
+import { ExamDatePrompt } from '@/components/planner';
 import { api } from '@/lib/api';
 import { trackOnce } from '@/lib/analytics';
-import { handleLimitError } from '@/lib/billing';
+import { handleLimitError, openPaywall, useEntitlement } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { examDrafts } from '@/lib/exam-drafts';
 import { usePreferences } from '@/lib/preferences';
@@ -241,6 +243,10 @@ function Results({ exam }: { exam: Exam }) {
     },
   });
 
+  // Practice targeted at weak topics is a Student/Pro/trial feature (decided by the server).
+  const e = useEntitlement().data;
+  const targeted = !!e?.features.adaptivePractice;
+
   const headline =
     score >= 0.85 ? t('exam.headlineExcellent') : score >= 0.7 ? t('exam.headlineGood') : score >= 0.4 ? t('exam.headlineGetting') : t('exam.headlineStart');
 
@@ -256,7 +262,8 @@ function Results({ exam }: { exam: Exam }) {
 
       {practice.isPending ? (
         <WorkingCard title={t('exam.buildingTitle')} detail={t('exam.buildingDetail')} />
-      ) : missedTopics.length > 0 ? (
+      ) : missedTopics.length > 0 && targeted ? (
+        // Student / Pro / trial: practice built from these weak topics and the questions missed.
         <Card style={{ gap: space(3) }}>
           <SectionLabel>{t('exam.workOn')}</SectionLabel>
           <ContentDirection language={exam.language} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
@@ -267,7 +274,29 @@ function Results({ exam }: { exam: Exam }) {
           <Button title={t('exam.practiseWeak')} onPress={() => practice.mutate()} />
           <ErrorText error={practice.error} />
         </Card>
+      ) : missedTopics.length > 0 && e ? (
+        // Free / Basic: what to revisit and what they can do now (review with sources, general
+        // practice); targeting practice on these topics is what Student adds.
+        <Card style={{ gap: space(3) }}>
+          <SectionLabel>{t('exam.revisitTitle')}</SectionLabel>
+          <ContentDirection language={exam.language} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+            {missedTopics.map((topic) => (
+              <Badge key={topic} label={topic} tone="warning" />
+            ))}
+          </ContentDirection>
+          <Body muted style={{ fontSize: 14 }}>{t('exam.revisitHint')}</Body>
+          <Button variant="secondary" title={t('exam.practiseCourse')} onPress={() => practice.mutate()} />
+          <ErrorText error={practice.error} />
+          <View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, padding: space(3), gap: space(1) }}>
+            <Body style={{ fontSize: 14, fontWeight: '600' }}>{t('course.upgradeTargetedTitle')}</Body>
+            <Body muted style={{ fontSize: 14 }}>{t('exam.upgradeTargeted')}</Body>
+            <TextButton title={t('course.seeStudent')} onPress={() => openPaywall('locked_weak_topics', t('paywall.lockedWeakTopics'))} />
+          </View>
+        </Card>
       ) : null}
+
+      {/* After a real exam: when is the student's actual exam? (optional, once per course) */}
+      {exam.kind === 'standard' && <ExamDatePrompt documentId={exam.documentId} />}
 
       <Button
         variant={missedTopics.length > 0 ? 'secondary' : 'primary'}

@@ -53,6 +53,7 @@ export function MaterialKindList({ onChoose, disabled, selected }: { onChoose: (
   const lectureHint = (() => {
     if (!e || access !== 'available') return null;
     if (e.lectureAllowance === 'once') return t('materials.lectureOnce', { length: e.limits.maxMediaMinutesPerFile });
+    if (e.lectureAllowance === 'trial') return t('materials.lectureTrial', { length: e.limits.maxMediaMinutesPerFile });
     const left = remaining(e.limits.mediaMinutesPerMonth, e.usage.mediaMinutesThisMonth);
     if (left === null) return null;
     return t(e.usagePeriod === 'trial' ? 'materials.minutesLeftTrial' : 'materials.minutesLeftMonth', { left, length: e.limits.maxMediaMinutesPerFile });
@@ -142,7 +143,16 @@ export function MaterialsCard({ documentId }: { documentId: string }) {
       {choosing ? (
         <View style={{ gap: space(2) }}>
           <Body style={{ fontWeight: '600' }}>{t('materials.addTitle')}</Body>
-          <MaterialKindList onChoose={(option) => upload.mutate({ documentId, option })} disabled={upload.isPending} />
+          <MaterialKindList
+            onChoose={(option) =>
+              upload.mutate(
+                { documentId, option },
+                { onSuccess: (m) => m?.partial && router.push({ pathname: '/materials/[id]', params: { id: m.id, documentId } }) },
+              )
+            }
+            disabled={upload.isPending}
+          />
+          <UploadTrust />
           <TextButton title={t('common.cancel')} tone="muted" onPress={() => setChoosing(false)} />
         </View>
       ) : (
@@ -182,7 +192,13 @@ function MaterialRow({ material: m, last }: { material: CourseMaterial; last: bo
   const active = isActive(m);
   const meta = [
     kindLabel,
-    m.durationSeconds ? formatDuration(m.durationSeconds) : m.pageCount ? t(m.format === 'pptx' ? 'home.slides' : 'home.pages', { count: m.pageCount }) : null,
+    m.partial && m.fullDurationSeconds && m.processedMinutes
+      ? t('materials.partialMeta', { processed: m.processedMinutes, total: Math.ceil(m.fullDurationSeconds / 60) })
+      : m.durationSeconds
+        ? formatDuration(m.durationSeconds)
+        : m.pageCount
+          ? t(m.format === 'pptx' ? 'home.slides' : 'home.pages', { count: m.pageCount })
+          : null,
     m.status === 'ready' ? null : t(statusKey(m.status)),
   ]
     .filter(Boolean)
@@ -221,5 +237,58 @@ function MaterialRow({ material: m, last }: { material: CourseMaterial; last: bo
     >
       {content}
     </Pressable>
+  );
+}
+
+/**
+ * A Free/trial lecture longer than the allowance: only its first part is used. Says so plainly
+ * ("This lecture is 60 minutes. Free includes the first 45 minutes.") and what Student adds.
+ */
+export function PartialLectureNotice({ material: m }: { material: Pick<CourseMaterial, 'partial' | 'fullDurationSeconds' | 'processedMinutes'> }) {
+  const { t } = useTranslation();
+  const e = useEntitlement().data;
+  if (!m.partial || !m.fullDurationSeconds || !m.processedMinutes) return null;
+  const values = { total: Math.ceil(m.fullDurationSeconds / 60), processed: m.processedMinutes };
+  const upsell = e?.tier === 'free' || e?.tier === 'trial';
+  const first = e?.tier === 'free' ? t('materials.partialFree', values) : e?.tier === 'trial' ? t('materials.partialTrial', values) : t('materials.partialOther', values);
+  return (
+    <View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, padding: space(3), gap: space(1.5) }} accessibilityLiveRegion="polite">
+      <Body style={{ fontWeight: '600', fontSize: 15 }}>{first}</Body>
+      {upsell && (
+        <>
+          <Body muted style={{ fontSize: 14 }}>{t('materials.partialUpgrade', values)}</Body>
+          <TextButton
+            title={t('course.seeStudent')}
+            onPress={() => openPaywall(e?.tier === 'free' ? 'free_lecture_used' : 'limit_media_length', `${first} ${t('materials.partialUpgrade', values)}`)}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Reassurance next to the upload, limited to what the app and the Privacy Policy actually do:
+ * files are only visible to the account, used to build the course, sent to the AI/transcription
+ * providers for that, recordings deleted after transcription, and removed with the course.
+ */
+export function UploadTrust() {
+  const { t } = useTranslation();
+  return (
+    <View style={{ flexDirection: 'row', gap: space(2), alignItems: 'flex-start' }}>
+      <Text style={{ fontSize: 14 }} accessibilityElementsHidden importantForAccessibility="no">
+        🔒
+      </Text>
+      <View style={{ flex: 1, gap: space(1) }}>
+        <Body muted style={{ fontSize: 13, lineHeight: 19 }}>{t('materials.trust')}</Body>
+        <Text
+          accessibilityRole="link"
+          onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}
+          style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}
+        >
+          {t('nav.privacy')}
+        </Text>
+      </View>
+    </View>
   );
 }

@@ -10,7 +10,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
-import { MaterialKindList, UploadingRow } from '@/components/materials';
+import { MaterialKindList, UploadingRow, UploadTrust } from '@/components/materials';
 import { Body, Card, Chevron, colors, ErrorText, Screen, SectionLabel, space, WorkingCard } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useEntitlement } from '@/lib/billing';
@@ -40,11 +40,27 @@ export default function AddMaterial() {
 
   const addTo = (d: DocumentSummary) => {
     if (!option) return;
-    upload.mutate({ documentId: d.id, option }, { onSuccess: (m) => m && openCourse(d.id) });
+    upload.mutate(
+      { documentId: d.id, option },
+      {
+        onSuccess: (m) => {
+          if (!m) return;
+          openCourse(d.id);
+          // Only the first part of a long Free/trial lecture is used: show why, right away.
+          if (m.partial) router.push({ pathname: '/materials/[id]', params: { id: m.id, documentId: d.id } });
+        },
+      },
+    );
   };
-  const newCourse = () => {
-    if (!option || courseCapReached(e)) return;
-    course.mutate(OPTION_PICKER_TYPES[option]);
+  const newCourse = (o: MaterialOption | null = option) => {
+    if (!o || courseCapReached(e)) return;
+    course.mutate(OPTION_PICKER_TYPES[o]);
+  };
+  // No course yet: a PDF or PowerPoint can only start a new one — open the file picker right away
+  // (inside the tap, which the web requires).
+  const choose = (o: MaterialOption) => {
+    setOption(o);
+    if (!isLectureOption(o) && docs.isSuccess && all.length === 0) newCourse(o);
   };
   const pages = (d: DocumentSummary) => (d.pageCount != null ? t(d.format === 'pptx' ? 'home.slides' : 'home.pages', { count: d.pageCount }) : '');
 
@@ -54,13 +70,15 @@ export default function AddMaterial() {
 
       <View style={{ gap: space(2) }}>
         <SectionLabel>{t('materials.addTitle')}</SectionLabel>
-        <MaterialKindList selected={option} onChoose={setOption} disabled={busy} />
+        <MaterialKindList selected={option} onChoose={choose} disabled={busy} />
       </View>
 
-      {!!option && !busy && (
+      <UploadTrust />
+
+      {!!option && !busy && !(all.length === 0 && !lecture) && (
         <View style={{ gap: space(2) }}>
           <SectionLabel>{t('addMaterial.where')}</SectionLabel>
-          {!lecture && <TargetRow icon="➕" title={t('addMaterial.newCourse')} detail={t('addMaterial.newCourseHint')} onPress={newCourse} />}
+          {!lecture && <TargetRow icon="➕" title={t('addMaterial.newCourse')} detail={t('addMaterial.newCourseHint')} onPress={() => newCourse()} />}
           {ready.map((d) => (
             <TargetRow key={d.id} icon="📚" title={d.title} detail={pages(d)} onPress={() => addTo(d)} />
           ))}

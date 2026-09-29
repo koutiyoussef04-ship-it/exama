@@ -1,0 +1,36 @@
+warning: in the working copy of 'apps/api/.env.example', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/apps/api/.env.example b/apps/api/.env.example[m
+[1mindex c265967..04e2e4e 100644[m
+[1m--- a/apps/api/.env.example[m
+[1m+++ b/apps/api/.env.example[m
+[36m@@ -81,8 +81,30 @@[m [mMEDIA_TRANSCRIPTION_TIMEOUT_SECONDS=[m
+ # TRANSCRIPTION_PROVIDER=mock, BILLING_MOCK_ENABLED=true or the template JWT_SECRET.[m
+ # NODE_ENV=production[m
+ [m
+[32m+[m[32m# ---------------- Email (password reset) ----------------[m
+[32m+[m[32m# "Forgot password?" emails a one-time 6-digit code. log = print emails to the server log (development[m
+[32m+[m[32m# only); resend = send with Resend (https://resend.com); disabled = no email (reset can't work).[m
+[32m+[m[32m# Unset: log in development, disabled in production.[m
+[32m+[m[32mEMAIL_PROVIDER=[m
+[32m+[m[32m# Resend API key (SECRET — server only) and the sender; the sender's domain must be verified in Resend.[m
+[32m+[m[32mRESEND_API_KEY=[m
+[32m+[m[32mEMAIL_FROM=[m
+[32m+[m
+[32m+[m[32m# ---------------- App Store (iOS) ----------------[m
+[32m+[m[32m# See docs/app-store/apple-subscriptions.md. Off until App Store Connect is set up: iOS purchases are[m
+[32m+[m[32m# then refused (the app shows "coming soon"), nothing else changes.[m
+ # iOS bundle id; App Store transactions for any other app are rejected.[m
+ APPLE_BUNDLE_ID=com.exama.app[m
+[32m+[m[32m# true = accept App Store purchases (verified with Apple's certificates in apps/api/certs/apple).[m
+[32m+[m[32mAPPLE_IAP_ENABLED=false[m
+[32m+[m[32m# The app's numeric Apple ID (App Store Connect → App Information). Required for Production purchases.[m
+[32m+[m[32mAPPLE_APP_APPLE_ID=[m
+[32m+[m[32m# Accept Sandbox purchases (TestFlight, App Review). Keep true — App Review buys in the Sandbox.[m
+[32m+[m[32mAPPLE_ALLOW_SANDBOX=true[m
+[32m+[m[32m# Check Apple's certificates for revocation (OCSP, outbound HTTPS to Apple). Keep true in production.[m
+[32m+[m[32mAPPLE_ONLINE_CHECKS=true[m
+[32m+[m[32m# Optional: another folder of Apple root certificates (.cer). Default: apps/api/certs/apple.[m
+[32m+[m[32mAPPLE_ROOT_CERTS_DIR=[m
+ [m
+ # ---------------- Google Play Billing (Android) ----------------[m
+ # See docs/google-play/google-play-billing.md. Leave empty until the Play Console is set up:[m

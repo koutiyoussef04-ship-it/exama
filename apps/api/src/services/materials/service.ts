@@ -51,6 +51,9 @@ export function canRetry(m: MaterialRow): boolean {
   );
 }
 
+/** Only the beginning of the recording is (or will be) processed: its length exceeds the reserved minutes. */
+const isPartial = (m: MaterialRow) => m.kind !== 'pdf' && !!m.originalDurationSeconds && m.billedMinutes > 0 && m.originalDurationSeconds > m.billedMinutes * 60;
+
 export const toMaterialDto = (m: MaterialRow): CourseMaterial => ({
   id: m.id,
   documentId: m.documentId,
@@ -61,6 +64,9 @@ export const toMaterialDto = (m: MaterialRow): CourseMaterial => ({
   status: m.status,
   sizeBytes: m.sizeBytes,
   durationSeconds: m.durationSeconds,
+  fullDurationSeconds: m.originalDurationSeconds ?? m.durationSeconds,
+  partial: isPartial(m),
+  processedMinutes: m.kind === 'pdf' ? null : m.billedMinutes || null,
   pageCount: m.pageCount,
   sourceLanguage: m.sourceLanguage,
   language: m.language,
@@ -87,6 +93,9 @@ function primaryMaterial(doc: DocRow): CourseMaterial {
     status: doc.status,
     sizeBytes: doc.sizeBytes,
     durationSeconds: null,
+    fullDurationSeconds: null,
+    partial: false,
+    processedMinutes: null,
     pageCount: doc.pageCount,
     sourceLanguage: doc.sourceLanguage,
     language: doc.summaryLanguage,
@@ -240,6 +249,7 @@ export async function createMaterial(userId: string, documentId: string, req: Up
           mimeType: req.contentType?.slice(0, 100) || 'application/octet-stream',
           sizeBytes: size,
           durationSeconds: probe.durationSeconds,
+          originalDurationSeconds: probe.durationSeconds,
           billedMinutes: reservation.minutes,
           minutesLedgerId: reservation.minutesLedgerId,
           transcriptionProvider: probe.kind === 'pdf' ? null : transcriber!.name,
@@ -258,6 +268,7 @@ export async function createMaterial(userId: string, documentId: string, req: Up
       file_size_kb: Math.round(size / 1024),
       ...(row.durationSeconds ? { duration_s: row.durationSeconds, reserved_minutes: row.billedMinutes } : {}),
       ...(allowance && allowance !== 'none' ? { lecture_allowance: allowance } : {}),
+      ...(isPartial(row) ? { partial: true } : {}),
       attempt: 1,
     });
     return toMaterialDto(row);
@@ -279,7 +290,7 @@ export async function retryMaterial(userId: string, documentId: string, material
   uploadLimiter.take(userId);
   // A failed transcription released its minutes: reserve them again (402 if the plan has no room).
   const needsTranscription = m.kind !== 'pdf' && m.failedStage !== 'analysis';
-  const reservation = needsTranscription ? await reserveMediaMinutes(userId, m.durationSeconds ?? 60) : null;
+  const reservation = needsTranscription ? await reserveMediaMinutes(userId, m.originalDurationSeconds ?? m.durationSeconds ?? 60) : null;
   const [row] = await db
     .update(courseMaterials)
     .set({

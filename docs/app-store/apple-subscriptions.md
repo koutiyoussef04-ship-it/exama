@@ -1,9 +1,11 @@
-# Exama — Apple subscriptions (StoreKit 2) preparation
+# Exama — Apple subscriptions (StoreKit 2)
 
-Status: **app side connected (expo-iap), server verification not implemented yet.** No real purchase
-is possible yet, and nothing pretends to be one: with no Apple verifier configured the catalog reports
-no store for iOS, the paywall shows "Subscriptions are coming soon", and the API refuses Apple purchases
-(503 `purchases_unavailable` / `apple_not_configured`).
+Status: **implemented and tested with a test certificate chain; not yet tested against the real App
+Store.** The server verifies every App Store transaction, renewal info and notification with Apple's
+official `@apple/app-store-server-library` (`SignedDataVerifier`) and Apple Root CA - G3
+(`apps/api/certs/apple`). It is switched off until you set `APPLE_IAP_ENABLED=true`: until then the
+catalog reports no store for iOS, the paywall shows "Subscriptions are coming soon", and the API refuses
+Apple purchases (503 `apple_not_configured`). No purchase is ever trusted without verification.
 
 Android uses Google Play Billing with the same server-side entitlement — see
 `docs/google-play/google-play-billing.md`. A subscription bought in one store works on every platform
@@ -33,7 +35,7 @@ Display names for the store: **Exama Basic** ("PDFs + PowerPoints"), **Exama Stu
 For each of the 6 products: **Introductory Offer → Free → 1 week**, all territories.
 - Apple enforces one introductory offer per Apple ID per subscription group; our server also allows one trial per Exama account (`trial_used`).
 - The trial length must stay **7 days** (`TRIAL_DAYS`): trial usage limits are counted from `trialEndsAt − 7 days`.
-- During the trial the server applies the **trial** limits (1 course, 1 PDF/PowerPoint, 1 exam of ≤ 8 questions, 5 practice questions, 1 lecture ≤ 30 min) with every feature on, whichever plan the trial was started from; never paid limits.
+- During the trial the server applies the **trial** limits (1 course, 3 PDF/PowerPoint uploads, 3 exams of ≤ 8 questions, 30 practice questions, 1 study plan, 1 audio/video lecture — the first 45 min of it) with every Student feature on, whichever plan the trial was started from; never paid limits.
 
 ## 2. Architecture
 
@@ -41,7 +43,7 @@ For each of the 6 products: **Introductory Offer → Free → 1 week**, all terr
 App (StoreKit 2, appAccountToken = Exama user id)
   └─ signed transaction (JWS) ─▶ POST /billing/purchase { signedTransaction }
                                   POST /billing/restore  { signedTransactions[] }
-                                        │ AppleVerifier (to implement) verifies Apple's signature
+                                        │ AppleVerifier (apple-verifier.ts) verifies Apple's signature
                                         ▼
                          mapAppleTransaction → SubscriptionUpdate → applySubscriptionUpdate
                                         ▲                             (single writer + analytics)
@@ -56,19 +58,22 @@ App Store Server Notifications V2 ─▶ POST /billing/apple/notifications { sig
 | Manage subscription | Account → "Manage subscription" (opens the store that bills it: `https://apps.apple.com/account/subscriptions` or Google Play) | done |
 | Transaction → subscription mapping (trial, active, cancelled, grace period, expired, refunded) | `apps/api/src/billing/providers/apple.ts` | done + tested (`apps/api/test/apple.test.ts`) |
 | Account association | same file: `appAccountToken` must equal the signed-in user id; bundle id must match `APPLE_BUNDLE_ID`; one `originalTransactionId` ↔ one account (unique index) | done + tested |
-| Notifications V2 handler | `handleAppleNotification` + route `POST /billing/apple/notifications` | done + tested with a fake verifier; returns 503 until configured |
-| JWS signature verification (`AppleVerifier`) | `apps/api/src/billing/index.ts` → `appleVerifier` | **to implement** |
+| Notifications V2 handler | `handleAppleNotification` + route `POST /billing/apple/notifications` | done + tested (renewal, auto-renew off, refund, expiry, forged); returns 503 until `APPLE_IAP_ENABLED=true` |
+| JWS signature verification (`AppleVerifier`) | `apps/api/src/billing/providers/apple-verifier.ts` (Apple's `SignedDataVerifier`: chain to Apple Root CA - G3, Apple OIDs, ES256, bundle id, App Apple ID, environment; OCSP revocation checks with `APPLE_ONLINE_CHECKS`) | done + tested (`apps/api/test/apple-verifier.test.ts`, test CA in `test/fixtures/apple`) |
 | StoreKit in the app | `apps/mobile/src/lib/store/native.ts` (expo-iap 5.8, shared with Google Play) | done (compiles into the iOS bundle; **not tested against the App Store** — needs a device + sandbox) |
 | Analytics separation | subscription events carry `provider` + `environment` (`test` / `sandbox` / `production`) | done |
 
-## 3. Remaining implementation (when you're ready)
+## 3. Switching it on
 
-**Server**
-1. `npm i @apple/app-store-server-library -w @study/api`.
-2. Implement `AppleVerifier` with `SignedDataVerifier(appleRootCAs, enableOnlineChecks=true, environment, bundleId, appAppleId)`; download Apple's root certificates (Apple PKI) and load them on start.
-3. Set `appleVerifier` in `apps/api/src/billing/index.ts` when the Apple variables are present. Add them to the config schema (server-side only):
-   `APPLE_ENVIRONMENT` (`Sandbox`/`Production`), `APPLE_APP_APPLE_ID` (numeric app id). For the App Store Server API (optional: look up transactions, send consumption info) also `APPLE_ISSUER_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8 contents). **Never in the mobile app.**
-4. In App Store Connect → App Information → App Store Server Notifications: **Version 2**, production and sandbox URL `https://<your-api>/billing/apple/notifications`.
+**Server** (`apps/api/.env` on the server — never in the app):
+1. Check `apps/api/certs/apple/AppleRootCA-G3.cer` against Apple's published fingerprint (see the README in that folder).
+2. `APPLE_IAP_ENABLED=true`
+3. `APPLE_APP_APPLE_ID=<numeric Apple ID>` (App Store Connect → App Information → Apple ID). Required in production; without it only Sandbox purchases are accepted.
+4. `APPLE_ALLOW_SANDBOX=true` (default) — App Review and TestFlight buy in the Sandbox. Sandbox purchases are recorded as `environment: sandbox` and excluded from revenue reports.
+5. `APPLE_ONLINE_CHECKS=true` (default) — the server calls Apple's OCSP responder to check the certificates aren't revoked, so it needs outbound HTTPS to `ocsp.apple.com`.
+6. App Store Connect → App Information → App Store Server Notifications: **Version 2**, production and sandbox URL `https://<your-api>/billing/apple/notifications`.
+
+The App Store Server API (looking up transactions with an `.p8` key) is not needed and not used: StoreKit 2 sends signed transactions, and notifications carry signed data.
 
 **App** — done in `apps/mobile/src/lib/store/native.ts` (expo-iap; needs an EAS build, StoreKit does not run in Expo Go):
 `fetchProducts` for the 6 product ids → localized prices; `requestPurchase` with `appAccountToken = user.id`;

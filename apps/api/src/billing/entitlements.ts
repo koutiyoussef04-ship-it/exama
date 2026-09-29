@@ -300,7 +300,7 @@ export async function assertCanUploadMaterial(userId: string, kindHint: 'pdf' | 
   }
 }
 
-export type MaterialReservation = { minutes: number; minutesLedgerId: string | null; allowance?: LectureAllowance };
+export type MaterialReservation = { minutes: number; minutesLedgerId: string | null; allowance?: LectureAllowance; partial?: boolean };
 
 /**
  * Authoritative check + reservation for a new material, inside the transaction that inserts it
@@ -319,26 +319,43 @@ export async function reserveMaterialUpload(tx: Tx, userId: string, kind: 'pdf' 
     return { minutes: 0, minutesLedgerId: null };
   }
   assertLectures(e);
-  const minutes = minutesFor(durationSeconds ?? 0);
   if (over(l.mediaUploadsPerMonth, u.mediaUploadsThisMonth)) {
     throw new LimitError('limit_reached', 'media_uploads', l.mediaUploadsPerMonth!, u.mediaUploadsThisMonth, e.tier);
   }
-  checkMedia(e, minutes);
+  const { minutes, partial } = minutesToReserve(e, minutesFor(durationSeconds ?? 0));
   await tx.insert(usageLedger).values({ userId, kind: 'media_upload', amount: 1 });
   const [row] = await tx.insert(usageLedger).values({ userId, kind: 'media_minutes', amount: minutes }).returning({ id: usageLedger.id });
-  return { minutes, minutesLedgerId: row.id, allowance: e.lectureAllowance };
+  return { minutes, minutesLedgerId: row.id, allowance: e.lectureAllowance, partial };
+}
+
+/**
+ * Minutes to reserve for a lecture of `requested` minutes.
+ *   Free's one lecture and the trial's lecture: a longer recording isn't refused — only its first
+ *   part is processed, up to the allowance left (45 min). The transcription provider is told to stop
+ *   there (`maxSeconds` → `audio_end_at`), so nothing beyond it is ever transcribed or charged.
+ *   Paid plans: the per-file maximum and monthly minutes apply as before (402 media_length / media_minutes).
+ */
+export function minutesToReserve(e: Entitlement, requested: number): { minutes: number; partial: boolean } {
+  const { limits: l, usage: u } = e;
+  if (e.lectureAllowance === 'once' || e.lectureAllowance === 'trial') {
+    const left = l.mediaMinutesPerMonth === null ? Infinity : l.mediaMinutesPerMonth - u.mediaMinutesThisMonth;
+    const cap = Math.min(l.maxMediaMinutesPerFile, left);
+    if (cap <= 0) throw new LimitError('limit_reached', 'media_minutes', l.mediaMinutesPerMonth ?? 0, u.mediaMinutesThisMonth, e.tier, requested);
+    return requested > cap ? { minutes: cap, partial: true } : { minutes: requested, partial: false };
+  }
+  checkMedia(e, requested);
+  return { minutes: requested, partial: false };
 }
 
 /** Retrying a failed transcription reserves its minutes again (they were released on failure). */
 export async function reserveMediaMinutes(userId: string, durationSeconds: number): Promise<MaterialReservation> {
   return db.transaction(async (tx) => {
     await lockUsage(tx, userId);
-    const minutes = minutesFor(durationSeconds);
     const e = await getEntitlement(userId, tx);
     assertLectures(e); // e.g. downgraded to Basic since the upload failed
-    checkMedia(e, minutes);
+    const { minutes, partial } = minutesToReserve(e, minutesFor(durationSeconds));
     const [row] = await tx.insert(usageLedger).values({ userId, kind: 'media_minutes', amount: minutes }).returning({ id: usageLedger.id });
-    return { minutes, minutesLedgerId: row.id };
+    return { minutes, minutesLedgerId: row.id, partial };
   });
 }
 
