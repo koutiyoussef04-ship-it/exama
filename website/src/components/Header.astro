@@ -20,7 +20,7 @@ import { site } from '../config/site';
       </ul>
     </nav>
 
-    <a class="btn btn-primary btn-sm header-cta" href={site.appUrl}>{site.cta.label}</a>
+    <a class="btn btn-primary btn-sm header-cta" href={site.cta.href}>{site.cta.label}</a>
 
     <details class="menu">
       <summary aria-label="Menu">
@@ -31,7 +31,7 @@ import { site } from '../config/site';
         <ul>
           {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
         </ul>
-        <a class="btn btn-primary btn-block" href={site.appUrl}>{site.cta.label}</a>
+        <a class="btn btn-primary btn-block" href={site.cta.href}>{site.cta.label}</a>
       </nav>
     </details>
   </div>

@@ -1,7 +1,8 @@
 # Exama marketing website
 
 The public landing site for **https://exama.app**. Its one job: turn visitors into students who start the
-7-day free trial at **https://app.exama.app**.
+7-day free trial: every "Start 7-day free trial" button goes to the app's real sign-up route,
+**https://app.exama.app/sign-up**, where the student creates an account, picks a plan and starts the trial at Stripe Checkout.
 
 This is a **separate, static site** next to the Exama app. It does not import, share or modify anything in
 `apps/mobile`, `apps/api` or `packages/shared`, and it is deliberately **not** part of the npm workspaces
@@ -91,10 +92,10 @@ The wordmark is rendered as text, exactly like in the app. `public/og-image.png`
 2. **Support contact.** Set `site.legal.supportEmail` in `src/config/site.ts`; `/support` shows it
    automatically. No company name, address or email is invented anywhere on the site.
 3. **Real screenshots** (see above).
-4. **Trial start path.** The 7-day trial is started through the App Store / Google Play, and the web app has no
-   checkout (`packages/shared/src/billing.ts`, `apps/mobile/src/app/paywall.tsx`). The FAQ explains this
-   accurately; decide whether the "Start 7-day free trial" button should stay pointed at `app.exama.app`, or at
-   store links once the listings exist.
+4. **Web billing must be live before this site is.** The "Start 7-day free trial" buttons and the FAQ describe the
+   Stripe web trial (`apps/api`, `docs/stripe/stripe-web-billing.md`). Do not publish this site until Stripe is
+   configured in production (`STRIPE_ENABLED=true`, Prices, webhook, Customer Portal) and the flow has been tried
+   end to end in Stripe test mode — otherwise the button leads to a paywall that cannot take a subscription.
 
 ## Deploy
 

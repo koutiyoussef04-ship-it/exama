@@ -235,14 +235,16 @@ export const faqs: Faq[] = [
   {
     q: 'How does the 7-day free trial work?',
     a: [
-      'Each account can start one 7-day free trial. It includes the Student features — lectures, weak-topic practice and an adaptive study plan — with a limited allowance. No payment is taken today, and you can cancel any time before the trial ends to avoid being charged.',
-      'The trial is started from the plan screen of the Exama app on iPhone or Android, because subscriptions are handled by the App Store and Google Play. You can create your account and use the Free plan at app.exama.app, and a trial or subscription started in either mobile app also works on the web.',
+      'Every account can start one 7-day free trial. Create your Exama account at app.exama.app, choose Basic, Student or Pro, and start the trial at checkout. It includes the Student features — lectures, weak-topic practice and an adaptive study plan — with a limited allowance.',
+      'You enter a payment method at checkout (handled by Stripe), but nothing is charged today. If you do nothing, your chosen plan starts automatically when the 7 days end. Cancel any time before then from Account → Manage billing and you will not be charged.',
+      'The trial works in any browser. A subscription started in a mobile app, where available, is billed by the App Store or Google Play and unlocks the same account.',
     ],
   },
   {
     q: 'What happens after the trial?',
     a: [
-      'When the 7 days end, your subscription to the plan you chose begins and is charged its price — unless you cancel before the trial ends. If you cancel, you move to the Free plan and keep your courses and progress.',
+      'When the 7 days end, the plan you chose begins and your card is charged its price — unless you cancel before the trial ends. If you cancel, you move to the Free plan and keep your courses and progress.',
+      'After that you can cancel or change plan any time from Account → Manage billing; a cancelled plan keeps working until the end of the period you paid for.',
     ],
   },
   {

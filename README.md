@@ -2,7 +2,7 @@
 
 > Turn your university course material into a personal AI tutor — in English, Spanish, French or Arabic.
 
-One Expo codebase for **iOS, Android and web**. Bundle id / package `com.exama.app`, version 1.0.0. Subscriptions: App Store on iOS, Google Play on Android, one server-side entitlement that also unlocks the web version.
+One Expo codebase for **iOS, Android and web**. Bundle id / package `com.exama.app`, version 1.0.0. Subscriptions: App Store on iOS, Google Play on Android, Stripe on the web (off until configured), one server-side entitlement that unlocks every platform.
 
 **Release docs:** [EAS builds & production config](docs/release/eas-build.md) · [Apple subscriptions](docs/app-store/apple-subscriptions.md) · [App Store Connect checklist](docs/app-store/app-store-connect-checklist.md) · [Google Play Billing](docs/google-play/google-play-billing.md) · [Play Console checklist](docs/google-play/play-console-checklist.md) · [Data inventory / App Privacy](docs/privacy/data-inventory.md) · [Legal templates](docs/legal/) · [Brand assets](docs/brand/assets.md)
 
@@ -83,6 +83,9 @@ GET|POST|PATCH|DELETE /documents/:id/study-plan      study planner (POST = creat
 POST /documents/:id/study-plan/recalculate|regenerate  re-plan (free) | rebuild with AI (counts)
 POST /documents/:id/study-plan/tasks/:taskId/complete|skip
 POST /billing/apple/notifications    App Store Server Notifications V2 (503 until Apple is configured)
+POST /billing/stripe/checkout        web: { plan, interval } → { url } of Stripe Checkout (503 until Stripe is configured)
+POST /billing/stripe/portal          web: { url } of the Stripe Customer Portal (own customer only)
+POST /billing/stripe/webhook         Stripe webhook: signature-verified, idempotent — the only thing that grants web access
 POST /billing/google/notifications   Google Play real-time notifications, Pub/Sub push with OIDC (503 until Play is configured)
 GET  /documents/:id/materials        course materials (original PDF first, then added lectures/PDFs)
 POST /documents/:id/materials        add material: raw file as the body (streamed), headers X-Exama-Title / X-Exama-Language
@@ -202,7 +205,7 @@ Tune in `apps/api/src/billing/limits.ts`, or without a deploy via `PLAN_LIMITS_O
 - `mock` (development only, `BILLING_MOCK_ENABLED=true`): trials/subscriptions/cancel/restore without payment, plus a state switcher on the Account screen. Refused when `NODE_ENV=production`.
 - `apple` (iOS): expo-iap in the app; the server verifies every signed transaction, renewal info and App Store Server Notification V2 with Apple's `SignedDataVerifier` (certificate chain to Apple Root CA G3 in `apps/api/certs/apple/`, bundle id, App Apple ID, environment; `apps/api/src/billing/providers/apple-verifier.ts`) and handles renewals, expiry, cancellation (auto-renew off), refunds and revocations. Off until `APPLE_IAP_ENABLED=true` (production also needs `APPLE_APP_APPLE_ID`); until then Apple purchases are refused and the iOS paywall shows "coming soon". Tested with a local test certificate chain — not yet against real App Store / sandbox purchases. See [docs/app-store/apple-subscriptions.md](docs/app-store/apple-subscriptions.md).
 - `google` (Android): Play Billing via expo-iap + Play Developer API verification, server-side acknowledgement, plan changes as replacements, real-time notifications. Tested against a fake Google API; enabled by `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`. See [docs/google-play/google-play-billing.md](docs/google-play/google-play-billing.md).
-- **Web** has no in-app purchases: the paywall explains how to subscribe in the iOS/Android app (Account → Upgrade; store links from `EXPO_PUBLIC_APP_STORE_URL` / `EXPO_PUBLIC_PLAY_STORE_URL`, the Play link falls back to the package name), and a subscription from either store works there. A subscription can only be bought in one store at a time (409 `subscribed_elsewhere`); the paywall shows where it's managed.
+- **Web** subscribes through **Stripe Checkout** when `STRIPE_ENABLED=true` (7-day trial owned by Stripe, card collected at checkout, billing managed in the Stripe Customer Portal; access is granted only by the signed webhook). Setup, access rules and the Dashboard checklist: [docs/stripe/stripe-web-billing.md](docs/stripe/stripe-web-billing.md). With Stripe off, web has no purchases: the paywall explains how to subscribe in the iOS/Android app (Account → Upgrade; store links from `EXPO_PUBLIC_APP_STORE_URL` / `EXPO_PUBLIC_PLAY_STORE_URL`, the Play link falls back to the package name), and a subscription from either store works there. A subscription can only exist in one source at a time (409 `subscribed_elsewhere` / `already_subscribed`); the paywall shows where it's managed.
 - In release builds the app never shows test-mode controls, and a production server refuses to start with mock billing.
 
 API: `GET /billing/plans` (public) · `GET /billing/status` · `POST /billing/purchase` · `POST /billing/restore` · `POST /billing/cancel` (mock) · `POST /billing/mock/state` (mock).

@@ -17,6 +17,8 @@ if (!existsSync(dist)) {
 }
 
 const APP_URL = 'https://app.exama.app';
+/** The app's real sign-up route: where every "Start 7-day free trial" button goes (then plan → Stripe Checkout). */
+const SIGNUP_URL = 'https://app.exama.app/sign-up';
 const TITLE = 'Exama — Your AI Exam Coach';
 const DESCRIPTION = 'Turn your course material into personalized exams, grading, weak-topic practice and a study plan.';
 
@@ -84,7 +86,7 @@ check(headingLevels.every((l, i) => i === 0 || l <= headingLevels[i - 1] + 1), '
 console.log('\nConversion');
 const ctaLinks = [...home.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>\s*Start 7-day free trial\s*<\/a>/g)].map((m) => m[1]);
 check(ctaLinks.length >= 4, `"Start 7-day free trial" appears ${ctaLinks.length}× (header, hero, pricing, final CTA)`);
-check(ctaLinks.every((h) => h === APP_URL), `every "Start 7-day free trial" link goes to ${APP_URL}`);
+check(ctaLinks.every((h) => h === SIGNUP_URL), `every "Start 7-day free trial" link goes to the app's sign-up route ${SIGNUP_URL}`);
 check(/href="#how-it-works"[^>]*>\s*See how it works/.test(home), 'secondary CTA "See how it works" → #how-it-works');
 check(homeText.includes('Turn your course material into your personal AI exam coach.'), 'hero headline present (exact)');
 for (const f of ['PDF', 'PowerPoint', 'Audio', 'Video']) check(new RegExp(`class="chip"[^>]*>(?:<svg[\\s\\S]*?</svg>)?\\s*${f}`).test(home), `hero shows supported format: ${f}`);
@@ -93,6 +95,11 @@ for (const f of ['PDF', 'PowerPoint', 'Audio', 'Video']) check(new RegExp(`class
 console.log('\nContent');
 for (const price of ['€0', '€9.99', '€79.99', '€14.99', '€119.99', '€24.99', '€199.99']) check(homeText.includes(price), `pricing shows ${price}`);
 check(/7 days free|7-day free trial/.test(homeText), 'communicates the 7-day free trial');
+// The trial is now genuinely available on the web (Stripe): the copy must say how it works, honestly.
+check(/Card required, no payment today/.test(homeText), 'hero says a card is required but nothing is charged today');
+check(homeText.includes('Account → Manage billing'), 'explains where to manage/cancel (Account → Manage billing)');
+check(/start the trial at checkout/.test(homeText), 'FAQ: the trial starts at checkout on the web');
+check(!/started from the plan screen of the Exama app/.test(homeText) && !/because subscriptions are handled by the App Store/.test(homeText), 'the old "trial only in the mobile app" claim is gone');
 for (const q of [
   'What can I upload to Exama?',
   'How does Exama create my exams?',
@@ -147,7 +154,7 @@ for (const [route, file] of Object.entries(pages)) {
 }
 check(bad === 0, 'all internal links and #anchors resolve');
 const external = new Set([...home.matchAll(/<a\b[^>]*href="(https?:[^"]*)"/g)].map((m) => m[1]));
-check([...external].every((u) => u === APP_URL), `the only external link is ${APP_URL}`);
+check([...external].every((u) => u === APP_URL || u === SIGNUP_URL), `the only external links are ${APP_URL} and ${SIGNUP_URL}`);
 
 // ---------- Weight ----------
 console.log('\nPerformance');

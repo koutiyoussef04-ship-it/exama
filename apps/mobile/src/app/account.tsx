@@ -2,15 +2,16 @@ import type { MockState } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, ListRow, Loading, ProgressBar, Screen, SectionLabel, space, TextButton, Title } from '@/components/ui';
 import { appVersion, isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
 import { ReminderSettingsCard } from '@/components/reminders';
+import { ManageBillingButton } from '@/components/web-billing';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, openManageSubscriptions, openPaywall, planSummary, useCatalog, useEntitlement } from '@/lib/billing';
-import { isStoreProvider, storeName } from '@/lib/store';
+import { hasWebSubscription, isStoreProvider, storeName } from '@/lib/store';
 import { confirm } from '@/lib/confirm';
 import { usePreferences } from '@/lib/preferences';
 
@@ -89,7 +90,8 @@ export default function Account() {
           <Body muted>{t(e.tier === 'trial' ? 'account.cancelledTrial' : 'account.cancelledPlan', { date: formatDate(e.currentPeriodEndsAt) })}</Body>
         )}
         {e.trialEnded && <Body muted>{t('account.trialEnded')}</Body>}
-        {e.status !== 'complimentary' && (
+        {/* A web subscription converts by itself and is changed in the Customer Portal (below), so no plan button here. */}
+        {e.status !== 'complimentary' && !hasWebSubscription(e) && (
           <Button
             variant={e.isPremium ? 'secondary' : 'primary'}
             title={
@@ -111,6 +113,16 @@ export default function Account() {
             <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.manageHint', { store: storeName(e.provider) })}</Body>
           </>
         )}
+        {/* Web subscriptions (Stripe): managed in Stripe's Customer Portal, reachable on the web only. The iOS/Android apps just say where it is managed. */}
+        {e.provider === 'stripe' &&
+          (Platform.OS === 'web' ? (
+            <>
+              <ManageBillingButton />
+              <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.manageBillingHint')}</Body>
+            </>
+          ) : (
+            <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.managedOnWebHint')}</Body>
+          ))}
         {devTools && mock && e.willRenew && e.status !== 'complimentary' && (
           <TextButton title={e.tier === 'trial' ? t('account.cancelTrial') : t('account.cancelSubscription')} tone="danger" onPress={askCancel} disabled={cancel.isPending} />
         )}

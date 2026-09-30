@@ -9,13 +9,16 @@
  *   whole storage folder is removed after the database commit.
  * - sessions: requireAuth rejects tokens of accounts that no longer exist.
  *
- * Store subscriptions (Apple) are NOT cancelled by deleting the account — Apple bills the Apple ID.
- * The app tells the user to cancel in Settings first; the response says whether one was active.
+ * Store subscriptions (Apple, Google Play) are NOT cancelled by deleting the account — the store bills the
+ * user's store account. The app tells the user to cancel there first; the response says whether one was active.
+ * Web subscriptions (Stripe) ARE cancelled by us, first: if Stripe cannot cancel, nothing is deleted.
  */
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { track } from '../analytics/index.js';
 import { verifyPassword } from '../auth/auth.js';
 import { getEntitlement } from '../billing/entitlements.js';
+import { stripeBilling } from '../billing/index.js';
+import { cancelStripeBillingForAccountDeletion } from '../billing/stripe-service.js';
 import { db } from '../db/client.js';
 import { analyticsEvents, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
@@ -31,6 +34,9 @@ export async function deleteAccount(userId: string, password: string): Promise<{
 
   const e = await getEntitlement(userId);
   const hadActiveSubscription = e.provider !== null && (e.status === 'active' || e.status === 'trialing' || e.status === 'cancelled');
+
+  // A web (Stripe) subscription would keep billing a person without an account: cancel it before deleting anything.
+  await cancelStripeBillingForAccountDeletion(stripeBilling, userId);
 
   await cancelUserMaterialJobs(userId);
   await db.transaction(async (tx) => {

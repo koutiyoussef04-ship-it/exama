@@ -6,11 +6,12 @@ import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, space, TextButton, Title } from '@/components/ui';
+import { ManageBillingButton, useResetOnPageShow } from '@/components/web-billing';
 import { isReleaseBuild, storeLinks } from '@/config/app-config';
 import { platform, track } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatPrice, monthlyEquivalent, openManageSubscriptions, tierName, trialAllowance, trialLecture, useCatalog, useEntitlement, useStorePrices } from '@/lib/billing';
-import { getStoreClient, isStoreProvider, storeName } from '@/lib/store';
+import { getStoreClient, hasWebSubscription, isStoreProvider, storeName } from '@/lib/store';
 
 const LECTURE_TRIGGERS: PaywallTrigger[] = ['free_lecture_used', 'locked_lectures'];
 
@@ -77,6 +78,7 @@ export default function Paywall() {
       router.back();
     },
   });
+  useResetOnPageShow(buy.reset); // web: back from Stripe Checkout with the browser's Back button
   // Closing the store sheet isn't an error; a pending payment is shown but refreshes access later.
   const shownError = [buy.error, restore.error].find((err) => err && (err as { code?: string }).code !== 'purchase_cancelled') ?? null;
   useEffect(() => {
@@ -110,6 +112,10 @@ export default function Paywall() {
   // A live subscription billed by the OTHER store (e.g. bought on iPhone, now on Android or web):
   // it already works here; buying again would charge twice, so point to where it's managed.
   const managedElsewhere = e.isPremium && isStoreProvider(e.provider) && e.provider !== provider;
+  // A subscription bought on the web (Stripe). On the web it is managed through the Customer Portal; in the
+  // iOS/Android apps it is only mentioned — the apps never link to, or sell through, web billing.
+  const managedOnWeb = hasWebSubscription(e);
+  const webCheckout = provider === 'stripe';
   /** The store's localized price when available (required by the stores), else the list price. */
   const price = (p: Plan) => storePrices?.[p.id] ?? formatPrice(p.priceCents);
   const find = (tr: PaidTier, p: BillingPeriod) => plans.find((x) => x.tier === tr && x.period === p)!;
@@ -268,7 +274,13 @@ export default function Paywall() {
       })}
       {withTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.trialAllPlans')}</Body>}
 
-      {managedElsewhere ? (
+      {managedOnWeb ? (
+        <Card style={{ gap: space(2) }}>
+          <Body style={{ fontWeight: '600' }}>{t('paywall.managedWebTitle')}</Body>
+          <Body muted>{Platform.OS === 'web' ? t('paywall.managedWebBodyWeb') : t('paywall.managedWebBody')}</Body>
+          {Platform.OS === 'web' && <ManageBillingButton />}
+        </Card>
+      ) : managedElsewhere ? (
         <Card style={{ gap: space(2) }}>
           <Body style={{ fontWeight: '600' }}>{t('paywall.managedElsewhereTitle', { store: storeName(e.provider) })}</Body>
           <Body muted>{t('paywall.managedElsewhereBody', { store: storeName(e.provider) })}</Body>
@@ -277,6 +289,7 @@ export default function Paywall() {
       ) : purchasesAvailable ? (
         <>
           <Button title={cta} onPress={() => buy.mutate()} loading={buy.isPending} disabled={!plan || isCurrent} />
+          {webCheckout && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.webCheckoutCard')}</Body>}
           {plan && withTrial && (
             <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
               {t('paywall.finePrintTrial', {
@@ -293,9 +306,10 @@ export default function Paywall() {
             </Body>
           )}
           {plan && onTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.finePrintConvert', { plan: tierName(plan.tier) })}</Body>}
-          <Body muted style={{ fontSize: 12, textAlign: 'center' }}>{t('paywall.finePrintRenew', { store: sellingStore })}</Body>
+          <Body muted style={{ fontSize: 12, textAlign: 'center' }}>{webCheckout ? t('paywall.webCheckoutRenew') : t('paywall.finePrintRenew', { store: sellingStore })}</Body>
           <ErrorText error={shownError} />
-          <TextButton title={restore.isPending ? t('paywall.restoring') : t('paywall.restore')} tone="muted" onPress={() => restore.mutate()} disabled={restore.isPending} />
+          {/* Nothing to restore on the web: the server keeps the subscription in sync with Stripe. */}
+          {!webCheckout && <TextButton title={restore.isPending ? t('paywall.restoring') : t('paywall.restore')} tone="muted" onPress={() => restore.mutate()} disabled={restore.isPending} />}
         </>
       ) : (
         <Card>

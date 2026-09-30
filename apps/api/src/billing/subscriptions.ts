@@ -1,5 +1,5 @@
 /**
- * Provider-neutral subscription state. Every provider (mock now, Apple later) produces a
+ * Provider-neutral subscription state. Every provider (mock, Apple, Google Play, Stripe) produces a
  * SubscriptionUpdate and calls applySubscriptionUpdate — the only writer of `subscriptions`.
  * Monetization analytics are emitted here, so they're identical whichever provider is used.
  */
@@ -12,7 +12,7 @@ import { subscriptions } from '../db/schema.js';
 export type SubscriptionRow = typeof subscriptions.$inferSelect;
 /** The shared connection pool or an open transaction. */
 export type Exec = DB | Parameters<Parameters<DB['transaction']>[0]>[0];
-export type ProviderId = 'mock' | 'apple' | 'google';
+export type ProviderId = 'mock' | 'apple' | 'google' | 'stripe';
 
 /** Common properties of every subscription analytics event: the plan, its tier and period, and where it was sold. */
 export function subscriptionEventProps(planId: PlanId, provider: ProviderId, environment: BillingEnvironment) {
@@ -49,10 +49,10 @@ export async function getSubscription(userId: string, exec: Exec = db): Promise<
   return row ?? null;
 }
 
-export async function applySubscriptionUpdate(userId: string, update: SubscriptionUpdate, reason: ChangeReason): Promise<SubscriptionRow> {
-  const previous = await getSubscription(userId);
+export async function applySubscriptionUpdate(userId: string, update: SubscriptionUpdate, reason: ChangeReason, exec: Exec = db): Promise<SubscriptionRow> {
+  const previous = await getSubscription(userId, exec);
   const values = { ...update, providerRef: update.providerRef ?? previous?.providerRef ?? null, updatedAt: new Date() };
-  const [row] = await db
+  const [row] = await exec
     .insert(subscriptions)
     .values({ userId, ...values })
     .onConflictDoUpdate({ target: subscriptions.userId, set: values })

@@ -71,6 +71,13 @@
       "when": 1790605307750,
       "tag": "0009_free_lecture_first_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790794962742,
+      "tag": "0010_stripe_web_billing",
+      "breakpoints": true
     }
   ]
 }

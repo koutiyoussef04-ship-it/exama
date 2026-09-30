@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { mockSetStateSchema, PLANS, RECOMMENDED_PLAN_ID, TRIAL_DAYS, type BillingCatalog, type Entitlement } from '@study/shared';
+import { mockSetStateSchema, PLANS, RECOMMENDED_PLAN_ID, TRIAL_DAYS, type BillingCatalog, type BillingRedirect, type Entitlement } from '@study/shared';
 import { requireAuth, type AuthEnv } from '../auth/auth.js';
-import { appleVerifier, billingProvider, billingProviders, googlePlayApi, providerForPlatform } from '../billing/index.js';
+import { appleVerifier, billingProvider, billingProviders, googlePlayApi, providerForPlatform, stripeBilling } from '../billing/index.js';
 import { handleAppleNotification } from '../billing/providers/apple.js';
 import { decodePushMessage, handleGoogleNotification, verifyPubSubToken } from '../billing/providers/google.js';
 import { isBillingPlatform, purchaseWith, requireStore, restoreWith } from '../billing/purchases.js';
@@ -11,6 +11,7 @@ import { getEntitlement } from '../billing/entitlements.js';
 import { TIER_FEATURES } from '../billing/features.js';
 import { LIMITS } from '../billing/limits.js';
 import { mockCancel, mockStateUpdate } from '../billing/providers/mock.js';
+import { createStripeCheckout, createStripePortal, handleStripeWebhook, MAX_WEBHOOK_BYTES } from '../billing/stripe-service.js';
 import { applySubscriptionUpdate, getSubscription } from '../billing/subscriptions.js';
 import { db } from '../db/client.js';
 import { subscriptions } from '../db/schema.js';
@@ -20,6 +21,11 @@ function requireMock() {
   // Mock-only routes don't exist at all unless the mock provider is enabled.
   if (!billingProviders.mock) throw new HttpError(404, 'Not found', 'not_found');
   return billingProviders.mock;
+}
+function requireStripe() {
+  // Stripe routes answer 503 (not 404) when switched off, like the Apple/Google ones, so a misconfigured server is obvious.
+  if (!stripeBilling) throw new HttpError(503, 'Web subscriptions are not available yet.', 'stripe_not_configured');
+  return stripeBilling;
 }
 async function body(c: { req: { json: () => Promise<unknown> } }) {
   return c.req.json().catch(() => ({}));
@@ -56,6 +62,15 @@ export const billingRoutes = new Hono<AuthEnv>()
     await handleGoogleNotification(googlePlayApi, decodePushMessage(await c.req.json().catch(() => null)), { packageName: config.GOOGLE_PLAY_PACKAGE_NAME });
     return c.body(null, 204);
   })
+  // Stripe webhook (Stripe Dashboard → Developers → Webhooks → https://<api>/billing/stripe/webhook). Signed by
+  // Stripe — the signature is verified over the RAW request body — so no user auth.
+  .post('/stripe/webhook', async (c) => {
+    const ctx = requireStripe();
+    if (Number(c.req.header('content-length') ?? 0) > MAX_WEBHOOK_BYTES) throw new HttpError(413, 'Payload too large.', 'payload_too_large');
+    const raw = Buffer.from(await c.req.arrayBuffer());
+    if (raw.length > MAX_WEBHOOK_BYTES) throw new HttpError(413, 'Payload too large.', 'payload_too_large');
+    return c.json(await handleStripeWebhook(ctx, raw, c.req.header('stripe-signature')));
+  })
   .use(requireAuth)
   .get('/status', async (c) => c.json<Entitlement>(await getEntitlement(c.var.userId)))
   // Body: { store: 'apple' | 'google' | 'mock', ...proof } — see packages/shared/src/billing.ts.
@@ -69,6 +84,11 @@ export const billingRoutes = new Hono<AuthEnv>()
     await restoreWith(requireStore(input), c.var.userId, input);
     return c.json<Entitlement>(await getEntitlement(c.var.userId));
   })
+  // Web subscriptions. Body: { plan: 'basic' | 'student' | 'pro', interval: 'monthly' | 'yearly' } → { url } of the
+  // Stripe Checkout page. Never grants access: the webhook does, once Stripe confirms the subscription.
+  .post('/stripe/checkout', async (c) => c.json<BillingRedirect>(await createStripeCheckout(requireStripe(), c.var.userId, await body(c))))
+  // Stripe Customer Portal for the signed-in user's own customer: payment method, invoices, cancel, change plan.
+  .post('/stripe/portal', async (c) => c.json<BillingRedirect>(await createStripePortal(requireStripe(), c.var.userId)))
   // Mock-only: on iOS, cancelling happens in Settings → Subscriptions and reaches us via Apple notifications.
   .post('/cancel', async (c) => {
     requireMock();

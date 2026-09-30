@@ -10,6 +10,13 @@ const csv = z
       .filter(Boolean),
   );
 
+/** Optional secret/identifier: empty (the .env.example placeholder) means "not set". */
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => v || undefined);
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().default(4000),
@@ -101,6 +108,30 @@ const envSchema = z
       .trim()
       .optional()
       .transform((v) => v || undefined),
+    // ---- Stripe (web subscriptions) ----
+    // A third billing provider next to Apple and Google, used by the WEB app only. Off by default: nothing
+    // changes until STRIPE_ENABLED=true and everything below is set. Start in Stripe TEST mode (sk_test_…).
+    // All of it is server-side: the secret key and Price ids never reach the app, the website or Git.
+    STRIPE_ENABLED: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v === 'true'),
+    STRIPE_SECRET_KEY: optionalString,
+    // Signing secret of the webhook endpoint (Stripe Dashboard → Developers → Webhooks), starts with whsec_.
+    STRIPE_WEBHOOK_SECRET: optionalString,
+    // One Stripe Price per plan and billing period (recurring, EUR). Never hard-coded, never sent by the browser.
+    STRIPE_BASIC_MONTHLY_PRICE_ID: optionalString,
+    STRIPE_BASIC_YEARLY_PRICE_ID: optionalString,
+    STRIPE_STUDENT_MONTHLY_PRICE_ID: optionalString,
+    STRIPE_STUDENT_YEARLY_PRICE_ID: optionalString,
+    STRIPE_PRO_MONTHLY_PRICE_ID: optionalString,
+    STRIPE_PRO_YEARLY_PRICE_ID: optionalString,
+    // Where Stripe Checkout sends the browser back to (pages of the web app, e.g.
+    // https://app.exama.app/checkout?status=success and …?status=cancelled).
+    STRIPE_SUCCESS_URL: optionalString,
+    STRIPE_CANCEL_URL: optionalString,
+    // Where the Customer Portal's "return" button goes. Default: /account on the success URL's origin.
+    STRIPE_PORTAL_RETURN_URL: optionalString,
     // ---- Email (password-reset codes) ----
     // log = print emails to the server log (development only); resend = send with Resend (resend.com);
     // disabled = no email (password reset can't work). Unset: log in development, disabled in production.
@@ -205,6 +236,30 @@ const envSchema = z
         message: 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be the service-account key JSON (or base64 of it) with client_email and private_key.',
       });
     }
+    if (e.STRIPE_ENABLED) {
+      const need = (key: keyof typeof e, ok: boolean, message: string) => {
+        if (!ok) ctx.addIssue({ code: 'custom', path: [key], message });
+      };
+      const has = (v: unknown, prefix: string) => typeof v === 'string' && v.startsWith(prefix);
+      need('STRIPE_SECRET_KEY', has(e.STRIPE_SECRET_KEY, 'sk_') || has(e.STRIPE_SECRET_KEY, 'rk_'), 'STRIPE_ENABLED=true needs STRIPE_SECRET_KEY (sk_test_… in test mode). Keep it in the server environment only.');
+      need('STRIPE_WEBHOOK_SECRET', has(e.STRIPE_WEBHOOK_SECRET, 'whsec_'), 'STRIPE_ENABLED=true needs STRIPE_WEBHOOK_SECRET (whsec_…, from the webhook endpoint in the Stripe Dashboard).');
+      const priceKeys = [
+        'STRIPE_BASIC_MONTHLY_PRICE_ID',
+        'STRIPE_BASIC_YEARLY_PRICE_ID',
+        'STRIPE_STUDENT_MONTHLY_PRICE_ID',
+        'STRIPE_STUDENT_YEARLY_PRICE_ID',
+        'STRIPE_PRO_MONTHLY_PRICE_ID',
+        'STRIPE_PRO_YEARLY_PRICE_ID',
+      ] as const;
+      for (const k of priceKeys) need(k, has(e[k], 'price_'), `STRIPE_ENABLED=true needs ${k} (price_…, from the Stripe Dashboard → Product catalog).`);
+      const prices = priceKeys.map((k) => e[k]).filter(Boolean);
+      need('STRIPE_BASIC_MONTHLY_PRICE_ID', new Set(prices).size === prices.length, 'Each plan needs its OWN Stripe Price id: two plans share the same id, so a subscription could not be mapped back to one plan.');
+      for (const k of ['STRIPE_SUCCESS_URL', 'STRIPE_CANCEL_URL'] as const) {
+        const url = URL.canParse(e[k] ?? '') ? new URL(e[k]!) : null;
+        need(k, !!url && (url.protocol === 'https:' || (!production && url.protocol === 'http:')), `STRIPE_ENABLED=true needs ${k}: a page of the web app (https in production, e.g. https://app.exama.app/checkout?status=success).`);
+      }
+      if (e.STRIPE_PORTAL_RETURN_URL) need('STRIPE_PORTAL_RETURN_URL', URL.canParse(e.STRIPE_PORTAL_RETURN_URL), 'STRIPE_PORTAL_RETURN_URL must be a full URL.');
+    }
     if (e.AI_PROVIDER === 'anthropic' && !e.ANTHROPIC_API_KEY) {
       ctx.addIssue({
         code: 'custom',
@@ -247,6 +302,9 @@ function loadConfig() {
       | 'disabled',
     EMAIL_PROVIDER: (parsed.data.EMAIL_PROVIDER ?? (parsed.data.NODE_ENV === 'production' ? 'disabled' : 'log')) as 'log' | 'resend' | 'disabled',
   };
+  if (cfg.STRIPE_ENABLED && cfg.BILLING_MOCK_ENABLED) {
+    console.warn('⚠ STRIPE_ENABLED=true but BILLING_MOCK_ENABLED=true: the mock provider replaces every real provider, so Stripe is NOT used. Set BILLING_MOCK_ENABLED=false to test Stripe.');
+  }
   if (cfg.EMAIL_PROVIDER === 'disabled') {
     console.warn('⚠ EMAIL_PROVIDER is disabled: password-reset emails are not sent. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.');
   }

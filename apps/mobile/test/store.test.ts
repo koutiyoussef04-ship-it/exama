@@ -1,8 +1,8 @@
-/** Store helpers: Google Play offer selection, localized prices, store names, store error codes. */
+/** Store helpers: Google Play offer selection, localized prices, store names, store error codes, web (Stripe) subscription helpers. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PLANS } from '@study/shared';
-import { googleRecurringPrice, googleReplacement, isStoreProvider, pickGoogleOfferToken, storeErrorCode, storeName, type OfferLike } from '../src/lib/store/offers.js';
+import { googleRecurringPrice, googleReplacement, hasWebSubscription, isStoreProvider, isStripeUrl, isWebProvider, pickGoogleOfferToken, storeErrorCode, storeName, type OfferLike } from '../src/lib/store/offers.js';
 
 const phase = (micros: string, formattedPrice: string) => ({ priceAmountMicros: micros, formattedPrice });
 // What Play returns for "exama_student": two base plans, a free-trial offer on each.
@@ -77,4 +77,38 @@ test('Google Play plan change replaces the current subscription (never a second,
   assert.equal(googleReplacement([{ ...owned[0], obfuscatedAccountIdAndroid: 'someone-else' }], { productId: 'exama_pro', basePlanId: 'annual' }, ids, me), null, 'another Exama account on this Google account');
   assert.equal(googleReplacement([{ ...owned[0], productId: 'other_app_sub' }], { productId: 'exama_pro', basePlanId: 'annual' }, ids, me), null);
   assert.equal(googleReplacement([{ ...owned[0], purchaseState: 'pending' }], { productId: 'exama_pro', basePlanId: 'annual' }, ids, me), null);
+});
+
+test('web subscriptions (Stripe) are their own provider: not a store, and never mistaken for one', () => {
+  assert.equal(isWebProvider('stripe'), true);
+  for (const p of ['apple', 'google', 'mock', null, undefined] as const) assert.equal(isWebProvider(p), false, String(p));
+  // The store-management UI (App Store / Google Play links) must never appear for a web subscription.
+  assert.equal(isStoreProvider('stripe'), false);
+  assert.equal(isStoreProvider('apple'), true);
+  assert.equal(isStoreProvider('google'), true);
+  assert.equal(storeName('stripe'), 'Stripe');
+  assert.equal(storeName('apple'), 'App Store', 'the store names are unchanged');
+  assert.equal(storeName('google'), 'Google Play');
+});
+
+test('a web subscription is live while active, trialing, or cancelled-but-paid-up — and only when it came from Stripe', () => {
+  for (const status of ['active', 'trialing', 'cancelled'] as const) assert.equal(hasWebSubscription({ provider: 'stripe', status }), true, status);
+  for (const status of ['expired', 'free', 'complimentary'] as const) assert.equal(hasWebSubscription({ provider: 'stripe', status }), false, status);
+  for (const provider of ['apple', 'google', 'mock', null] as const) assert.equal(hasWebSubscription({ provider, status: 'active' }), false, String(provider));
+});
+
+test('only Stripe-hosted https pages are ever opened from a server answer', () => {
+  for (const ok of ['https://checkout.stripe.com/c/pay/cs_test_abc#fid', 'https://billing.stripe.com/p/session/test_abc', 'https://stripe.com/x']) assert.equal(isStripeUrl(ok), true, ok);
+  for (const bad of [
+    'http://checkout.stripe.com/c/pay/x',
+    'https://evil.example/checkout.stripe.com',
+    'https://checkout.stripe.com.evil.example/x',
+    'https://notstripe.com/x',
+    'https://stripe.com.evil.example',
+    'javascript:alert(1)',
+    'data:text/html,<script>1</script>',
+    '//checkout.stripe.com/x',
+    'checkout.stripe.com/x',
+    '',
+  ]) assert.equal(isStripeUrl(bad), false, bad);
 });

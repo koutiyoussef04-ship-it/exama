@@ -7,7 +7,7 @@ import { Body, Button, Card, CheckRow, colors, ErrorText, Field, Screen, space, 
 import { api, setAuthToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { openManageSubscriptions, useEntitlement } from '@/lib/billing';
-import { isStoreProvider, storeName } from '@/lib/store';
+import { hasWebSubscription, isStoreProvider, storeName } from '@/lib/store';
 import { confirm } from '@/lib/confirm';
 
 /**
@@ -26,6 +26,8 @@ export default function DeleteAccount() {
   const e = entitlement.data;
   // A store subscription keeps billing the Apple ID / Google account even after the Exama account is gone.
   const storeSubscription = !!e && isStoreProvider(e.provider) && e.willRenew && (e.status === 'active' || e.status === 'trialing');
+  // A web (Stripe) subscription, by contrast, is cancelled by Exama itself when the account is deleted.
+  const webSubscription = !!e && hasWebSubscription(e);
 
   const remove = useMutation({
     mutationFn: () => api.deleteAccount(password),
@@ -87,6 +89,12 @@ export default function DeleteAccount() {
           <Card style={{ gap: space(2), backgroundColor: colors.warningSoft, borderColor: colors.warningSoft }}>
             <Body style={{ color: colors.text }}>{t('deleteAccount.subscriptionWarning', { store: storeName(e.provider) })}</Body>
             <TextButton title={t('account.manageSubscription')} onPress={() => openManageSubscriptions(e.provider, e.planId)} />
+          </Card>
+        )}
+
+        {webSubscription && (
+          <Card style={{ gap: space(2) }}>
+            <Body>{t('deleteAccount.webSubscriptionNote')}</Body>
           </Card>
         )}
 

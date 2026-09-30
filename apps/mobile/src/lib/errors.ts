@@ -42,6 +42,8 @@ export function errorMessage(err: unknown): string {
     if (err.status === 402 && err.body && typeof err.body === 'object' && 'feature' in err.body) return limitMessage(err.body as LimitErrorBody);
     if (err.code && i18n.exists(`errors.codes.${err.code}`)) {
       const details = (err.body as { details?: { maxMb?: number; maxDays?: number; max?: number; provider?: BillingProviderId } } | undefined)?.details;
+      // A subscription bought on the web: there is no store to name.
+      if (err.code === 'subscribed_elsewhere' && details?.provider === 'stripe') return t('errors.codes.subscribed_on_web');
       return t(`errors.codes.${err.code}` as 'errors.codes.file_too_large', {
         maxMb: details?.maxMb ?? 20,
         maxDays: details?.maxDays ?? 365,

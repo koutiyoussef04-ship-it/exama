@@ -6,13 +6,15 @@ import { createAppleVerifier, loadRootCertificates } from './providers/apple-ver
 import { createGoogleProvider } from './providers/google.js';
 import { createPlayApi, type GooglePlayApi } from './providers/google-play-api.js';
 import { mockProvider } from './providers/mock.js';
+import { createStripeBilling, createStripeProvider, type StripeBilling } from './providers/stripe.js';
 import type { BillingProvider } from './providers/types.js';
 
 /**
  * Stores and platforms. One Exama account = one entitlement, whichever store sold it:
  *   iOS app      → Apple App Store (StoreKit 2)        — `apple`
  *   Android app  → Google Play Billing                 — `google`
- *   web          → no in-app purchases; a subscription bought in either app applies there too
+ *   web          → Stripe Checkout when STRIPE_ENABLED (see providers/stripe.ts); otherwise no purchases here.
+ *                  A subscription bought in either app (or on the web) applies on every platform.
  *   development  → the mock provider on every platform (BILLING_MOCK_ENABLED, refused in production)
  * The server stays the source of truth: every purchase is verified with the store that sold it.
  */
@@ -36,9 +38,13 @@ export const googlePlayApi: GooglePlayApi | null = config.GOOGLE_PLAY_SERVICE_AC
   ? createPlayApi({ serviceAccount: parseServiceAccount(config.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)!, packageName: config.GOOGLE_PLAY_PACKAGE_NAME })
   : null;
 
+/** Stripe (web subscriptions): the client of the Stripe API plus the Price/URL configuration; null unless STRIPE_ENABLED. */
+export const stripeBilling: StripeBilling | null = config.STRIPE_ENABLED ? createStripeBilling(config) : null;
+
 const real: Partial<Record<BillingProviderId, BillingProvider>> = {
   ...(appleVerifier ? { apple: createAppleProvider(appleVerifier, { bundleId: config.APPLE_BUNDLE_ID }) } : {}),
   ...(googlePlayApi ? { google: createGoogleProvider(googlePlayApi) } : {}),
+  ...(stripeBilling ? { stripe: createStripeProvider() } : {}),
 };
 
 /** Stores this server accepts purchases from. */
@@ -49,6 +55,7 @@ export function providerForPlatform(platform: BillingPlatform | undefined): Bill
   if (billingProviders.mock) return billingProviders.mock;
   if (platform === 'ios') return billingProviders.apple ?? null;
   if (platform === 'android') return billingProviders.google ?? null;
+  if (platform === 'web') return billingProviders.stripe ?? null;
   return null;
 }
 

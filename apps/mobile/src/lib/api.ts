@@ -11,8 +11,11 @@ import type {
   RegisterInput,
   SubmitExamInput,
   BillingCatalog,
+  BillingPeriod,
+  BillingRedirect,
   Entitlement,
   MockState,
+  PaidTier,
   PlanId,
   TrackEventsInput,
   User,
@@ -184,6 +187,10 @@ export const api = {
   appleRestore: (signedTransactions: string[]) => post<Entitlement>('/billing/restore', { store: 'apple', signedTransactions }),
   googlePurchase: (purchaseToken: string, productId: string) => post<Entitlement>('/billing/purchase', { store: 'google', purchaseToken, productId }),
   googleRestore: (purchases: { purchaseToken: string; productId: string }[]) => post<Entitlement>('/billing/restore', { store: 'google', purchases }),
+  /** Web only: the Stripe Checkout page for a plan. Access is granted by the server once Stripe confirms the subscription. */
+  stripeCheckout: (plan: PaidTier, interval: BillingPeriod) => post<BillingRedirect>('/billing/stripe/checkout', { plan, interval }),
+  /** Web only: Stripe's Customer Portal (payment method, invoices, change plan, cancel) for the signed-in user. */
+  stripePortal: () => post<BillingRedirect>('/billing/stripe/portal', {}),
   cancelSubscription: () => post<Entitlement>('/billing/cancel', {}),
   setMockBillingState: (state: MockState) => post<Entitlement>('/billing/mock/state', { state }),
 

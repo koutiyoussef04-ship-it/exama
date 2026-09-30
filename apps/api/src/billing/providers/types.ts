@@ -1,7 +1,7 @@
 /**
  * A billing provider turns a provider-specific purchase proof into a normalized
  * SubscriptionUpdate. The rest of the system (entitlements, limits, analytics) only sees
- * SubscriptionUpdates. Stores: mock (development), apple (iOS), google (Android) — see billing/index.ts
+ * SubscriptionUpdates. Stores: mock (development), apple (iOS), google (Android), stripe (web) — see billing/index.ts
  * for which store serves which platform.
  */
 import type { SubscriptionRow, SubscriptionUpdate } from '../subscriptions.js';
@@ -14,7 +14,7 @@ export type PurchaseResult = {
 };
 
 export interface BillingProvider {
-  readonly id: 'mock' | 'apple' | 'google';
+  readonly id: 'mock' | 'apple' | 'google' | 'stripe';
   /** True when no real money moves (development mock). */
   readonly testMode: boolean;
   /**

@@ -6,7 +6,7 @@
  * Play only returns offers the user is eligible for, so the trial offer is missing for someone
  * who already had it — the base plan is then used.
  */
-import { GOOGLE_TRIAL_OFFER_ID, type BillingProviderId } from '@study/shared';
+import { GOOGLE_TRIAL_OFFER_ID, type BillingProviderId, type Entitlement } from '@study/shared';
 
 /** The fields we read from expo-iap's SubscriptionOffer (Android). */
 export type OfferLike = {
@@ -48,7 +48,25 @@ export function googleRecurringPrice(offers: OfferLike[], basePlanId: string): s
 export function storeName(provider: BillingProviderId | null | undefined, platformOS?: string): string {
   if (provider === 'google') return 'Google Play';
   if (provider === 'apple') return 'App Store';
+  if (provider === 'stripe') return 'Stripe';
   return platformOS === 'android' ? 'Google Play' : 'App Store';
+}
+
+/** A subscription bought on the WEB (Stripe): billed by Stripe and managed there (Customer Portal), never by the stores. */
+export const isWebProvider = (p: BillingProviderId | null | undefined): p is 'stripe' => p === 'stripe';
+
+/** A live web subscription: running, in its trial, or cancelled but still inside the paid period. */
+export const hasWebSubscription = (e: Pick<Entitlement, 'provider' | 'status'>): boolean =>
+  isWebProvider(e.provider) && (e.status === 'active' || e.status === 'trialing' || e.status === 'cancelled');
+
+/** Only Stripe-hosted pages are ever opened from a server answer (Checkout, Customer Portal): https on stripe.com. */
+export function isStripeUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && (u.hostname === 'stripe.com' || u.hostname.endsWith('.stripe.com'));
+  } catch {
+    return false;
+  }
 }
 
 /** A real store subscription (billed and managed by Apple or Google, not by the app). */

@@ -50,6 +50,7 @@ function RootNavigator() {
         <Stack.Screen name="account" options={{ title: t('nav.account') }} />
         <Stack.Screen name="delete-account" options={{ title: t('nav.deleteAccount') }} />
         <Stack.Screen name="paywall" options={{ title: t('nav.upgrade'), presentation: 'modal' }} />
+        <Stack.Screen name="checkout" options={{ title: t('nav.checkout') }} />
         <Stack.Screen name="plan/[id]" options={{ title: t('nav.studyPlan') }} />
         <Stack.Screen name="plan/setup" options={{ title: t('nav.planSetup') }} />
         <Stack.Screen name="materials/[id]" options={{ title: t('nav.material') }} />

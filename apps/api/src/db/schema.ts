@@ -256,7 +256,7 @@ export const analyticsEvents = pgTable(
 export const subscriptionStatus = pgEnum('subscription_status', ['trialing', 'active', 'cancelled', 'expired']);
 
 /**
- * A user's current subscription, normalized across billing providers (mock today, Apple later).
+ * A user's current subscription, normalized across billing providers (mock, Apple, Google Play, Stripe).
  * One row per user; provider events update it. Access is computed from status + dates at read time.
  */
 export const subscriptions = pgTable('subscriptions', {
@@ -265,7 +265,7 @@ export const subscriptions = pgTable('subscriptions', {
     .notNull()
     .unique()
     .references(() => users.id, { onDelete: 'cascade' }),
-  provider: text('provider').$type<'mock' | 'apple' | 'google'>().notNull(),
+  provider: text('provider').$type<'mock' | 'apple' | 'google' | 'stripe'>().notNull(),
   planId: text('plan_id').$type<PlanId>().notNull(),
   status: subscriptionStatus('status').notNull(),
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
@@ -273,7 +273,7 @@ export const subscriptions = pgTable('subscriptions', {
   willRenew: boolean('will_renew').notNull().default(true),
   /** Intro offer (free trial) already consumed — Apple allows one per subscription group. */
   trialUsed: boolean('trial_used').notNull().default(false),
-  /** Provider reference, e.g. Apple originalTransactionId. Never payment details. */
+  /** Provider reference: Apple originalTransactionId, Google purchase token, Stripe subscription id (sub_…). Never payment details. */
   providerRef: text('provider_ref'),
   /** test (mock) | sandbox (Apple sandbox/TestFlight) | production — keeps test data out of revenue reports. */
   environment: text('environment').$type<BillingEnvironment>().notNull().default('test'),
@@ -283,6 +283,30 @@ export const subscriptions = pgTable('subscriptions', {
   // One store subscription (e.g. Apple originalTransactionId) can belong to one account only.
   uniqueIndex('subscriptions_provider_ref_uq').on(t.provider, t.providerRef).where(sql`${t.providerRef} is not null`),
 ]);
+
+/**
+ * The Stripe Customer of an Exama user (web subscriptions). At most one per user (primary key) and one
+ * user per Customer (unique), so concurrent checkouts can never create a second Customer for the same
+ * account. Holds an identifier only — never card or payment details, which stay with Stripe.
+ */
+export const stripeCustomers = pgTable('stripe_customers', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  stripeCustomerId: text('stripe_customer_id').notNull().unique(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Stripe webhook events already received (evt_…), so a redelivered event is processed once.
+ * `processedAt` stays null while an event is being handled or if handling failed — Stripe retries it.
+ */
+export const stripeEvents = pgTable('stripe_events', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+});
 
 export const usageKind = pgEnum('usage_kind', [
   'course_upload',

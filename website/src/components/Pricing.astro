@@ -45,15 +45,17 @@ import { site } from '../config/site';
             ))}
           </ul>
 
-          <a class:list={['btn', 'btn-block', p.recommended ? 'btn-primary' : 'btn-secondary']} href={site.appUrl}>{p.cta}</a>
+          <a class:list={['btn', 'btn-block', p.recommended ? 'btn-primary' : 'btn-secondary']} href={site.cta.href}>{p.cta}</a>
         </li>
       ))}
     </ul>
 
     <p class="fineprint center">
-      Prices are list prices in euros; the App Store and Google Play show the price for your country. Subscriptions
-      are billed by the store you subscribe in, and a subscription in either store unlocks your account everywhere,
-      including the web. After the {TRIAL_DAYS}-day trial, your chosen plan begins unless you cancel before it ends.
+      Prices are list prices in euros. On the web you pay by card through Stripe and manage or cancel any time from
+      Account → Manage billing. You enter a payment method at checkout, but nothing is charged today: after the
+      {TRIAL_DAYS}-day trial your chosen plan begins unless you cancel before it ends. If you subscribe in a mobile app
+      instead, the App Store or Google Play bills you and shows the price for your country. A subscription started
+      anywhere unlocks your account everywhere.
     </p>
   </div>
 </section>

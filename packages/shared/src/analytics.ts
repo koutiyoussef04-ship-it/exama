@@ -220,9 +220,9 @@ export type ServerEvents = {
 type MaterialProps = { material_id: string; document_id: string; kind: MaterialKind };
 /**
  * `provider` + `environment` separate real revenue from test data:
- * mock → environment "test"; Apple sandbox/TestFlight → "sandbox"; App Store → "production".
+ * mock → environment "test"; Apple sandbox/TestFlight and Stripe test mode → "sandbox"; App Store, Google Play and Stripe live mode → "production".
  */
-type SubscriptionProps = { plan_id: PlanId; tier: PaidTier; period: BillingPeriod; provider: 'mock' | 'apple' | 'google'; environment: BillingEnvironment };
+type SubscriptionProps = { plan_id: PlanId; tier: PaidTier; period: BillingPeriod; provider: 'mock' | 'apple' | 'google' | 'stripe'; environment: BillingEnvironment };
 export type BillingEnvironment = 'test' | 'sandbox' | 'production';
 type StudyPlanProps = { document_id: string; days_until_exam: number; study_minutes_per_day: number; task_count: number; language: string };
 type CompletedProps = {

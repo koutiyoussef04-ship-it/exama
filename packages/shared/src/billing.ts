@@ -10,9 +10,10 @@
  *   Pro      €24.99/month · €199.99/year  everything in Student with much higher allowances
  * plus the 7-day trial (full experience, restricted trial caps) and the owner account (unlimited).
  *
- * Stores: Apple App Store (iOS) and Google Play (Android) sell the same six plans; a subscription
- * bought in either store unlocks the account everywhere (iOS, Android and web). Prices here are list
- * prices for reference/analytics; the apps show the localized price the store returns.
+ * Stores: Apple App Store (iOS) and Google Play (Android) sell the same six plans; the web sells them
+ * through Stripe Checkout (docs/stripe/stripe-web-billing.md). A subscription bought in any of them unlocks
+ * the account everywhere (iOS, Android and web). Prices here are list prices for reference/analytics; the
+ * apps show the localized price the store returns.
  */
 import { z } from 'zod';
 
@@ -169,8 +170,8 @@ export type EntitlementStatus =
   | 'expired' // subscription/trial ended; free limits apply
   | 'complimentary'; // premium granted by the server (no billing)
 
-export type BillingProviderId = 'mock' | 'apple' | 'google';
-export const STORE_IDS = ['mock', 'apple', 'google'] as const;
+export type BillingProviderId = 'mock' | 'apple' | 'google' | 'stripe';
+export const STORE_IDS = ['mock', 'apple', 'google', 'stripe'] as const;
 
 /** Where the app runs. Decides which store sells subscriptions there (see GET /billing/plans?platform=). */
 export const BILLING_PLATFORMS = ['ios', 'android', 'web'] as const;
@@ -274,6 +275,19 @@ export const googleRestoreSchema = z.object({ purchases: z.array(googlePurchaseS
  */
 export const applePurchaseSchema = z.object({ signedTransaction: z.string().min(20).max(20_000) });
 export const appleRestoreSchema = z.object({ signedTransactions: z.array(z.string().min(20).max(20_000)).max(50) });
+
+// ---------- Stripe (web subscriptions) ----------
+// Web has no in-app purchase: the server creates a Stripe Checkout Session and the browser is redirected
+// to it. The request names a plan and an interval only — the server picks the Stripe Price, decides
+// whether the account still gets the free trial, and grants access only after Stripe's webhook arrives.
+
+export const BILLING_PERIODS = ['monthly', 'yearly'] as const satisfies readonly BillingPeriod[];
+
+/** POST /billing/stripe/checkout body. No prices, no price ids, no entitlements: those are server-side. */
+export type StripeCheckoutInput = { plan: PaidTier; interval: BillingPeriod };
+
+/** A Stripe-hosted page to send the browser to (Checkout or the Customer Portal). */
+export type BillingRedirect = { url: string };
 
 // ---------- Mock (development) billing ----------
 
