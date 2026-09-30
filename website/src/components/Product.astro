@@ -1,0 +1,48 @@
+---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import Icon from './Icon.astro';
+import { productAreas } from '../data/content';
+
+/**
+ * Real product screens only. Drop genuine screenshots of the Exama app into `public/screenshots/`
+ * named after the area id (materials, exams, results, weak-topics, planner) as .png, .webp or .jpg and
+ * they appear here automatically. Until a file exists, the card shows an icon instead — this site never
+ * mocks up fake screens.
+ */
+const EXTENSIONS = ['webp', 'png', 'jpg'];
+const areas = productAreas.map((a) => {
+  const ext = EXTENSIONS.find((e) => existsSync(join(process.cwd(), 'public', 'screenshots', `${a.id}.${e}`)));
+  return { ...a, src: ext ? `/screenshots/${a.id}.${ext}` : null };
+});
+const hasScreens = areas.some((a) => a.src);
+---
+
+<section id="product" class="section" aria-labelledby="product-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Inside Exama</p>
+      <h2 id="product-title">Everything you need, in one app</h2>
+      <p class="section-lead">
+        Your materials, your exams, your results, your weak topics and your study plan — all built from the same
+        course.
+      </p>
+    </div>
+
+    <ul class:list={['product-grid', { 'has-screens': hasScreens }]}>
+      {areas.map((a) => (
+        <li class="product-card">
+          {a.src ? (
+            <div class="shot">
+              <img src={a.src} alt={a.alt} loading="lazy" decoding="async" />
+            </div>
+          ) : (
+            <span class="card-icon"><Icon name={a.icon} size={24} /></span>
+          )}
+          <h3>{a.title}</h3>
+          <p>{a.text}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

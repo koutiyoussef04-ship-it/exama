@@ -1,0 +1,24 @@
+---
+import Icon from './Icon.astro';
+import { steps } from '../data/content';
+---
+
+<section id="how-it-works" class="section" aria-labelledby="how-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-title">From course material to exam-ready, in six steps</h2>
+    </div>
+
+    <ol class="steps">
+      {steps.map((s, i) => (
+        <li class="step">
+          <span class="step-num" aria-hidden="true">{i + 1}</span>
+          <span class="step-icon"><Icon name={s.icon} size={22} /></span>
+          <h3>{s.title}</h3>
+          <p>{s.text}</p>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>

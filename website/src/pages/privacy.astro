@@ -1,0 +1,17 @@
+---
+import InfoPage from '../layouts/InfoPage.astro';
+---
+
+<!--
+  INTERIM PAGE. The repository's Privacy Policy (docs/legal/privacy-policy.md, generated from
+  apps/mobile/src/i18n/legal.ts) is still a DRAFT with unresolved company/address placeholders, so it is
+  deliberately NOT published here. Before launch: finish and review the policy, then render it on this page
+  and remove `noindex`. The App Store and Google Play need this URL to be live.
+-->
+<InfoPage title="Privacy Policy" path="/privacy" description="Exama's Privacy Policy.">
+  <p>
+    The full Exama Privacy Policy will be published on this page before launch. It will explain what data Exama
+    processes, which providers it uses and how you can delete your data.
+  </p>
+  <p>Questions about privacy before then? See <a href="/support">Support</a>.</p>
+</InfoPage>

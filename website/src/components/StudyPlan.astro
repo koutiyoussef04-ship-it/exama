@@ -1,0 +1,50 @@
+---
+import Icon from './Icon.astro';
+import { planInputs, planOutputs } from '../data/content';
+---
+
+<section id="study-plan" class="section section-alt" aria-labelledby="plan-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Personalized study plan</p>
+      <h2 id="plan-title">A study plan that knows your exam date</h2>
+      <p class="section-lead">
+        Tell Exama when your exam is, how many minutes a day you can study and how prepared you feel. It plans every
+        day until the exam from your course material and your results.
+      </p>
+    </div>
+
+    <div class="plan-grid">
+      <div>
+        <h3 class="plan-heading">What feeds your plan</h3>
+        <ul class="plan-inputs">
+          {planInputs.map((i) => (
+            <li>
+              <span class="card-icon"><Icon name={i.icon} size={22} /></span>
+              <div>
+                <strong>{i.title}</strong>
+                <p>{i.text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div class="plan-arrow" aria-hidden="true"><Icon name="arrowRight" size={28} /></div>
+
+      <div class="plan-out">
+        <h3 class="plan-heading">What you get</h3>
+        <ul class="checks">
+          {planOutputs.map((o) => (
+            <li><Icon name="check" size={20} /><span>{o}</span></li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+    <p class="fineprint center">
+      The plan that adapts to your results is part of Student and Pro, and of the free trial. Free and Basic include a
+      planner that spreads your topics evenly.
+    </p>
+  </div>
+</section>

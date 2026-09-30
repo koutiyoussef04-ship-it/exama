@@ -1,0 +1,33 @@
+---
+import Icon from './Icon.astro';
+import { materials } from '../data/content';
+---
+
+<section id="materials" class="section section-alt" aria-labelledby="materials-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Supported material</p>
+      <h2 id="materials-title">Bring whatever your course is made of</h2>
+      <p class="section-lead">
+        PDFs, slides, lecture recordings and lecture videos all feed the same course. Your exams, practice and study
+        plan use everything you add.
+      </p>
+    </div>
+
+    <ul class="cards cards-4">
+      {materials.map((m) => (
+        <li class="card">
+          <span class="card-icon"><Icon name={m.icon} size={24} /></span>
+          <h3>{m.name}</h3>
+          <p class="card-meta">{m.formats}</p>
+          <p>{m.text}</p>
+        </li>
+      ))}
+    </ul>
+
+    <p class="fineprint">
+      Audio and video lectures are included with Student and Pro, and in the free trial. Free includes one lecture per
+      account. Basic covers PDFs and PowerPoints.
+    </p>
+  </div>
+</section>

@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Materials from '../components/Materials.astro';
+import Grounded from '../components/Grounded.astro';
+import Exams from '../components/Exams.astro';
+import WeakTopics from '../components/WeakTopics.astro';
+import StudyPlan from '../components/StudyPlan.astro';
+import Product from '../components/Product.astro';
+import Pricing from '../components/Pricing.astro';
+import Faq from '../components/Faq.astro';
+import FinalCta from '../components/FinalCta.astro';
+import { faqs } from '../data/content';
+import { site } from '../config/site';
+
+// Structured data describes only what is visibly on the page (FAQ text, site name). No ratings, no reviews.
+const jsonLd = [
+  { '@context': 'https://schema.org', '@type': 'WebSite', name: site.name, url: site.url },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a.join(' ') },
+    })),
+  },
+];
+---
+
+<Base path="/" jsonLd={jsonLd}>
+  <Hero />
+  <HowItWorks />
+  <Materials />
+  <Grounded />
+  <Exams />
+  <WeakTopics />
+  <StudyPlan />
+  <Product />
+  <Pricing />
+  <Faq />
+  <FinalCta />
+</Base>

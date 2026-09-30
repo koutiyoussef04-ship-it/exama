@@ -1,0 +1,39 @@
+---
+import { Image } from 'astro:assets';
+import logoMark from '../assets/brand/logo-mark.png';
+import Wordmark from './Wordmark.astro';
+import { footerLinks } from '../data/content';
+import { site } from '../config/site';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <a class="brand" href="/" aria-label="Exama — home">
+        <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" />
+        <Wordmark />
+      </a>
+      <p>Your AI exam coach, built from your own course material.</p>
+      <a class="footer-app" href={site.appUrl}>Open the Exama app</a>
+    </div>
+
+    <nav aria-label="Product">
+      <h2 class="footer-heading">Product</h2>
+      <ul>
+        {footerLinks.product.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+      </ul>
+    </nav>
+
+    <nav aria-label="Legal and help">
+      <h2 class="footer-heading">Legal &amp; help</h2>
+      <ul>
+        {footerLinks.legal.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+      </ul>
+    </nav>
+  </div>
+  <div class="container footer-base">
+    <small>© {year} {site.name}</small>
+  </div>
+</footer>

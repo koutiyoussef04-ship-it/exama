@@ -1,0 +1,52 @@
+---
+import { Image } from 'astro:assets';
+import logoMark from '../assets/brand/logo-mark.png';
+import Icon from './Icon.astro';
+import Wordmark from './Wordmark.astro';
+import { navLinks } from '../data/content';
+import { site } from '../config/site';
+---
+
+<header class="site-header">
+  <div class="container header-bar">
+    <a class="brand" href="/" aria-label="Exama — home">
+      <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" loading="eager" />
+      <Wordmark />
+    </a>
+
+    <nav class="nav-desktop" aria-label="Primary">
+      <ul>
+        {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+      </ul>
+    </nav>
+
+    <a class="btn btn-primary btn-sm header-cta" href={site.appUrl}>{site.cta.label}</a>
+
+    <details class="menu">
+      <summary aria-label="Menu">
+        <Icon name="menu" class="menu-open" />
+        <Icon name="close" class="menu-close" />
+      </summary>
+      <nav class="menu-panel" aria-label="Mobile">
+        <ul>
+          {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        </ul>
+        <a class="btn btn-primary btn-block" href={site.appUrl}>{site.cta.label}</a>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<!-- Progressive enhancement: the menu opens without JS; this only closes it after a link is used. -->
+<script is:inline data-purpose="close-menu">
+  (function () {
+    var menu = document.querySelector('.menu');
+    if (!menu) return;
+    menu.addEventListener('click', function (e) {
+      if (e.target.closest('a')) menu.removeAttribute('open');
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') menu.removeAttribute('open');
+    });
+  })();
+</script>

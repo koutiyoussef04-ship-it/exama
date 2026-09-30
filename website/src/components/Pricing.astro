@@ -1,0 +1,59 @@
+---
+import Icon from './Icon.astro';
+import { TRIAL_DAYS, plans } from '../data/content';
+import { site } from '../config/site';
+---
+
+<section id="pricing" class="section section-alt" aria-labelledby="pricing-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Pricing</p>
+      <h2 id="pricing-title">Start with {TRIAL_DAYS} days free</h2>
+      <p class="section-lead">
+        Try the Student features free for {TRIAL_DAYS} days, with a limited allowance. No payment today, and you can
+        cancel any time before the trial ends.
+      </p>
+    </div>
+
+    <ul class="pricing">
+      {plans.map((p) => (
+        <li class:list={['plan', { 'plan-recommended': p.recommended }]}>
+          <div class="plan-top">
+            <h3>{p.name}</h3>
+            {p.recommended && <span class="badge">Recommended</span>}
+          </div>
+          <p class="plan-tagline">{p.tagline}</p>
+
+          {p.price ? (
+            <div class="plan-price">
+              <p class="price-main"><span class="price-amount">{p.price.monthly}</span><span class="price-per">/month</span></p>
+              <p class="price-alt">or {p.price.yearly}/year · save {p.price.savingPct}%</p>
+            </div>
+          ) : (
+            <div class="plan-price">
+              <p class="price-main"><span class="price-amount">€0</span></p>
+              <p class="price-alt">No payment needed</p>
+            </div>
+          )}
+
+          <ul class="plan-features">
+            {p.features.map((f) => (
+              <li class:list={{ off: f.off }}>
+                <Icon name={f.off ? 'x' : 'check'} size={18} />
+                <span>{f.text}</span>
+              </li>
+            ))}
+          </ul>
+
+          <a class:list={['btn', 'btn-block', p.recommended ? 'btn-primary' : 'btn-secondary']} href={site.appUrl}>{p.cta}</a>
+        </li>
+      ))}
+    </ul>
+
+    <p class="fineprint center">
+      Prices are list prices in euros; the App Store and Google Play show the price for your country. Subscriptions
+      are billed by the store you subscribe in, and a subscription in either store unlocks your account everywhere,
+      including the web. After the {TRIAL_DAYS}-day trial, your chosen plan begins unless you cancel before it ends.
+    </p>
+  </div>
+</section>

@@ -1,0 +1,38 @@
+---
+import Icon from './Icon.astro';
+import { groundedPoints } from '../data/content';
+---
+
+<section id="grounded" class="section" aria-labelledby="grounded-title">
+  <div class="container split">
+    <div class="split-copy">
+      <p class="eyebrow">Source-based learning</p>
+      <h2 id="grounded-title">Your material, not generic AI</h2>
+      <p class="section-lead">
+        Exama does not quiz you on whatever an AI happens to know. It builds questions and practice from what your
+        course actually teaches — your slides, your notes, your lectures.
+      </p>
+      <ul class="checks">
+        {groundedPoints.map((p) => (
+          <li><Icon name="check" size={20} /><span>{p}</span></li>
+        ))}
+      </ul>
+      <p class="fineprint">Exama is AI and can make mistakes. Double-check important facts against your course.</p>
+    </div>
+
+    <div class="contrast" role="group" aria-label="Generic questions compared with Exama questions">
+      <div class="contrast-row contrast-generic">
+        <p class="contrast-label">Generic questions</p>
+        <p>Written from general knowledge. They can cover things your lecturer never taught.</p>
+      </div>
+      <div class="contrast-row contrast-exama">
+        <p class="contrast-label">Exama questions</p>
+        <p>Written from your slides, notes and lectures — each one tied to a passage of your material.</p>
+        <p class="contrast-source">
+          <Icon name="quote" size={18} />
+          <span>Source passage shown with your results</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

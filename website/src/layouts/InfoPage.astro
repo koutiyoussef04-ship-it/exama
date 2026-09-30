@@ -1,0 +1,24 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  path: string;
+  description: string;
+  /** Interim pages stay out of search results until their final content is published. */
+  noindex?: boolean;
+}
+const { title, path, description, noindex = true } = Astro.props;
+---
+
+<Base title={`${title} — Exama`} description={description} path={path} noindex={noindex}>
+  <section class="section info-page">
+    <div class="container narrow">
+      <h1>{title}</h1>
+      <div class="prose">
+        <slot />
+      </div>
+      <p class="back"><a href="/">← Back to exama.app</a></p>
+    </div>
+  </section>
+</Base>

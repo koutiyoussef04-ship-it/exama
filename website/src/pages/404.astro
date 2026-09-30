@@ -1,0 +1,19 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../config/site';
+---
+
+<Base title="Page not found — Exama" description="This page could not be found." path="/404" noindex>
+  <section class="section info-page">
+    <div class="container narrow">
+      <h1>Page not found</h1>
+      <div class="prose">
+        <p>That page does not exist. Head back to the homepage, or open the Exama app.</p>
+      </div>
+      <p class="cta-row">
+        <a class="btn btn-secondary" href="/">Go to the homepage</a>
+        <a class="btn btn-primary" href={site.appUrl}>{site.cta.label}</a>
+      </p>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  Source for public/og-image.png (1200×630). Uses only the real logo mark, the wordmark and the headline —
+  no product UI, no statistics. Regenerate with any headless Chromium:
+    chromium --headless --screenshot=public/og-image.png --window-size=1200,630 scripts/og-image.html
+  (run from website/; the screenshot is written at the window size).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      html, body { width: 1200px; height: 630px; }
+      body {
+        display: flex; flex-direction: column; justify-content: space-between;
+        padding: 64px 72px;
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: #fff;
+        background:
+          radial-gradient(60% 90% at 88% 0%, rgba(139, 92, 246, 0.55), transparent 70%),
+          radial-gradient(50% 70% at 0% 100%, rgba(91, 141, 239, 0.35), transparent 70%),
+          #15173f;
+      }
+      .brand { display: flex; align-items: center; gap: 20px; }
+      .brand img { width: 72px; height: 72px; border-radius: 18px; }
+      .wordmark { font-size: 56px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+      .x { background: linear-gradient(120deg, #a78bfa, #7aa2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      h1 { max-width: 980px; font-size: 76px; line-height: 1.04; font-weight: 800; letter-spacing: -0.04em; }
+      h1 span { background: linear-gradient(120deg, #a78bfa, #7aa2ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .foot { display: flex; justify-content: space-between; align-items: center; font-size: 28px; color: #c9ccec; }
+      .foot strong { color: #fff; font-weight: 650; }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <img src="../src/assets/brand/logo-mark.png" alt="" />
+      <div class="wordmark">E<span class="x">x</span>ama</div>
+    </div>
+    <h1>Turn your course material into your <span>personal AI exam coach.</span></h1>
+    <div class="foot">
+      <span>PDF · PowerPoint · Audio · Video</span>
+      <strong>exama.app</strong>
+    </div>
+  </body>
+</html>

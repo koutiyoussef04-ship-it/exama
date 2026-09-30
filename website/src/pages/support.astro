@@ -1,0 +1,29 @@
+---
+import InfoPage from '../layouts/InfoPage.astro';
+import { site } from '../config/site';
+
+const email = site.legal.supportEmail;
+---
+
+<!--
+  INTERIM PAGE. Set `site.legal.supportEmail` in src/config/site.ts once the support address is confirmed;
+  it then appears here automatically. The App Store needs a public Support URL.
+-->
+<InfoPage title="Support" path="/support" description="Get help with Exama.">
+  <p>
+    Questions, problems or feedback? In the Exama app, open <strong>Account → Help &amp; support</strong> for answers to
+    common questions and to get in touch. You can open the app at <a href={site.appUrl}>app.exama.app</a>.
+  </p>
+  {
+    email ? (
+      <p>
+        You can also email us at <a href={`mailto:${email}`}>{email}</a>.
+      </p>
+    ) : (
+      <p>A support email address will be listed here before launch.</p>
+    )
+  }
+  <p>
+    Looking for an answer about uploads, exams or the free trial? See the <a href="/#faq">frequently asked questions</a>.
+  </p>
+</InfoPage>

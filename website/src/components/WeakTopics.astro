@@ -1,0 +1,34 @@
+---
+import Icon from './Icon.astro';
+import { loopSteps } from '../data/content';
+---
+
+<section id="weak-topics" class="section" aria-labelledby="weak-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Weak topics &amp; targeted practice</p>
+      <h2 id="weak-title">Find what you don’t know yet — and fix it</h2>
+      <p class="section-lead">
+        Every graded answer updates how well you know that topic. Exama flags your weak topics and builds practice
+        around them, plus follow-up exams that focus on the topics and mistakes that need work.
+      </p>
+    </div>
+
+    <ol class="loop" aria-label="The study loop">
+      {loopSteps.map((s, i) => (
+        <li>
+          <span class="loop-node">{s}</span>
+          {i < loopSteps.length - 1 && <Icon name="arrowRight" size={20} class="loop-arrow" />}
+        </li>
+      ))}
+      <li class="loop-back">
+        <Icon name="repeat" size={18} /><span>and around again</span>
+      </li>
+    </ol>
+
+    <p class="fineprint center">
+      Weak-topic analysis and adaptive practice are part of Student and Pro, and of the free trial. Free and Basic
+      practice across all the topics of your course.
+    </p>
+  </div>
+</section>
