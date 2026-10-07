@@ -65,6 +65,9 @@ const es: LocaleDict = {
     newPassword: 'Contraseña nueva',
     setPassword: 'Guardar contraseña nueva',
     resend: 'Enviar un código nuevo',
+    resendWait_one: 'Podrás pedir un código nuevo dentro de {{count}} minuto.',
+    resendWait_other: 'Podrás pedir un código nuevo dentro de {{count}} minutos.',
+    resendWaitSoon: 'Podrás pedir un código nuevo en menos de un minuto.',
     changeEmail: 'Usar otro correo',
   },
   home: {

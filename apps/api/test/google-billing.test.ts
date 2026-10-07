@@ -11,7 +11,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT, type
 import type { AuthResponse } from '@study/shared';
 
 const OWNER_EMAIL = `owner-google-${crypto.randomUUID()}@example.com`;
-Object.assign(process.env, { AI_PROVIDER: 'mock', BILLING_MOCK_ENABLED: 'false', OWNER_EMAILS: OWNER_EMAIL, OWNER_USER_IDS: '' });
+Object.assign(process.env, { AI_PROVIDER: 'mock', BILLING_MOCK_ENABLED: 'false', STRIPE_ENABLED: 'false', OWNER_EMAILS: OWNER_EMAIL, OWNER_USER_IDS: '' });
 const { app } = await import('../src/app.js');
 const { sql } = await import('../src/db/client.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');

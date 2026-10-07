@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { createPrivateKey, sign, X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import type { AuthResponse, Entitlement } from '@study/shared';
 
@@ -18,11 +19,12 @@ const APP_APPLE_ID = 1234567890;
 Object.assign(process.env, {
   AI_PROVIDER: 'mock',
   BILLING_MOCK_ENABLED: 'false',
+  STRIPE_ENABLED: 'false', // the real .env may enable Stripe; this suite is about Apple
   APPLE_IAP_ENABLED: 'true',
   APPLE_APP_APPLE_ID: String(APP_APPLE_ID),
   APPLE_ALLOW_SANDBOX: 'true',
   APPLE_ONLINE_CHECKS: 'false', // no OCSP calls to Apple in tests (certificate dates checked against signedDate)
-  APPLE_ROOT_CERTS_DIR: new URL('./roots/', FIX).pathname,
+  APPLE_ROOT_CERTS_DIR: fileURLToPath(new URL('./roots/', FIX)),
 });
 const { app } = await import('../src/app.js');
 const { sql } = await import('../src/db/client.js');

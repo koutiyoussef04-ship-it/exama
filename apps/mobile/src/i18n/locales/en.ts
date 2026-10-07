@@ -68,6 +68,9 @@ const en = {
     newPassword: 'New password',
     setPassword: 'Set new password',
     resend: 'Send a new code',
+    resendWait_one: 'You can request a new code in {{count}} minute.',
+    resendWait_other: 'You can request a new code in {{count}} minutes.',
+    resendWaitSoon: 'You can request a new code in less than a minute.',
     changeEmail: 'Use another email',
   },
   home: {

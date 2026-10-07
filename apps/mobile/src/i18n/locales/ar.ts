@@ -73,6 +73,13 @@ const ar: LocaleDict = {
     newPassword: 'كلمة المرور الجديدة',
     setPassword: 'تعيين كلمة المرور الجديدة',
     resend: 'إرسال رمز جديد',
+    resendWait_zero: 'يمكنك طلب رمز جديد بعد أقل من دقيقة.',
+    resendWait_one: 'يمكنك طلب رمز جديد بعد دقيقة واحدة.',
+    resendWait_two: 'يمكنك طلب رمز جديد بعد دقيقتين.',
+    resendWait_few: 'يمكنك طلب رمز جديد بعد {{count}} دقائق.',
+    resendWait_many: 'يمكنك طلب رمز جديد بعد {{count}} دقيقة.',
+    resendWait_other: 'يمكنك طلب رمز جديد بعد {{count}} دقيقة.',
+    resendWaitSoon: 'يمكنك طلب رمز جديد بعد أقل من دقيقة.',
     changeEmail: 'استخدام بريد إلكتروني آخر',
   },
   home: {

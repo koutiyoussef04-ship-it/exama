@@ -7,9 +7,13 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-const ROOTS = [new URL('../src/app', import.meta.url).pathname, new URL('../src/components', import.meta.url).pathname];
+const ROOTS = [
+  fileURLToPath(new URL('../src/app', import.meta.url)),
+  fileURLToPath(new URL('../src/components', import.meta.url)),
+];
 const files = (dir: string): string[] =>
   readdirSync(dir).flatMap((f) => {
     const p = join(dir, f);

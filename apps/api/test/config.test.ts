@@ -40,6 +40,8 @@ function loadConfigWith(overrides: Record<string, string | undefined>, file = sc
     JWT_SECRET: 'x'.repeat(40),
     ...overrides,
   };
+  // Stripe has many settings; the developer's real .env may enable it. Start every case with Stripe off.
+  for (const k of Object.keys(env)) if (k.startsWith('STRIPE_') && !(k in overrides)) delete env[k];
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   const r = spawnSync(process.execPath, ['--import', 'tsx', file], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
   return { code: r.status, out: r.stdout, err: r.stderr };

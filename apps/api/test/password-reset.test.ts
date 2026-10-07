@@ -1,6 +1,6 @@
 /**
  * Password reset: one-time emailed code, no account enumeration, expiry, single use, attempt cap,
- * rate limits, older sessions ended after the reset.
+ * rate limits, 15-minute cooldown between codes, older sessions ended after the reset.
  */
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
@@ -11,7 +11,7 @@ const { app } = await import('../src/app.js');
 const { sql, db } = await import('../src/db/client.js');
 const { passwordResetCodes } = await import('../src/db/schema.js');
 const { outbox } = await import('../src/lib/mailer.js');
-const { resetRateLimits, RESET_MAX_ATTEMPTS } = await import('../src/services/password-reset.js');
+const { resetRateLimits, requestPasswordReset, confirmPasswordReset, RESET_MAX_ATTEMPTS, RESET_COOLDOWN_MINUTES, RESET_CODE_TTL_MINUTES } = await import('../src/services/password-reset.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');
 const { eq } = await import('drizzle-orm');
 after(async () => {
@@ -41,6 +41,14 @@ const codeFor = (email: string) => {
   const mail = [...outbox].reverse().find((m) => m.to === email);
   return mail?.text.match(/\b(\d{6})\b/)?.[1];
 };
+const MIN = 60_000;
+const settle = () => new Promise((r) => setTimeout(r, 20));
+const COOLDOWN_S = RESET_COOLDOWN_MINUTES * 60;
+/** The service at a chosen moment ("time travel"), with its own client key so IP limits don't interfere. */
+let keyNo = 0;
+const requestAt = (email: string, atMs: number) => requestPasswordReset(email, 'en', `svc-${++keyNo}`, atMs);
+const confirmAt = (email: string, code: string, atMs: number, password = 'new-password-2') => confirmPasswordReset(email, code, password, `svc-${++keyNo}`, atMs);
+const mailsTo = (email: string) => outbox.filter((m) => m.to === email).length;
 const request = (email: string, extra: object = {}, o?: { ip?: string }) => call('/auth/password-reset/request', { email, ...extra }, o);
 const confirm = (email: string, code: string, password = 'new-password-2', o?: { ip?: string }) => call('/auth/password-reset/confirm', { email, code, password }, o);
 
@@ -51,7 +59,9 @@ test('request: same 202 answer for known and unknown emails; only real accounts 
   const unknown = await request(`nobody-${crypto.randomUUID()}@example.com`);
   assert.equal(known.status, 202);
   assert.equal(unknown.status, 202);
-  assert.deepEqual(await known.json(), await unknown.json(), 'identical bodies: no account enumeration');
+  const knownBody = await known.json();
+  assert.deepEqual(knownBody, await unknown.json(), 'identical bodies: no account enumeration');
+  assert.deepEqual(knownBody, { ok: true, retryAfterSeconds: COOLDOWN_S }, 'tells the caller how long until another code');
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(outbox.length, before + 1, 'one email, to the existing account only');
   assert.match(codeFor(email) ?? '', /^\d{6}$/);
@@ -91,9 +101,9 @@ test('confirm: wrong codes fail; the right code sets the password, signs in and 
   // Unknown email: same error as a wrong code.
   const unknown = await confirm(`nobody-${crypto.randomUUID()}@example.com`, code);
   assert.equal(((await unknown.json()) as { code: string }).code, 'reset_code_invalid');
-  // Too-short password rejected before anything is checked.
-  await request(email);
-  await new Promise((r) => setTimeout(r, 20));
+  // Too-short password rejected before anything is checked (a new code, once the cooldown is over).
+  await requestAt(email, Date.now() + (RESET_COOLDOWN_MINUTES + 1) * MIN);
+  await settle();
   assert.equal((await confirm(email, codeFor(email)!, 'short')).status, 400);
 });
 
@@ -110,8 +120,8 @@ test(`a code allows ${RESET_MAX_ATTEMPTS} attempts, expires, and is replaced by 
   await request(b.email);
   await new Promise((r) => setTimeout(r, 20));
   const first = codeFor(b.email)!;
-  await request(b.email);
-  await new Promise((r) => setTimeout(r, 20));
+  await requestAt(b.email, Date.now() + (RESET_COOLDOWN_MINUTES + 1) * MIN); // a request inside the cooldown would not issue a code
+  await settle();
   const second = codeFor(b.email)!;
   if (first !== second) assert.equal((await confirm(b.email, first)).status, 400, 'older code invalidated');
   // Expire the current code.
@@ -127,14 +137,132 @@ test('rate limits: per client for requests and attempts; at most 3 emails per ac
   for (let i = 0; i < 11; i++) statuses.push((await request(`x${i}-${crypto.randomUUID()}@example.com`, {}, sameIp)).status);
   assert.deepEqual([statuses.slice(0, 10).every((s) => s === 202), statuses[10]], [true, 429]);
 
+  // A request that lands inside a cooldown still counts against the client's limit.
   resetRateLimits();
-  const before = outbox.filter((m) => m.to === email).length;
-  for (let i = 0; i < 5; i++) assert.equal((await request(email)).status, 202, 'same answer even when no email is sent');
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(outbox.filter((m) => m.to === email).length - before, 3);
+  const { email: known } = await newUser();
+  const again = { ip: '203.0.113.9' };
+  const answers = [];
+  for (let i = 0; i < 11; i++) answers.push((await request(known, {}, again)).status);
+  assert.deepEqual([answers.slice(0, 10).every((s) => s === 202), answers[10]], [true, 429]);
+
+  // Per account: at most 3 emails an hour (one every 16 minutes here), the rest answered the same but silent.
+  resetRateLimits();
+  const before = mailsTo(email);
+  const t0 = Date.now();
+  for (let i = 0; i < 4; i++) assert.equal((await requestAt(email, t0 + i * (RESET_COOLDOWN_MINUTES + 1) * MIN)).retryAfterSeconds, COOLDOWN_S, 'same answer even when no email is sent');
+  await settle();
+  assert.equal(mailsTo(email) - before, 3);
 
   resetRateLimits();
   const codes = [];
   for (let i = 0; i < 21; i++) codes.push((await confirm(email, '123456', 'whatever-123', sameIp)).status);
   assert.equal(codes[20], 429);
+});
+
+test('cooldown: a second request right away gets no new code and no email, and says how long to wait', async () => {
+  const { email } = await newUser();
+  const first = await request(email);
+  assert.deepEqual(await first.json(), { ok: true, retryAfterSeconds: COOLDOWN_S });
+  await settle();
+  assert.equal(mailsTo(email), 1);
+  const code = codeFor(email)!;
+  const rowsAfterFirst = await sql`select id from password_reset_codes where user_id = (select id from users where email = ${email})`;
+
+  const second = await request(email); // the same as tapping "Send a new code"
+  assert.equal(second.status, 202);
+  const body = (await second.json()) as { ok: boolean; retryAfterSeconds: number };
+  assert.equal(body.ok, true);
+  assert.ok(body.retryAfterSeconds > COOLDOWN_S - 30 && body.retryAfterSeconds <= COOLDOWN_S, `about ${RESET_COOLDOWN_MINUTES} minutes left, got ${body.retryAfterSeconds}s`);
+  await settle();
+  assert.equal(mailsTo(email), 1, 'no second email');
+  const rowsAfterSecond = await sql`select id from password_reset_codes where user_id = (select id from users where email = ${email})`;
+  assert.equal(rowsAfterSecond.length, rowsAfterFirst.length, 'no second code generated');
+  assert.equal(codeFor(email), code);
+  assert.equal((await confirm(email, code)).status, 200, 'the first code still works');
+});
+
+test('cooldown timeline: throttled for 15 minutes, then a new code replaces the old one', async () => {
+  const { email } = await newUser();
+  const t0 = Date.now();
+  assert.equal((await requestAt(email, t0)).retryAfterSeconds, COOLDOWN_S);
+  await settle();
+  const first = codeFor(email)!;
+
+  for (const [minutes, left] of [[1, 14 * 60], [10, 5 * 60], [14.5, 30]] as const) {
+    assert.equal((await requestAt(email, t0 + minutes * MIN)).retryAfterSeconds, left, `${minutes} min in: ${left}s left`);
+  }
+  assert.equal((await requestAt(email, t0 + 15 * MIN - 1000)).retryAfterSeconds, 1);
+  await settle();
+  assert.equal(mailsTo(email), 1, 'nothing sent during the cooldown');
+
+  assert.equal((await requestAt(email, t0 + 15 * MIN)).retryAfterSeconds, COOLDOWN_S, 'after 15 minutes a code is issued again');
+  await settle();
+  assert.equal(mailsTo(email), 2);
+  const second = codeFor(email)!;
+  if (first !== second) await assert.rejects(confirmAt(email, first, t0 + 15 * MIN + 1000), /incorrect or has expired/, 'a newer code replaces the older one');
+  // ...and the clock restarts from the new code.
+  assert.equal((await requestAt(email, t0 + 20 * MIN)).retryAfterSeconds, 10 * 60);
+  await settle();
+  assert.equal(mailsTo(email), 2);
+});
+
+test('cooldown: the first code keeps its 30-minute life and 5-attempt limit while requests are throttled', async () => {
+  const a = await newUser();
+  const t0 = Date.now();
+  await requestAt(a.email, t0);
+  await settle();
+  const code = codeFor(a.email)!;
+  const wrong = code === '000000' ? '111111' : '000000';
+  await assert.rejects(confirmAt(a.email, wrong, t0 + MIN), /incorrect or has expired/);
+  await requestAt(a.email, t0 + 14 * MIN); // throttled: must not reset the attempt counter or touch the code
+  const [row] = await sql`select attempts, used_at from password_reset_codes where user_id = (select id from users where email = ${a.email})`;
+  assert.equal(row.attempts, 1, 'attempt counter untouched by a throttled request');
+  assert.equal(row.used_at, null, 'code untouched by a throttled request');
+  const ok = await confirmAt(a.email, code, t0 + (RESET_CODE_TTL_MINUTES - 1) * MIN);
+  assert.ok(ok.token, 'still valid just before 30 minutes');
+
+  const b = await newUser();
+  await requestAt(b.email, t0);
+  await settle();
+  await assert.rejects(confirmAt(b.email, codeFor(b.email)!, t0 + RESET_CODE_TTL_MINUTES * MIN + 1000), /incorrect or has expired/, 'expired after 30 minutes');
+
+  // Five wrong attempts still burn the code, cooldown or not.
+  const c = await newUser();
+  await requestAt(c.email, t0);
+  await settle();
+  const cCode = codeFor(c.email)!;
+  const cWrong = cCode === '000000' ? '111111' : '000000';
+  for (let i = 0; i < RESET_MAX_ATTEMPTS; i++) await assert.rejects(confirmAt(c.email, cWrong, t0 + (i + 1) * MIN));
+  await assert.rejects(confirmAt(c.email, cCode, t0 + 6 * MIN), /incorrect or has expired/, 'burned after too many wrong attempts');
+});
+
+test('cooldown survives a restart (it is stored with the code, not just in memory)', async () => {
+  const { email } = await newUser();
+  await request(email);
+  await settle();
+  assert.equal(mailsTo(email), 1);
+  resetRateLimits(); // what a restart does to everything kept in memory
+  const body = (await (await request(email)).json()) as { retryAfterSeconds: number };
+  assert.ok(body.retryAfterSeconds > COOLDOWN_S - 30 && body.retryAfterSeconds <= COOLDOWN_S);
+  await settle();
+  assert.equal(mailsTo(email), 1, 'still no second email');
+});
+
+test('cooldown does not reveal whether an account exists: unknown emails get the same answers over time', async () => {
+  const { email } = await newUser();
+  const ghost = `nobody-${crypto.randomUUID()}@example.com`;
+  const t0 = Date.now();
+  for (const minutes of [0, 0.5, 1, 7, 14, 15, 16, 22]) {
+    const [k, u] = [await requestAt(email, t0 + minutes * MIN), await requestAt(ghost, t0 + minutes * MIN)];
+    assert.deepEqual(k, u, `identical answer ${minutes} min in`);
+  }
+  // Over HTTP too: same status and same body shape, first and second time.
+  const [e2, g2] = [(await newUser()).email, `nobody-${crypto.randomUUID()}@example.com`];
+  for (let i = 0; i < 2; i++) {
+    const [a, b] = [await request(e2), await request(g2)];
+    assert.equal(a.status, b.status);
+    assert.deepEqual(Object.keys(await a.json() as object).sort(), Object.keys(await b.json() as object).sort());
+  }
+  await settle();
+  assert.equal(outbox.filter((m) => m.to === ghost).length, 0, 'unknown emails never get mail');
 });

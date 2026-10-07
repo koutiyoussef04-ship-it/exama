@@ -37,10 +37,11 @@ export const authRoutes = new Hono<AuthEnv>()
     return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt), user: toUser(user) });
   })
   // Forgot password → a one-time code by email. Always 202: never reveals whether the email has an account.
+  // `retryAfterSeconds`: how long until another code can be requested (15-minute cooldown per account).
   .post('/password-reset/request', async (c) => {
     const input = parseBody(passwordResetRequestSchema, await c.req.json().catch(() => ({})));
-    await requestPasswordReset(input.email, input.language ?? 'en', clientKey(c));
-    return c.json({ ok: true }, 202);
+    const { retryAfterSeconds } = await requestPasswordReset(input.email, input.language ?? 'en', clientKey(c));
+    return c.json({ ok: true, retryAfterSeconds }, 202);
   })
   // Code + new password → new password set, older sessions ended, signed in.
   .post('/password-reset/confirm', async (c) => {

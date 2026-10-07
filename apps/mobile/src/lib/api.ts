@@ -147,7 +147,7 @@ async function uploadMaterialFile(documentId: string, file: PickedFile, language
 export const api = {
   register: (input: RegisterInput) => post<AuthResponse>('/auth/register', input),
   login: (input: LoginInput) => post<AuthResponse>('/auth/login', input),
-  requestPasswordReset: (input: PasswordResetRequestInput) => post<{ ok: true }>('/auth/password-reset/request', input),
+  requestPasswordReset: (input: PasswordResetRequestInput) => post<{ ok: true; retryAfterSeconds?: number }>('/auth/password-reset/request', input),
   confirmPasswordReset: (input: PasswordResetConfirmInput) => post<AuthResponse>('/auth/password-reset/confirm', input),
   me: () => request<User>('/auth/me'),
   /** Permanently deletes the account (server verifies the password). */

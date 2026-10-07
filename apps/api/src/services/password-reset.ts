@@ -3,15 +3,24 @@
  *
  *   request(email)                 → 202 whatever happens (never reveals whether the email has an
  *                                    account); for an existing account, a 6-digit code is emailed.
+ *                                    The answer says how long to wait before asking again (see cooldown).
  *   confirm(email, code, password) → sets the new password, signs the student in, and ends every
  *                                    older session (tokens issued before the change stop working).
  *
  * Safeguards: only an HMAC of the code is stored; a code expires after 30 minutes, works once and
  * allows 5 attempts; a new request invalidates older codes; requests and attempts are rate-limited
  * per client IP, and emails per account.
+ *
+ * Cooldown: once a code has been issued, the same account can't get another one (and no other email
+ * is sent) for 15 minutes — the "Send a new code" button and the first request alike. The issue time
+ * is the `created_at` of the newest row in `password_reset_codes`, so it survives restarts and can't
+ * be dodged by refreshing the app. A request during the cooldown generates nothing, sends nothing
+ * and leaves the earlier code valid (30 minutes, 5 attempts, as before). Answers stay identical for
+ * unknown emails: they get the same cooldown (kept in memory — there is nothing to store), so the
+ * remaining time never tells known and unknown addresses apart.
  */
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { and, desc, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { PASSWORD_RESET_CODE_LENGTH, type AuthResponse, type Language } from '@study/shared';
 import { track } from '../analytics/index.js';
 import { hashPassword, signToken } from '../auth/auth.js';
@@ -24,6 +33,9 @@ import { RateLimiter } from '../lib/rate-limit.js';
 
 export const RESET_CODE_TTL_MINUTES = 30;
 export const RESET_MAX_ATTEMPTS = 5;
+/** Minimum time between two codes for the same account. */
+export const RESET_COOLDOWN_MINUTES = 15;
+const COOLDOWN_MS = RESET_COOLDOWN_MINUTES * 60_000;
 
 const TOO_MANY = 'Too many attempts. Please wait a little and try again.';
 /** Per client IP: reset requests / code attempts. */
@@ -35,7 +47,21 @@ export function resetRateLimits() {
   resetRequestLimiter.reset();
   resetConfirmLimiter.reset();
   resetEmailLimiter.reset();
+  cooldownUntil.clear();
 }
+
+/**
+ * email → when its cooldown ends (ms). Gives unknown emails the same cooldown as real accounts (so the
+ * answers can't tell them apart) and also covers a request whose email the per-account limiter skipped.
+ * Per process, like the rate limiters above; for real accounts the database is the lasting record.
+ */
+const cooldownUntil = new Map<string, number>();
+const remainingFromMemory = (email: string, now: number) => Math.max(0, (cooldownUntil.get(email) ?? 0) - now);
+function startMemoryCooldown(email: string, now: number) {
+  cooldownUntil.set(email, now + COOLDOWN_MS);
+  if (cooldownUntil.size > 10_000) for (const [k, until] of cooldownUntil) if (until <= now) cooldownUntil.delete(k);
+}
+const toSeconds = (ms: number) => Math.ceil(ms / 1000);
 
 const hashCode = (userId: string, code: string) => createHmac('sha256', config.JWT_SECRET).update(`password-reset:${userId}:${code}`).digest();
 const invalidCode = () => new HttpError(400, 'This code is incorrect or has expired. Request a new code.', 'reset_code_invalid');
@@ -71,29 +97,58 @@ function resetEmail(to: string, code: string, language: Language) {
   return { to, subject: t.subject, text, html };
 }
 
-/** Always resolves (the route answers 202); rate limit per IP → 429. */
-export async function requestPasswordReset(email: string, language: Language, clientKey: string): Promise<void> {
+/**
+ * Always resolves (the route answers 202); rate limit per IP → 429. Resolves with how many seconds the
+ * caller must wait before asking again: the full cooldown after a request that was handled, the time
+ * left when one was already running. `now` is injectable for tests only.
+ */
+export async function requestPasswordReset(email: string, language: Language, clientKey: string, now = Date.now()): Promise<{ retryAfterSeconds: number }> {
   resetRequestLimiter.take(clientKey);
+  const fresh = { retryAfterSeconds: toSeconds(COOLDOWN_MS) };
   const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.email, email));
-  if (!user) return; // same answer as for an existing account
-  if (!resetEmailLimiter.tryTake(user.id)) return; // don't flood an inbox; still the same answer
+  const inMemory = remainingFromMemory(email, now);
+  if (!user) {
+    // Same answer as for an existing account, including the cooldown.
+    if (inMemory > 0) return { retryAfterSeconds: toSeconds(inMemory) };
+    startMemoryCooldown(email, now);
+    return fresh;
+  }
 
   const code = String(randomInt(0, 10 ** PASSWORD_RESET_CODE_LENGTH)).padStart(PASSWORD_RESET_CODE_LENGTH, '0');
-  await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx): Promise<{ kind: 'throttled'; ms: number } | { kind: 'skipped' } | { kind: 'issued' }> => {
+    // One request at a time per account, so two parallel requests can't both get a code.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`password-reset:${user.id}`}))`);
+    const [last] = await tx
+      .select({ createdAt: passwordResetCodes.createdAt })
+      .from(passwordResetCodes)
+      .where(eq(passwordResetCodes.userId, user.id))
+      .orderBy(desc(passwordResetCodes.createdAt))
+      .limit(1);
+    const remaining = Math.max(inMemory, last ? last.createdAt.getTime() + COOLDOWN_MS - now : 0);
+    // Cooldown running: no new code, no email, and the earlier code stays valid.
+    if (remaining > 0) return { kind: 'throttled', ms: remaining };
+    startMemoryCooldown(email, now);
+    if (!resetEmailLimiter.tryTake(user.id, now)) return { kind: 'skipped' }; // don't flood an inbox; still the same answer
     // A new code replaces any older unused one.
-    await tx.update(passwordResetCodes).set({ usedAt: new Date() }).where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt)));
+    await tx.update(passwordResetCodes).set({ usedAt: new Date(now) }).where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt)));
     await tx.insert(passwordResetCodes).values({
       userId: user.id,
       codeHash: hashCode(user.id, code).toString('hex'),
-      expiresAt: new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60_000),
+      createdAt: new Date(now), // the cooldown starts here (set by the app, not the database clock)
+      expiresAt: new Date(now + RESET_CODE_TTL_MINUTES * 60_000),
     });
+    return { kind: 'issued' };
   });
+  if (outcome.kind === 'throttled') return { retryAfterSeconds: toSeconds(outcome.ms) };
+  if (outcome.kind === 'skipped') return fresh;
+
   void track('password_reset_requested', user.id, {});
   // Not awaited: the response time must not depend on whether an email was sent.
   void sendMail(resetEmail(user.email, code, language)).catch((err) => console.error('[password-reset] email failed:', err instanceof Error ? err.message : err));
+  return fresh;
 }
 
-export async function confirmPasswordReset(email: string, code: string, password: string, clientKey: string): Promise<AuthResponse> {
+export async function confirmPasswordReset(email: string, code: string, password: string, clientKey: string, nowMs = Date.now()): Promise<AuthResponse> {
   resetConfirmLimiter.take(clientKey);
   const [user] = await db.select().from(users).where(eq(users.email, email));
   if (!user) {
@@ -103,7 +158,7 @@ export async function confirmPasswordReset(email: string, code: string, password
   const [row] = await db
     .select()
     .from(passwordResetCodes)
-    .where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt), gt(passwordResetCodes.expiresAt, new Date())))
+    .where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt), gt(passwordResetCodes.expiresAt, new Date(nowMs))))
     .orderBy(desc(passwordResetCodes.createdAt))
     .limit(1);
   if (!row || row.attempts >= RESET_MAX_ATTEMPTS) throw invalidCode();
@@ -120,7 +175,7 @@ export async function confirmPasswordReset(email: string, code: string, password
   }
 
   const passwordHash = await hashPassword(password);
-  const now = new Date();
+  const now = new Date(nowMs);
   const changedAt = now; // older tokens carry another `pwc` → session_expired
   const claimed = await db.transaction(async (tx) => {
     const used = await tx
