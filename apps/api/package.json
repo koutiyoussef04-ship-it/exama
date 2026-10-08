@@ -13,7 +13,8 @@
     "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
     "transcription:check": "tsx --env-file=.env scripts/transcription-check.ts",
     "analytics:report": "tsx --env-file=.env scripts/analytics-report.ts",
-    "owner:check": "tsx --env-file=.env scripts/owner-check.ts"
+    "owner:check": "tsx --env-file=.env scripts/owner-check.ts",
+    "db:migrate:prod": "tsx src/db/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
