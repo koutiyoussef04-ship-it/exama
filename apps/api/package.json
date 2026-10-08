@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "tsx --env-file=.env src/index.ts",
+    "start:prod": "tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
@@ -26,6 +27,7 @@
     "hono": "^4.13.8",
     "jose": "^6.2.12",
     "postgres": "^3.4.9",
+    "stripe": "^22.6.2",
     "unpdf": "^1.8.1",
     "zod": "^4.1.0"
   },
