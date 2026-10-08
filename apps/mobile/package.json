@@ -40,7 +40,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p test",
     "lint": "expo lint",
     "test": "tsx --test test/*.test.ts",
-    "legal:export": "tsx scripts/export-legal.ts"
+    "legal:export": "tsx scripts/export-legal.ts",
+    "build:web": "expo export -p web"
   },
   "private": true
 }
