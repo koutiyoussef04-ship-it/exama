@@ -1,0 +1,156 @@
+# Exama on Render — production Blueprint (web app + API + Postgres + marketing site).
+# Runbook: docs/deploy/web-production.md
+#
+# Secrets are NEVER written here. Values marked `sync: false` are typed by you in the Render dashboard
+# when you apply the Blueprint (they stay in Render). Everything else below is non-secret configuration.
+#
+#   https://api.exama.app  → exama-api        (Node API, persistent disk for uploads, Render Postgres)
+#   https://app.exama.app  → exama-app        (Expo web build, static)
+#   https://exama.app      → exama-marketing  (Astro static site — attach the domain LATER, see runbook)
+#
+# Stripe stays OFF (STRIPE_ENABLED=false) until the web app is verified; enable it in a second step.
+
+databases:
+  - name: exama-db
+    region: frankfurt
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
+    databaseName: exama
+    user: exama
+    ipAllowList: [] # private network only: just the API can reach the database
+
+services:
+  # ---------------------------------------------------------------- API
+  - type: web
+    name: exama-api
+    runtime: node
+    region: frankfurt
+    plan: 0.5c-512mb # a persistent disk needs a paid plan; one instance only (uploads live on that disk)
+    autoDeployTrigger: "off" # deploy from the dashboard ("Deploy latest commit") until you trust the pipeline
+    buildCommand: npm ci --include=dev # tsx (a dev dependency) runs the API
+    preDeployCommand: npm run db:migrate:prod -w @study/api # applies SQL migrations before each release
+    startCommand: npm run start:prod -w @study/api
+    healthCheckPath: /health
+    domains:
+      - api.exama.app
+    disk:
+      name: exama-storage
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: exama-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # random, created by Render, never shown in the repo
+      - key: STORAGE_DIR
+        value: /var/data/storage
+      - key: CORS_ORIGINS
+        value: https://app.exama.app
+      # AI (Anthropic) — key typed in the dashboard
+      - key: AI_PROVIDER
+        value: anthropic
+      - key: AI_MODEL
+        value: claude-sonnet-5
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Lecture transcription (AssemblyAI) — key typed in the dashboard
+      - key: TRANSCRIPTION_PROVIDER
+        value: assemblyai
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      # Password-reset email (Resend) — key typed in the dashboard; the sender's domain must be verified in Resend
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Exama <no-reply@exama.app>
+      # Billing: nothing is charged yet. Stripe is switched on later, on purpose.
+      - key: BILLING_MOCK_ENABLED
+        value: "false"
+      - key: STRIPE_ENABLED
+        value: "false"
+      - key: APPLE_IAP_ENABLED
+        value: "false"
+      # Optional, added later in the dashboard (Environment tab) when you have them:
+      #   OWNER_EMAILS            your own email → full access for testing every feature, server-side only
+      #   ANTHROPIC_WORKSPACE_ID  only if Anthropic asks for it
+      #   PLAN_LIMITS_OVERRIDE    only to tune limits
+
+  # ---------------------------------------------------------------- Web app (Expo web build)
+  - type: web
+    name: exama-app
+    runtime: static
+    autoDeployTrigger: "off"
+    buildCommand: npm ci --include=dev && npm run build:web -w @study/mobile
+    staticPublishPath: ./apps/mobile/dist
+    domains:
+      - app.exama.app
+    routes:
+      # Single-page app: every path (e.g. /sign-up, /paywall) is served by index.html and handled by the router.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      - path: /_expo/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_ENV
+        value: production
+      # Public value baked into the web bundle at build time (it is not a secret).
+      - key: EXPO_PUBLIC_API_URL
+        value: https://api.exama.app
+      # Add later in the dashboard (then redeploy), when you have the real details — the app shows
+      # "[placeholders]" on its legal screens until you do:
+      #   EXPO_PUBLIC_COMPANY_NAME, EXPO_PUBLIC_COMPANY_ADDRESS, EXPO_PUBLIC_SUPPORT_EMAIL,
+      #   EXPO_PUBLIC_PRIVACY_URL, EXPO_PUBLIC_TERMS_URL
+
+  # ---------------------------------------------------------------- Marketing site (static)
+  # Created now, but exama.app is NOT attached here: website/README.md says not to publish it before
+  # Stripe works (its buttons promise a 7-day trial). Attach the domain in the dashboard when ready.
+  - type: web
+    name: exama-marketing
+    runtime: static
+    autoDeployTrigger: "off"
+    buildCommand: cd website && npm ci && npm run build
+    staticPublishPath: ./website/dist
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      - path: /_astro/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
