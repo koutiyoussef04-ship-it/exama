@@ -1,17 +1,17 @@
-import { isRtlLanguage, PAID_TIERS, RECOMMENDED_PLAN_ID, planById, type BillingPeriod, type Entitlement, type PaidTier, type PaywallTrigger, type Plan } from '@study/shared';
+import { PAID_TIERS, RECOMMENDED_PLAN_ID, planById, type BillingPeriod, type Entitlement, type PaidTier, type PaywallTrigger, type Plan } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Linking, Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, space, TextButton, Title } from '@/components/ui';
 import { ManageBillingButton, useResetOnPageShow } from '@/components/web-billing';
-import { isReleaseBuild, storeLinks } from '@/config/app-config';
+import { isReleaseBuild } from '@/config/app-config';
 import { platform, track } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatPrice, monthlyEquivalent, openManageSubscriptions, tierName, trialAllowance, trialLecture, useCatalog, useEntitlement, useStorePrices } from '@/lib/billing';
-import { getStoreClient, hasWebSubscription, isStoreProvider, storeName } from '@/lib/store';
+import { getStoreClient, hasWebSubscription, isStoreProvider, purchaseGap, storeName } from '@/lib/store';
 
 const LECTURE_TRIGGERS: PaywallTrigger[] = ['free_lecture_used', 'locked_lectures'];
 
@@ -107,6 +107,8 @@ export default function Paywall() {
 
   const { plans, trialDays, testMode, limits, provider } = catalog.data;
   const purchasesAvailable = catalog.data.purchasesAvailable && !!store;
+  // Don't advertise a free trial on the web while web checkout is off: there is no way to start it.
+  const showTrial = withTrial && (Platform.OS !== 'web' || purchasesAvailable);
   // Store name for the renewal fine print: the store selling here (mock: this device's store).
   const sellingStore = storeName(provider, Platform.OS);
   // A live subscription billed by the OTHER store (e.g. bought on iPhone, now on Android or web):
@@ -194,7 +196,7 @@ export default function Paywall() {
         </View>
       )}
 
-      {withTrial ? (
+      {showTrial ? (
         <View style={{ gap: space(2.5) }}>
           {!!params.message && <Body muted>{params.message}</Body>}
           <Title style={{ fontSize: 26, lineHeight: 32 }}>{t('paywall.trialTitle', { days: trialDays })}</Title>
@@ -272,7 +274,7 @@ export default function Paywall() {
           </Pressable>
         );
       })}
-      {withTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.trialAllPlans')}</Body>}
+      {showTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.trialAllPlans')}</Body>}
 
       {managedOnWeb ? (
         <Card style={{ gap: space(2) }}>
@@ -313,21 +315,27 @@ export default function Paywall() {
         </>
       ) : (
         <Card>
-          {Platform.OS === 'web' ? (
-            // No purchases on the web: subscriptions are bought in the iOS/Android app and work here too.
-            <WebStorePath />
-          ) : catalog.data.purchasesAvailable ? (
-            // The server sells here but this build can't reach the store (Expo Go / no native module).
-            <>
-              <Body style={{ fontWeight: '600' }}>{t('paywall.storeUnavailableTitle')}</Body>
-              <Body muted>{t('paywall.storeUnavailableBody')}</Body>
-            </>
-          ) : (
-            <>
-              <Body style={{ fontWeight: '600' }}>{t('paywall.comingSoonTitle')}</Body>
-              <Body muted>{t('paywall.comingSoonBody')}</Body>
-            </>
-          )}
+          {(() => {
+            const gap = purchaseGap(Platform.OS, catalog.data.purchasesAvailable);
+            return gap === 'web_unavailable' ? (
+              // Web checkout is Stripe only and the server has it off: say so plainly. Never send people to the stores to buy.
+              <>
+                <Body style={{ fontWeight: '600' }}>{t('paywall.webUnavailableTitle')}</Body>
+                <Body muted>{t('paywall.webUnavailableBody')}</Body>
+              </>
+            ) : gap === 'no_store_client' ? (
+              // The server sells here but this build can't reach the store (Expo Go / no native module).
+              <>
+                <Body style={{ fontWeight: '600' }}>{t('paywall.storeUnavailableTitle')}</Body>
+                <Body muted>{t('paywall.storeUnavailableBody')}</Body>
+              </>
+            ) : (
+              <>
+                <Body style={{ fontWeight: '600' }}>{t('paywall.comingSoonTitle')}</Body>
+                <Body muted>{t('paywall.comingSoonBody')}</Body>
+              </>
+            );
+          })()}
         </Card>
       )}
 
@@ -342,36 +350,5 @@ export default function Paywall() {
       </View>
       <TextButton title={t('common.notNow')} tone="muted" onPress={() => router.back()} />
     </Screen>
-  );
-}
-
-/**
- * Web: no purchases here (no fake web checkout). Explain the path through the stores and link to
- * the listings: Google Play's URL follows from the package name; the App Store's needs the app's id
- * (EXPO_PUBLIC_APP_STORE_URL) — without it, the student is told what to search for.
- */
-function WebStorePath() {
-  const { t, i18n } = useTranslation();
-  const link = { color: colors.primary, fontWeight: '700' as const, fontSize: 15 };
-  return (
-    <View style={{ gap: space(2) }}>
-      <Body style={{ fontWeight: '600' }}>{t('paywall.webTitle')}</Body>
-      <Body muted>{t('paywall.webBody')}</Body>
-      <Body muted style={{ fontSize: 14 }}>{t('paywall.webSteps', { path: [t('nav.account'), t('account.upgrade')].join(isRtlLanguage(i18n.language) ? ' ← ' : ' → ') })}</Body>
-      {storeLinks.appStore ? (
-        <Text accessibilityRole="link" style={link} onPress={() => void Linking.openURL(storeLinks.appStore!)}>
-          {t('paywall.webIphone')} {t('common.chevron')}
-        </Text>
-      ) : (
-        <Body muted style={{ fontSize: 14 }}>{t('paywall.webSearchApple')}</Body>
-      )}
-      {storeLinks.googlePlay ? (
-        <Text accessibilityRole="link" style={link} onPress={() => void Linking.openURL(storeLinks.googlePlay!)}>
-          {t('paywall.webAndroid')} {t('common.chevron')}
-        </Text>
-      ) : (
-        <Body muted style={{ fontSize: 14 }}>{t('paywall.webSearchGoogle')}</Body>
-      )}
-    </View>
   );
 }

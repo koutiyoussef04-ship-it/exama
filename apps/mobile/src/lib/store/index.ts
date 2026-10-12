@@ -17,7 +17,7 @@ import { stripeStore } from './stripe';
 import type { StoreClient } from './types';
 
 export type { StoreClient } from './types';
-export { hasWebSubscription, isStoreProvider, isWebProvider, storeName } from './offers';
+export { hasWebSubscription, isStoreProvider, isWebProvider, purchaseGap, storeName } from './offers';
 
 const mockStore: StoreClient = {
   provider: 'mock',

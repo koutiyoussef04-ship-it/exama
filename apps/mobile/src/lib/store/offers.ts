@@ -69,6 +69,19 @@ export function isStripeUrl(value: string): boolean {
   }
 }
 
+/**
+ * What the paywall shows INSTEAD of a purchase button, when this device cannot buy right now:
+ *  - web_unavailable: the web sells through Stripe only; the server has it switched off (or unconfigured).
+ *    A plain "not available yet" message — the web never sends people to the stores to buy.
+ *  - no_store_client: the server sells here but this build cannot reach the store (Expo Go, no native module).
+ *  - coming_soon: the server does not sell on this platform yet.
+ */
+export type PurchaseGap = 'web_unavailable' | 'no_store_client' | 'coming_soon';
+export function purchaseGap(platformOS: string, serverSells: boolean): PurchaseGap {
+  if (platformOS === 'web') return 'web_unavailable';
+  return serverSells ? 'no_store_client' : 'coming_soon';
+}
+
 /** A real store subscription (billed and managed by Apple or Google, not by the app). */
 export const isStoreProvider = (p: BillingProviderId | null | undefined): p is 'apple' | 'google' => p === 'apple' || p === 'google';
 

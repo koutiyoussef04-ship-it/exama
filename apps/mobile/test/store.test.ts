@@ -2,7 +2,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PLANS } from '@study/shared';
-import { googleRecurringPrice, googleReplacement, hasWebSubscription, isStoreProvider, isStripeUrl, isWebProvider, pickGoogleOfferToken, storeErrorCode, storeName, type OfferLike } from '../src/lib/store/offers.js';
+import ar from '../src/i18n/locales/ar';
+import en from '../src/i18n/locales/en';
+import es from '../src/i18n/locales/es';
+import fr from '../src/i18n/locales/fr';
+import { googleRecurringPrice, googleReplacement, hasWebSubscription, isStoreProvider, isStripeUrl, isWebProvider, pickGoogleOfferToken, purchaseGap, storeErrorCode, storeName, type OfferLike } from '../src/lib/store/offers.js';
 
 const phase = (micros: string, formattedPrice: string) => ({ priceAmountMicros: micros, formattedPrice });
 // What Play returns for "exama_student": two base plans, a free-trial offer on each.
@@ -111,4 +115,31 @@ test('only Stripe-hosted https pages are ever opened from a server answer', () =
     'checkout.stripe.com/x',
     '',
   ]) assert.equal(isStripeUrl(bad), false, bad);
+});
+
+test('paywall: with Stripe off the web gets a plain "not available" message, never a purchase path through the stores', () => {
+  // The server answers purchasesAvailable=false for ?platform=web when STRIPE_ENABLED is off.
+  assert.equal(purchaseGap('web', false), 'web_unavailable');
+  // Stripe on: the paywall renders the checkout button instead and never reaches this branch; if it did, still the web message.
+  assert.equal(purchaseGap('web', true), 'web_unavailable');
+});
+
+test('paywall: native fallbacks are unchanged (iOS/Android keep their own messages)', () => {
+  for (const os of ['ios', 'android']) {
+    assert.equal(purchaseGap(os, true), 'no_store_client', `${os}: server sells but this build has no store`);
+    assert.equal(purchaseGap(os, false), 'coming_soon', `${os}: server does not sell yet`);
+  }
+});
+
+test('web unavailable copy exists in every language and does not tell people to buy in the iPhone/Android apps', () => {
+  const locales = { en, es, fr, ar } as unknown as Record<string, { paywall: Record<string, string> }>;
+  for (const [lang, l] of Object.entries(locales)) {
+    assert.ok(l.paywall.webUnavailableTitle?.trim(), `${lang}: title`);
+    assert.ok(l.paywall.webUnavailableBody?.trim(), `${lang}: body`);
+    const text = `${l.paywall.webUnavailableTitle} ${l.paywall.webUnavailableBody}`;
+    assert.doesNotMatch(text, /App Store|Google Play|iPhone|Android|iOS/i, `${lang}: no store instructions`);
+    for (const gone of ['webTitle', 'webBody', 'webSteps', 'webIphone', 'webAndroid', 'webSearchApple', 'webSearchGoogle']) {
+      assert.equal(l.paywall[gone], undefined, `${lang}: old "subscribe in the app" string ${gone} removed`);
+    }
+  }
 });
