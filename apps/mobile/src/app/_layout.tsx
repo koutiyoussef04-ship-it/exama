@@ -44,6 +44,7 @@ function RootNavigator() {
         <Stack.Screen name="forgot-password" options={{ title: t('nav.forgotPassword') }} />
       </Stack.Protected>
       <Stack.Protected guard={!!user}>
+        <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="index" options={{ title: t('nav.courses') }} />
         <Stack.Screen name="documents/[id]" options={{ title: t('nav.course') }} />
         <Stack.Screen name="exams/[id]" options={{ title: '' }} />

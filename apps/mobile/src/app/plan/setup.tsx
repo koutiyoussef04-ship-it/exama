@@ -11,18 +11,29 @@ import { api } from '@/lib/api';
 import { syncReminders } from '@/lib/reminders';
 import { handleLimitError } from '@/lib/billing';
 import { addDaysIso, deviceTimeZone, formatTime, stepTime, todayIso } from '@/lib/plan-dates';
+import { preparedLevelDefault } from '@/lib/onboarding';
 import { usePreferences } from '@/lib/preferences';
+import { useOnboarding } from '@/lib/use-onboarding';
 
 /** Plan setup: a few quick questions. Also used to edit an existing plan (no AI call when editing). */
 export default function PlanSetup() {
   const { id, edit, from } = useLocalSearchParams<{ id: string; edit?: string; from?: string }>();
   const editing = edit === '1';
   const existing = useQuery({ queryKey: ['study-plan', id], queryFn: () => api.getStudyPlan(id), enabled: editing });
-  if (editing && existing.isLoading) return <Loading />;
-  return <SetupForm documentId={id} plan={editing ? (existing.data ?? null) : null} fromResults={from === 'results'} />;
+  // The onboarding answer about confidence is the starting choice for a NEW plan; wait for it (it is normally cached already).
+  const onboarding = useOnboarding();
+  if ((editing && existing.isLoading) || (!editing && onboarding.isLoading)) return <Loading />;
+  return (
+    <SetupForm
+      documentId={id}
+      plan={editing ? (existing.data ?? null) : null}
+      fromResults={from === 'results'}
+      defaultPrepared={preparedLevelDefault(onboarding.data?.answers)}
+    />
+  );
 }
 
-function SetupForm({ documentId, plan, fromResults = false }: { documentId: string; plan: StudyPlan | null; fromResults?: boolean }) {
+function SetupForm({ documentId, plan, fromResults = false, defaultPrepared }: { documentId: string; plan: StudyPlan | null; fromResults?: boolean; defaultPrepared: PreparedLevel }) {
   const { t } = useTranslation();
   const locale = useDateLocale();
   const qc = useQueryClient();
@@ -31,7 +42,7 @@ function SetupForm({ documentId, plan, fromResults = false }: { documentId: stri
   const [examDate, setExamDate] = useState<string | null>(plan && plan.daysUntilExam >= 0 ? plan.examDate : null);
   const [examTime, setExamTime] = useState<string | null>(plan?.examTime ?? null);
   const [minutes, setMinutes] = useState<StudyMinutes>(plan?.minutesPerDay ?? 60);
-  const [prepared, setPrepared] = useState<PreparedLevel>(plan?.preparedLevel ?? 'familiar');
+  const [prepared, setPrepared] = useState<PreparedLevel>(plan?.preparedLevel ?? defaultPrepared);
   const [studyDays, setStudyDays] = useState<number[]>(plan?.studyDays ?? [0, 1, 2, 3, 4, 5, 6]);
   const [unavailable, setUnavailable] = useState<string[]>(plan?.unavailableDates ?? []);
   const [more, setMore] = useState(!!plan && (plan.studyDays.length < 7 || plan.unavailableDates.length > 0));

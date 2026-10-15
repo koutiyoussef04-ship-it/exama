@@ -4,7 +4,7 @@ import { deleteAccountSchema, loginSchema, passwordResetConfirmSchema, passwordR
 import { hashPassword, requireAuth, signToken, verifyPassword, type AuthEnv } from '../auth/auth.js';
 import { track } from '../analytics/index.js';
 import { db } from '../db/client.js';
-import { users } from '../db/schema.js';
+import { userOnboarding, users } from '../db/schema.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { deleteAccount } from '../services/account.js';
 import { confirmPasswordReset, requestPasswordReset } from '../services/password-reset.js';
@@ -20,10 +20,13 @@ export const authRoutes = new Hono<AuthEnv>()
     const input = parseBody(registerSchema, await c.req.json());
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, input.email));
     if (existing) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
-    const [user] = await db
-      .insert(users)
-      .values({ email: input.email, name: input.name, passwordHash: await hashPassword(input.password) })
-      .returning();
+    const passwordHash = await hashPassword(input.password);
+    // The onboarding row is created with the account (same transaction): only new accounts are ever asked.
+    const user = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(users).values({ email: input.email, name: input.name, passwordHash }).returning();
+      await tx.insert(userOnboarding).values({ userId: created.id }).onConflictDoNothing();
+      return created;
+    });
     void track('signup_completed', user.id, {});
     return c.json<AuthResponse>({ token: await signToken(user.id), user: toUser(user) }, 201);
   })

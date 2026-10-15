@@ -24,6 +24,8 @@ import type {
   UpdateStudyPlanInput,
   CourseMaterial,
   CourseMaterialDetail,
+  OnboardingAnswers,
+  OnboardingState,
 } from '@study/shared';
 import { MATERIAL_HEADERS } from '@study/shared';
 import type { AiLanguage } from '@study/shared';
@@ -193,6 +195,11 @@ export const api = {
   stripePortal: () => post<BillingRedirect>('/billing/stripe/portal', {}),
   cancelSubscription: () => post<Entitlement>('/billing/cancel', {}),
   setMockBillingState: (state: MockState) => post<Entitlement>('/billing/mock/state', { state }),
+
+  // Student onboarding (five questions, asked once to new accounts).
+  getOnboarding: () => request<OnboardingState>('/onboarding'),
+  saveOnboarding: (answers: OnboardingAnswers) => request<OnboardingState>('/onboarding', { method: 'PUT', body: JSON.stringify({ answers }) }),
+  skipOnboarding: () => post<OnboardingState>('/onboarding/skip', {}),
 
   sendEvents: (input: TrackEventsInput) => post<{ accepted: number }>('/events', input),
 

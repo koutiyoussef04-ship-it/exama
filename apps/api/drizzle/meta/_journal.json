@@ -78,6 +78,13 @@
       "when": 1790794962742,
       "tag": "0010_stripe_web_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792048247271,
+      "tag": "0011_onboarding",
+      "breakpoints": true
     }
   ]
 }

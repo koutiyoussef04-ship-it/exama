@@ -12,6 +12,7 @@ import { documentRoutes } from './routes/documents.js';
 import { eventRoutes } from './routes/events.js';
 import { examRoutes } from './routes/exams.js';
 import { materialRoutes } from './routes/materials.js';
+import { onboardingRoutes } from './routes/onboarding.js';
 import { studyPlanRoutes } from './routes/study-plans.js';
 
 export const app = new Hono()
@@ -25,6 +26,7 @@ export const app = new Hono()
   .route('/documents', materialRoutes)
   .route('/exams', examRoutes)
   .route('/events', eventRoutes)
+  .route('/onboarding', onboardingRoutes)
   .route('/billing', billingRoutes);
 
 app.onError((err, c) => {

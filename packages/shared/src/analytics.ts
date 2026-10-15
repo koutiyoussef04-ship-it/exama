@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { PAID_TIERS, planIdSchema, type BillingPeriod, type PaidTier, type PlanId } from './billing';
 import { aiLanguageSchema, languageSchema, type AiLanguage } from './languages';
 import { MATERIAL_KINDS, MATERIAL_STATUSES, type MaterialFormat, type MaterialKind } from './materials';
+import type { OnboardingAnswers } from './onboarding';
 
 const platform = z.enum(['ios', 'android', 'web', 'unknown']);
 const count = z.number().int().min(0).max(1_000_000);
@@ -140,6 +141,9 @@ export type ServerEvents = {
   /** A reset code was emailed to an existing account (never recorded for unknown emails). */
   password_reset_requested: Record<string, never>;
   password_reset_completed: Record<string, never>;
+  /** Onboarding questions answered (fixed categories only) or dismissed. */
+  onboarding_completed: OnboardingAnswers;
+  onboarding_skipped: Record<string, never>;
   upload_succeeded: { document_id: string; file_size_kb: number; ai_language: AiLanguage };
   document_processing_completed: {
     document_id: string;

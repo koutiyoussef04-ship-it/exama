@@ -165,3 +165,4 @@ export * from './analytics';
 export * from './billing';
 export * from './study-plan';
 export * from './materials';
+export * from './onboarding';

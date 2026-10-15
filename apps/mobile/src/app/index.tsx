@@ -1,12 +1,14 @@
 import type { DocumentSummary } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Link, router, Stack } from 'expo-router';
+import { Link, Redirect, router, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, Chevron, colors, EmptyState, ErrorState, Loading, Screen, space, Title } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { openPaywall, planSummary, remaining, useEntitlement } from '@/lib/billing';
+import { onboardingGate } from '@/lib/onboarding';
+import { useOnboarding } from '@/lib/use-onboarding';
 
 const STATUS_TONE: Record<DocumentSummary['status'], 'primary' | 'success' | 'danger'> = {
   processing: 'primary',
@@ -18,6 +20,7 @@ export default function Courses() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const entitlement = useEntitlement();
+  const onboarding = useOnboarding();
   const docs = useQuery({
     queryKey: ['documents'],
     queryFn: api.listDocuments,
@@ -41,6 +44,12 @@ export default function Courses() {
     }
     return `${t('banner.coursesUsed', { used: e.usage.courses, limit: e.limits.courses ?? '∞' })} · ${t('banner.examsLeftMonth', { count: exams })}`;
   };
+
+  // New accounts answer the five onboarding questions first. A failed lookup never blocks the app:
+  // the server keeps the state, so the questions simply come back next time.
+  const gate = onboardingGate(onboarding);
+  if (gate === 'loading') return <Loading />;
+  if (gate === 'ask') return <Redirect href="/onboarding" />;
 
   return (
     <Screen onRefresh={() => docs.refetch()} refreshing={docs.isRefetching}>

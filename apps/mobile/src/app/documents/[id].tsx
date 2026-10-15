@@ -32,7 +32,9 @@ import { trackOnce } from '@/lib/analytics';
 import { formatDate, handleLimitError, openPaywall, useEntitlement } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { documentErrorMessage, isRetryableDocumentError } from '@/lib/errors';
+import { planFirst } from '@/lib/onboarding';
 import { usePreferences } from '@/lib/preferences';
+import { useOnboarding } from '@/lib/use-onboarding';
 
 const EXAM_LENGTH = 8;
 const PRACTICE_LENGTH = 6;
@@ -49,6 +51,8 @@ export default function CourseScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  // Onboarding: a student who asked for a study plan (and has an exam coming) sees it before the first exam.
+  const planOnTop = planFirst(useOnboarding().data?.answers);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const entitlement = useEntitlement();
   const { aiLanguage } = usePreferences();
@@ -195,6 +199,8 @@ export default function CourseScreen() {
             {!!languageLine && <Body muted style={{ fontSize: 13 }}>{languageLine}</Body>}
           </Card>
 
+          {planOnTop && <StudyPlanCard documentId={d.id} />}
+
           {generating ? (
             <WorkingCard title={t('course.writingExam')} detail={t('course.generatingDetail')} />
           ) : (
@@ -204,7 +210,7 @@ export default function CourseScreen() {
           <ErrorText error={createExam.error} />
           {examsLeft}
 
-          <StudyPlanCard documentId={d.id} />
+          {!planOnTop && <StudyPlanCard documentId={d.id} />}
           <MaterialsCard documentId={d.id} />
         </>
       )}

@@ -7,7 +7,7 @@
 import type { DocumentSummary } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import { MaterialKindList, UploadingRow, UploadTrust } from '@/components/materials';
@@ -17,6 +17,8 @@ import { useEntitlement } from '@/lib/billing';
 import { courseCapReached, useCourseUpload } from '@/lib/courses';
 import { isLectureOption, OPTION_PICKER_TYPES, type MaterialOption } from '@/lib/material-options';
 import { useMaterialUpload } from '@/lib/materials';
+import { preferredMaterialOption } from '@/lib/onboarding';
+import { useOnboarding } from '@/lib/use-onboarding';
 
 /** Close this sheet and open the course, where the new material's progress is shown. */
 function openCourse(id: string) {
@@ -29,6 +31,15 @@ export default function AddMaterial() {
   const e = useEntitlement().data;
   const docs = useQuery({ queryKey: ['documents'], queryFn: api.listDocuments });
   const [option, setOption] = useState<MaterialOption | null>(null);
+  // Highlight the kind of material the student said they usually have (onboarding) — once, and only if they haven't picked yet.
+  const onboarding = useOnboarding();
+  const preselected = useRef(false);
+  useEffect(() => {
+    if (preselected.current || !onboarding.data) return;
+    preselected.current = true;
+    const preferred = preferredMaterialOption(onboarding.data.answers);
+    if (preferred) setOption((current) => current ?? preferred);
+  }, [onboarding.data]);
   const upload = useMaterialUpload('home');
   const course = useCourseUpload(openCourse);
   const busy = upload.isPending || course.isPending;

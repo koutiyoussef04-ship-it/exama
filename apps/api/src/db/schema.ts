@@ -1,4 +1,4 @@
-import type { BillingEnvironment, MaterialFormat, MaterialKnowledge, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
+import type { BillingEnvironment, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -30,6 +30,21 @@ export const users = pgTable('users', {
   createdAt: createdAt(),
   /** Set when the password changes (reset): sessions issued before it stop working. */
   passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+});
+
+/**
+ * Student onboarding (five questions). A row is created with the account, so accounts that predate
+ * onboarding have none and are never asked. One row per user: saving again replaces the answers.
+ * `answers` holds fixed option ids only (validated by @study/shared) — no free text.
+ */
+export const userOnboarding = pgTable('user_onboarding', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status').$type<'pending' | 'completed' | 'skipped'>().notNull().default('pending'),
+  answers: jsonb('answers').$type<OnboardingAnswers>(),
+  /** Set when the student completes or skips. */
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /**
