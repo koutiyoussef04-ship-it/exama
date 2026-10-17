@@ -273,6 +273,11 @@ const es: LocaleDict = {
     trialTitle: 'Prueba gratuita de {{days}} días',
     trialSubtitle: 'Las funciones de Student durante {{days}} días: práctica de tus temas débiles, plan de estudio adaptativo y tus clases grabadas. Sin pagar hoy.',
     trialIncluded: '{{allowance}} incluidos en tu prueba',
+    trialSubtitleWeb: 'Acceso completo al plan que elijas durante {{days}} días: todas sus funciones y límites, desde el primer minuto. Sin pagar hoy.',
+    trialIncludedWeb: 'Todo lo del plan que elijas está incluido en tu prueba',
+    trialAllPlansWeb: 'La prueba incluye todo lo del plan que elijas: Basic, Student o Pro.',
+    finePrintTrialWeb:
+      'Hoy no pagas nada. Gratis durante {{days}} días y después {{price}}{{per}}. Cancela cuando quieras antes del {{date}} y no se te cobrará. La prueba incluye todo lo del plan que elegiste.',
     courses_one: '{{count}} curso',
     courses_other: '{{count}} cursos',
     exams_one: '{{count}} examen',

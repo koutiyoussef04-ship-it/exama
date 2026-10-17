@@ -16,7 +16,9 @@ import type { Lang } from '../i18n/languages';
 
 // ---------- Pricing (keep the `key: { monthlyCents, yearlyCents }` shape — scripts/check-pricing.mjs parses it) ----------
 
-export const TRIAL_DAYS = 7;
+// The WEB (Stripe) trial: must equal STRIPE_TRIAL_DAYS in packages/shared/src/billing.ts (scripts/check-pricing.mjs checks it).
+// The App Store / Google Play trial (TRIAL_DAYS there) is a different offer and is never advertised on this site.
+export const TRIAL_DAYS = 3;
 
 export const PRICES = {
   basic: { monthlyCents: 999, yearlyCents: 7999 },

@@ -12,7 +12,7 @@
  *    all converge on Stripe's current state.
  */
 import { and, eq, isNull, lt, sql } from 'drizzle-orm';
-import { BILLING_PERIODS, PAID_TIERS, TRIAL_DAYS, type BillingPeriod, type BillingRedirect, type CheckoutConsent, type Language, type PaidTier, type PlanId } from '@study/shared';
+import { BILLING_PERIODS, PAID_TIERS, STRIPE_TRIAL_DAYS, type BillingPeriod, type BillingRedirect, type CheckoutConsent, type Language, type PaidTier, type PlanId } from '@study/shared';
 import { track } from '../analytics/index.js';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
@@ -113,7 +113,7 @@ export async function createStripeCheckout(ctx: StripeBilling, userId: string, b
       userId,
       planId,
       priceId: ctx.prices[planId],
-      trialDays: trialEligible ? TRIAL_DAYS : null,
+      trialDays: trialEligible ? STRIPE_TRIAL_DAYS : null,
       successUrl: ctx.successUrl,
       cancelUrl: ctx.cancelUrl,
       expiresAt: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_SECONDS,

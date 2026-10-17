@@ -276,6 +276,12 @@ const en = {
     trialTitle: '{{days}}-day free trial',
     trialSubtitle: 'Student features for {{days}} days: practice on your weak topics, an adaptive study plan and your lectures. No payment today.',
     trialIncluded: '{{allowance}} included in your trial',
+    // Web (Stripe) trial: the full plan the customer selects, not the store trial's reduced allowance.
+    trialSubtitleWeb: 'Full access to the plan you choose, for {{days}} days: every feature and allowance it includes, from the first minute. No payment today.',
+    trialIncludedWeb: 'Everything in your chosen plan is included in your trial',
+    trialAllPlansWeb: 'The trial includes everything in the plan you choose — Basic, Student or Pro.',
+    finePrintTrialWeb:
+      'No payment today. Free for {{days}} days, then {{price}}{{per}}. Cancel anytime before {{date}} and you won’t be charged. The trial includes everything in the plan you chose.',
     courses_one: '{{count}} course',
     courses_other: '{{count}} courses',
     exams_one: '{{count}} exam',

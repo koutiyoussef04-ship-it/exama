@@ -54,7 +54,7 @@ export const es: Copy = {
       { name: 'Audio', icon: 'audio', formats: 'MP3 · M4A · WAV', text: 'Grabaciones de clase. Exama transcribe la clase y después encuentra los temas que trata.' },
       { name: 'Vídeo', icon: 'video', formats: 'MP4 · MOV', text: 'Vídeos de clase. Exama usa lo que se dice: las diapositivas o los diagramas que se muestran pero no se explican en voz alta no se recogen.' },
     ],
-    fineTrial: 'Las clases en audio y vídeo están incluidas en Student y Pro, y en la prueba gratuita. Free incluye una clase por cuenta. Basic cubre PDF y PowerPoint.',
+    fineTrial: 'Las clases en audio y vídeo están incluidas en Student y Pro, también durante su prueba gratuita. Free incluye una clase por cuenta. Basic cubre PDF y PowerPoint.',
     fineFree: 'Las clases en audio y vídeo están incluidas en Student y Pro. Free incluye una clase por cuenta. Basic cubre PDF y PowerPoint.',
   },
   grounded: {
@@ -95,7 +95,7 @@ export const es: Copy = {
     loopAria: 'El ciclo de estudio',
     steps: ['Estudia', 'Ponte a prueba', 'Detecta puntos débiles', 'Practícalos', 'Mejora'],
     back: 'y vuelta a empezar',
-    fineTrial: 'El análisis de temas débiles y la práctica adaptativa forman parte de Student y Pro, y de la prueba gratuita. Con Free y Basic practicas todos los temas de tu curso.',
+    fineTrial: 'El análisis de temas débiles y la práctica adaptativa forman parte de Student y Pro, también durante su prueba gratuita. Con Free y Basic practicas todos los temas de tu curso.',
     fineFree: 'El análisis de temas débiles y la práctica adaptativa forman parte de Student y Pro. Con Free y Basic practicas todos los temas de tu curso.',
   },
   plan: {
@@ -115,7 +115,7 @@ export const es: Copy = {
       'Se vuelve a planificar cuando completas, omites o te saltas una tarea.',
       'Las tareas de hoy y tu progreso, en un solo lugar.',
     ],
-    fineTrial: 'El plan que se adapta a tus resultados forma parte de Student y Pro, y de la prueba gratuita. Free y Basic incluyen un planificador que reparte tus temas de forma uniforme.',
+    fineTrial: 'El plan que se adapta a tus resultados forma parte de Student y Pro, también durante su prueba gratuita. Free y Basic incluyen un planificador que reparte tus temas de forma uniforme.',
     fineFree: 'El plan que se adapta a tus resultados forma parte de Student y Pro. Free y Basic incluyen un planificador que reparte tus temas de forma uniforme.',
   },
   product: {
@@ -134,7 +134,7 @@ export const es: Copy = {
     eyebrow: 'Precios',
     titleTrial: (days) => `Empieza con ${days} días gratis`,
     titleFree: 'Empieza gratis y mejora tu plan cuando lo necesites',
-    leadTrial: (days) => `Prueba gratis las funciones de Student durante ${days} días, con un uso limitado. Sin pago hoy, y puedes cancelar en cualquier momento antes de que termine la prueba.`,
+    leadTrial: (days) => `Prueba gratis el plan que elijas durante ${days} días, con acceso completo a todo lo que incluye. Sin pago hoy, y puedes cancelar en cualquier momento antes de que termine la prueba.`,
     leadFree: 'Usa Exama con el plan Free, sin coste y sin tarjeta. Los planes de pago añaden más cursos, clases y práctica adaptativa.',
     recommended: 'Recomendado',
     perMonth: '/mes',
@@ -182,7 +182,7 @@ export const es: Copy = {
         a: [
           'PDF, presentaciones de PowerPoint (.pptx), grabaciones de audio (MP3, M4A, WAV) y vídeos (MP4, MOV). Puedes mezclarlos en un mismo curso: todo lo que añades alimenta los mismos exámenes, la misma práctica y el mismo plan de estudio.',
           trial
-            ? 'Las clases en audio y vídeo están incluidas en Student y Pro, y en la prueba gratuita. Free incluye una clase por cuenta; Basic cubre PDF y PowerPoint.'
+            ? 'Las clases en audio y vídeo están incluidas en Student y Pro, también durante su prueba gratuita. Free incluye una clase por cuenta; Basic cubre PDF y PowerPoint.'
             : 'Las clases en audio y vídeo están incluidas en Student y Pro. Free incluye una clase por cuenta; Basic cubre PDF y PowerPoint.',
         ],
       },
@@ -204,7 +204,7 @@ export const es: Copy = {
         a: [
           'Sí. Las clases en audio y vídeo se transcriben y analizan como cualquier otro material, y sus temas se suman a tu curso. Exama trabaja con lo que se dice: las diapositivas o los diagramas que se muestran en pantalla pero no se explican en voz alta no se recogen.',
           trial
-            ? 'Las clases forman parte de Student y Pro y de la prueba gratuita; Free incluye una clase por cuenta, de la que usa los primeros 45 minutos.'
+            ? 'Las clases forman parte de Student y Pro, también durante su prueba gratuita; Free incluye una clase por cuenta, de la que usa los primeros 45 minutos.'
             : 'Las clases forman parte de Student y Pro; Free incluye una clase por cuenta, de la que usa los primeros 45 minutos.',
         ],
       },
@@ -213,7 +213,7 @@ export const es: Copy = {
             {
               q: `¿Cómo funciona la prueba gratuita de ${days} días?`,
               a: [
-                `Cada cuenta puede empezar una prueba gratuita de ${days} días. Crea tu cuenta de Exama en app.exama.app, elige Basic, Student o Pro y empieza la prueba al contratar. Incluye las funciones de Student (clases, práctica de temas débiles y un plan de estudio adaptativo) con un uso limitado.`,
+                `Cada cuenta puede empezar una prueba gratuita de ${days} días. Crea tu cuenta de Exama en app.exama.app, elige Basic, Student o Pro y empieza la prueba al contratar. Durante la prueba tienes acceso completo al plan que elijas, con todo lo que incluye.`,
                 `Introduces un método de pago al contratar (lo gestiona Stripe), pero hoy no se cobra nada. Si no haces nada, el plan elegido empieza automáticamente al terminar los ${days} días. Cancela en cualquier momento antes desde Cuenta → Gestionar facturación y no se te cobrará.`,
                 '¿Ya tienes cuenta? Inicia sesión y elige tu plan: la prueba se ofrece si tu cuenta todavía no la ha usado. La prueba funciona en cualquier navegador. Una suscripción iniciada en una app móvil, donde esté disponible, la cobra el App Store o Google Play y desbloquea la misma cuenta.',
               ],

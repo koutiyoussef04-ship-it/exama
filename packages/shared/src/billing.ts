@@ -49,7 +49,18 @@ export type Plan = {
 /** Google Play offer id of the 7-day free trial (configured on each base plan in Play Console). */
 export const GOOGLE_TRIAL_OFFER_ID = 'free-trial';
 
+/**
+ * Free-trial length of the STORE subscriptions (App Store / Google Play) and of the development mock.
+ * It must match the offers configured in App Store Connect and Play Console, and Google's trial
+ * detection and the trial usage window are derived from it — do not change it for web checkout.
+ */
 export const TRIAL_DAYS = 7;
+
+/**
+ * Free-trial length of WEB subscriptions (Stripe Checkout `trial_period_days`). Stripe owns the trial;
+ * during it the customer has full access to the plan they selected (see getEntitlement).
+ */
+export const STRIPE_TRIAL_DAYS = 3;
 
 /** Google Play: one subscription product per tier, base plans `monthly` and `annual` inside it. */
 const plan = (tier: PaidTier, period: BillingPeriod, priceCents: number): Plan => ({
@@ -287,7 +298,7 @@ export const BILLING_PERIODS = ['monthly', 'yearly'] as const satisfies readonly
  * Version (date) of the Terms of Use and Privacy Policy in force. Recorded with every web checkout so it
  * is clear which terms the customer accepted. The app's legal texts use the same value (LEGAL_UPDATED).
  */
-export const LEGAL_VERSION = '2026-10-16';
+export const LEGAL_VERSION = '2026-10-17';
 
 /**
  * What the customer must expressly confirm before web checkout (two separate, unticked checkboxes):

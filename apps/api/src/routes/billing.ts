@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { mockSetStateSchema, PLANS, RECOMMENDED_PLAN_ID, TRIAL_DAYS, type BillingCatalog, type BillingRedirect, type Entitlement } from '@study/shared';
+import { mockSetStateSchema, PLANS, RECOMMENDED_PLAN_ID, STRIPE_TRIAL_DAYS, TRIAL_DAYS, type BillingCatalog, type BillingRedirect, type Entitlement } from '@study/shared';
 import { requireAuth, type AuthEnv } from '../auth/auth.js';
 import { appleVerifier, billingProvider, billingProviders, googlePlayApi, providerForPlatform, stripeBilling } from '../billing/index.js';
 import { handleAppleNotification } from '../billing/providers/apple.js';
@@ -38,7 +38,8 @@ export const billingRoutes = new Hono<AuthEnv>()
     const provider = isBillingPlatform(platform) ? providerForPlatform(platform) : billingProvider; // no platform: older iOS builds
     return c.json<BillingCatalog>({
       plans: [...PLANS],
-      trialDays: TRIAL_DAYS,
+      // The trial offered where this catalog is used: the web (Stripe) trial is shorter than the stores' trial.
+      trialDays: provider?.id === 'stripe' ? STRIPE_TRIAL_DAYS : TRIAL_DAYS,
       purchasesAvailable: !!provider,
       testMode: provider?.testMode ?? false,
       provider: provider?.id ?? null,

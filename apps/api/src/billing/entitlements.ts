@@ -131,7 +131,11 @@ export async function getEntitlement(userId: string, exec: Exec = db): Promise<E
     };
   }
 
-  if (isTrialPeriod(sub)) {
+  // Web (Stripe) trials are NOT the restricted `trial` tier: the customer has the full plan they selected
+  // — its tier, features and monthly limits — from the first moment of the trial (also after cancelling,
+  // until it ends), so they fall through to the paid-plan answer below, with status `trialing`.
+  // Store (Apple/Google) and mock trials keep the restricted trial tier.
+  if (isTrialPeriod(sub) && sub.provider !== 'stripe') {
     // Free trial (also after cancelling, until it ends): trial limits over the whole trial.
     const endsAt = (sub.trialEndsAt ?? sub.currentPeriodEndsAt)!.toISOString();
     return {

@@ -6,7 +6,7 @@
  * (pricing, FAQ, footer) in every language (en, es, fr, ar — Arabic right-to-left), zero JavaScript,
  * a small payload — and no fabricated social proof.
  *
- * Checks the build mode too: PUBLIC_WEB_CHECKOUT_AVAILABLE=true (web checkout with the 7-day trial
+ * Checks the build mode too: PUBLIC_WEB_CHECKOUT_AVAILABLE=true (web checkout with the 3-day trial
  * is live) must show the trial; anything else must not promise a trial or web payments anywhere.
  * Run it with the same environment as the build. Node stdlib only.
  */
@@ -39,7 +39,7 @@ const EXPECT = {
   en: {
     title: 'Exama — Your AI Exam Coach',
     ctaFree: 'Get started free',
-    ctaTrial: 'Start your 7-day free trial',
+    ctaTrial: 'Start your 3-day free trial',
     choose: (p) => `Choose ${p}`,
     startFree: 'Start free',
     login: 'Log in',
@@ -50,7 +50,7 @@ const EXPECT = {
   es: {
     title: 'Exama — Tu entrenador de exámenes con IA',
     ctaFree: 'Empieza gratis',
-    ctaTrial: 'Empieza tu prueba gratuita de 7 días',
+    ctaTrial: 'Empieza tu prueba gratuita de 3 días',
     choose: (p) => `Elegir ${p}`,
     startFree: 'Empezar gratis',
     login: 'Iniciar sesión',
@@ -61,7 +61,7 @@ const EXPECT = {
   fr: {
     title: 'Exama — Votre coach d’examen IA',
     ctaFree: 'Commencer gratuitement',
-    ctaTrial: 'Commencez votre essai gratuit de 7 jours',
+    ctaTrial: 'Commencez votre essai gratuit de 3 jours',
     choose: (p) => `Choisir ${p}`,
     startFree: 'Commencer gratuitement',
     login: 'Se connecter',
@@ -72,7 +72,7 @@ const EXPECT = {
   ar: {
     title: 'Exama — مدرّبك للاختبارات بالذكاء الاصطناعي',
     ctaFree: 'ابدأ مجانًا',
-    ctaTrial: 'ابدأ تجربتك المجانية لمدة 7 أيام',
+    ctaTrial: 'ابدأ تجربتك المجانية لمدة 3 أيام',
     choose: (p) => `اختر ${p}`,
     startFree: 'ابدأ مجانًا',
     login: 'تسجيل الدخول',
@@ -117,7 +117,7 @@ const homes = LANGS.map((lang) => ({ lang, route: homePath(lang), file: fileOf(h
 const supports = LANGS.map((lang) => ({ lang, route: pagePath(lang, 'support'), file: fileOf(pagePath(lang, 'support')) }));
 const pages = Object.fromEntries([...homes, ...supports, { route: '/404', file: '404.html' }, ...legalPages].map((p) => [p.route, p.file]));
 
-console.log(`Build mode: ${TRIAL ? 'web checkout live — the 7-day trial is advertised' : 'web checkout NOT live — no trial or web-payment claims'}\n`);
+console.log(`Build mode: ${TRIAL ? 'web checkout live — the 3-day trial is advertised' : 'web checkout NOT live — no trial or web-payment claims'}\n`);
 for (const [route, file] of Object.entries(pages)) check(existsSync(join(dist, file)), `page built: ${route}`);
 
 // ---------- Every home page (/, /es/, /fr/, /ar/) ----------
@@ -187,7 +187,7 @@ for (const { lang, route, file } of homes) {
 
   // Trial / web payments: only when checkout is live.
   if (TRIAL) {
-    check(e.trialWords.test(body), 'communicates the 7-day free trial');
+    check(e.trialWords.test(body), 'communicates the 3-day free trial');
     check(/Stripe/.test(body), 'says web payments go through Stripe');
   } else {
     const hit = body.match(e.trialWords);
@@ -232,7 +232,7 @@ const enQuestions = [
   'How does Exama create my exams?',
   'Are the questions based on my course material?',
   'Can Exama understand lectures?',
-  ...(TRIAL ? ['How does the 7-day free trial work?', 'What happens after the trial?'] : ['Can I use Exama for free?', 'How do I choose a paid plan?']),
+  ...(TRIAL ? ['How does the 3-day free trial work?', 'What happens after the trial?'] : ['Can I use Exama for free?', 'How do I choose a paid plan?']),
   'Is Exama only for PDF files?',
 ];
 for (const q of enQuestions) check(homeText.includes(q), `FAQ: ${q}`);

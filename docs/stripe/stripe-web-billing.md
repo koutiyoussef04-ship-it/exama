@@ -14,7 +14,7 @@ web app  ──POST /billing/stripe/checkout {plan, interval, consent, language}
    ▲                                                            │  (server picks the Price, the trial, the Customer)
    │ redirect to the Checkout URL                               ▼
    └────────────────────────── Stripe Checkout ◀───────────────┘
-                                   │  customer pays/enters a card; Stripe owns the 7-day trial
+                                   │  customer pays/enters a card; Stripe owns the 3-day trial
                                    ▼
 Stripe ──signed webhook──▶ POST /billing/stripe/webhook ──▶ re-fetch the subscription ──▶ subscriptions row
                                                                                               │
@@ -66,7 +66,7 @@ Policy: no voluntary refunds; the statutory EU/EEA/UK withdrawal right and manda
 
 | Stripe status | Exama access | Notes |
 |---|---|---|
-| `trialing` | trial (Student features, trial allowance) until the trial ends | status `trialing` |
+| `trialing` | the **full selected plan** (its tier, features and monthly limits) from the first moment until the trial ends — not the restricted store-trial tier | status `trialing`; a cancelled trial keeps the same access until it ends |
 | `active` | the plan's tier until the current period ends | status `active` |
 | `active` + cancel at period end | same, until the period ends, then none | status `cancelled` (will not renew) |
 | `past_due` | still entitled for **7 days** after the failed renewal (`PAST_DUE_GRACE_DAYS`), then none | like Apple's billing grace / Google's grace period; if the payment later succeeds, `invoice.paid` restores access |
@@ -92,7 +92,7 @@ Test mode and live mode are separate worlds in Stripe: repeat every step in live
    | Student | €14.99 | €119.99 |
    | Pro | €24.99 | €199.99 |
 
-   **Do not configure a trial on the Prices**: the 7-day trial is added by the server at Checkout
+   **Do not configure a trial on the Prices**: the 3-day trial (`STRIPE_TRIAL_DAYS`) is added by the server at Checkout
    (`trial_period_days`). Copy the six Price ids (`price_…`) into the environment variables below.
 2. **Webhook endpoint** (Developers → Webhooks → Add endpoint): URL
    `https://<your-api-host>/billing/stripe/webhook`, and subscribe to exactly these events:
@@ -139,7 +139,7 @@ checked by prefix, the six Price ids must differ, URLs must be https in producti
 
 1. Forward webhooks to your machine with the Stripe CLI: `stripe listen --forward-to localhost:4000/billing/stripe/webhook`
    (it prints a `whsec_…` for that session — use it as `STRIPE_WEBHOOK_SECRET` locally).
-2. Sign up in the web app → *Upgrade* → *Start 7-day free trial* → pay with test card `4242 4242 4242 4242`.
+2. Sign up in the web app → *Upgrade* → *Start 3-day free trial* → pay with test card `4242 4242 4242 4242`.
    The return page should show "Activating your plan…" and then "You're all set".
 3. Account → *Manage billing* opens the Portal (cancel, change plan, payment method).
 4. Use a **Test clock** (Billing → Test clocks) to jump past the trial and renewal dates; the card

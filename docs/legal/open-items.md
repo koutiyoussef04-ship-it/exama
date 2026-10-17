@@ -31,7 +31,7 @@ controller's identity and DPO/EU representative if required (§4.7), and the sub
 
 | Topic | What the code does | Terms today | Action |
 |---|---|---|---|
-| 7-day trial | Stripe: `trial_period_days: 7`, card collected, nothing charged during the trial, one trial per Exama account across sources (`trial_used`) | matches | — |
+| 3-day web trial | Stripe: `trial_period_days: 3` (`STRIPE_TRIAL_DAYS`), full access to the selected plan during the trial, card collected, nothing charged during the trial, one trial per Exama account across sources (`trial_used`) | matches | — |
 | Trial across stores | Apple/Google decide introductory-offer eligibility per Apple ID / Google account; an Exama account that used a web trial can still be given a store trial (the app just doesn't advertise it) | "once per account on the web; store trials follow Apple/Google rules" (2026-10-16) | — |
 | Web cancellation | done in Stripe's Customer Portal; whether it cancels **at period end** or **immediately** is a Stripe Dashboard setting, not code (`docs/stripe/stripe-web-billing.md` recommends period end) | "you keep access until the end of the period you have paid for" (2026-10-16) | **confirm the Portal is set to cancel at period end** — the Terms now promise it |
 | Account deletion with a web subscription | deletes the Stripe Customer → subscription cancelled **immediately**, no proration or refund of the unused period | Terms and the delete screen say the remaining period is not refunded and to withdraw first if still within 14 days (2026-10-16) | — |
@@ -129,7 +129,7 @@ rights. App Store / Google Play purchases follow Apple's and Google's terms (the
 
 ### What the Terms now say (all four languages, `apps/mobile/src/i18n/legal.ts`)
 
-- **Subscriptions and free trial:** 7-day web trial once per account; store trials follow the stores;
+- **Subscriptions and free trial:** 3-day web trial (full access to the selected plan) once per account; store trials follow the stores;
   what checkout asks you to confirm; the confirmation email; cancel in the Portal and keep access until
   the end of the paid period; deleting the account cancels a web subscription immediately.
 - **Right of withdrawal (consumers in the EU, the EEA and the UK):** 14 days from the conclusion of the

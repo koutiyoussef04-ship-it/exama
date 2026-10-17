@@ -54,7 +54,7 @@ export const en: Copy = {
       { name: 'Audio', icon: 'audio', formats: 'MP3 · M4A · WAV', text: 'Lecture recordings. Exama transcribes the lecture, then finds the topics it teaches.' },
       { name: 'Video', icon: 'video', formats: 'MP4 · MOV', text: 'Lecture videos. Exama uses what is said — slides or diagrams that are shown but never spoken are not captured.' },
     ],
-    fineTrial: 'Audio and video lectures are included with Student and Pro, and in the free trial. Free includes one lecture per account. Basic covers PDFs and PowerPoints.',
+    fineTrial: 'Audio and video lectures are included with Student and Pro, including during their free trial. Free includes one lecture per account. Basic covers PDFs and PowerPoints.',
     fineFree: 'Audio and video lectures are included with Student and Pro. Free includes one lecture per account. Basic covers PDFs and PowerPoints.',
   },
   grounded: {
@@ -95,7 +95,7 @@ export const en: Copy = {
     loopAria: 'The study loop',
     steps: ['Study', 'Test', 'Find weak areas', 'Practice them', 'Improve'],
     back: 'and around again',
-    fineTrial: 'Weak-topic analysis and adaptive practice are part of Student and Pro, and of the free trial. Free and Basic practice across all the topics of your course.',
+    fineTrial: 'Weak-topic analysis and adaptive practice are part of Student and Pro, including during their free trial. Free and Basic practice across all the topics of your course.',
     fineFree: 'Weak-topic analysis and adaptive practice are part of Student and Pro. Free and Basic practice across all the topics of your course.',
   },
   plan: {
@@ -115,7 +115,7 @@ export const en: Copy = {
       'It re-plans when you complete, skip or miss a task.',
       'Today’s tasks and your progress, in one place.',
     ],
-    fineTrial: 'The plan that adapts to your results is part of Student and Pro, and of the free trial. Free and Basic include a planner that spreads your topics evenly.',
+    fineTrial: 'The plan that adapts to your results is part of Student and Pro, including during their free trial. Free and Basic include a planner that spreads your topics evenly.',
     fineFree: 'The plan that adapts to your results is part of Student and Pro. Free and Basic include a planner that spreads your topics evenly.',
   },
   product: {
@@ -134,7 +134,7 @@ export const en: Copy = {
     eyebrow: 'Pricing',
     titleTrial: (days) => `Start with ${days} days free`,
     titleFree: 'Start free, upgrade when you need more',
-    leadTrial: (days) => `Try the Student features free for ${days} days, with a limited allowance. No payment today, and you can cancel any time before the trial ends.`,
+    leadTrial: (days) => `Try the plan you choose free for ${days} days, with full access to everything it includes. No payment today, and you can cancel any time before the trial ends.`,
     leadFree: 'Use Exama on the Free plan at no cost and without a card. Paid plans add more courses, lectures and adaptive practice.',
     recommended: 'Recommended',
     perMonth: '/month',
@@ -182,7 +182,7 @@ export const en: Copy = {
         a: [
           'PDFs, PowerPoint presentations (.pptx), audio recordings (MP3, M4A, WAV) and videos (MP4, MOV). You can mix them in one course — everything you add feeds the same exams, practice and study plan.',
           trial
-            ? 'Audio and video lectures are included with Student and Pro, and in the free trial. Free includes one lecture per account; Basic covers PDFs and PowerPoints.'
+            ? 'Audio and video lectures are included with Student and Pro, including during their free trial. Free includes one lecture per account; Basic covers PDFs and PowerPoints.'
             : 'Audio and video lectures are included with Student and Pro. Free includes one lecture per account; Basic covers PDFs and PowerPoints.',
         ],
       },
@@ -204,7 +204,7 @@ export const en: Copy = {
         a: [
           'Yes. Audio and video lectures are transcribed and analysed like any other material, and their topics join your course. Exama works from what is said: slides or diagrams that are shown on screen but not spoken are not captured.',
           trial
-            ? 'Lectures are part of Student and Pro and of the free trial; Free includes one lecture per account, using the first 45 minutes of it.'
+            ? 'Lectures are part of Student and Pro, including during their free trial; Free includes one lecture per account, using the first 45 minutes of it.'
             : 'Lectures are part of Student and Pro; Free includes one lecture per account, using the first 45 minutes of it.',
         ],
       },
@@ -213,7 +213,7 @@ export const en: Copy = {
             {
               q: `How does the ${days}-day free trial work?`,
               a: [
-                `Every account can start one ${days}-day free trial. Create your Exama account at app.exama.app, choose Basic, Student or Pro, and start the trial at checkout. It includes the Student features — lectures, weak-topic practice and an adaptive study plan — with a limited allowance.`,
+                `Every account can start one ${days}-day free trial. Create your Exama account at app.exama.app, choose Basic, Student or Pro, and start the trial at checkout. During the trial you have full access to the plan you pick, with everything it includes.`,
                 `You enter a payment method at checkout (handled by Stripe), but nothing is charged today. If you do nothing, your chosen plan starts automatically when the ${days} days end. Cancel any time before then from Account → Manage billing and you will not be charged.`,
                 'Already have an account? Log in and choose your plan — the trial is offered if your account has not used it yet. The trial works in any browser. A subscription started in a mobile app, where available, is billed by the App Store or Google Play and unlocks the same account.',
               ],

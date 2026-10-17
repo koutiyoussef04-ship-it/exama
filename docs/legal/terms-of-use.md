@@ -2,7 +2,7 @@
 
 # Terms of Use (English)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Agreement
 
@@ -26,7 +26,7 @@ Do not misuse Exama: no unlawful content, no attempts to access other accounts, 
 
 ## Subscriptions and free trial
 
-Basic, Student and Pro are auto-renewing subscriptions (monthly or yearly) sold through the App Store (billed to your Apple ID), Google Play (billed to your Google account) and, on the web, Stripe (billed to the payment method you enter at checkout). On the web, a 7-day free trial may be offered once per account; in the App Store and Google Play, the store decides whether you can get its free trial. The trial includes a limited allowance (shown before you start). On the web, before checkout you confirm that the subscription renews automatically and that you ask us to start it immediately; a payment method is required to start the trial, but you are not charged until the trial ends. After you subscribe on the web, we confirm your subscription by email. The subscription renews automatically at the price shown unless you cancel it: for the App Store and Google Play, at least 24 hours before the end of the trial or current period; on the web, before the end of the trial or current period. When you cancel, the subscription stops renewing and you keep access until the end of the trial or of the period already paid. Manage or cancel an App Store or Google Play subscription in the account settings of that store, and a web subscription in Exama under Account → Manage billing. A subscription works on every device where you sign in to Exama, including the web version. Deleting the app does not cancel a subscription. Deleting your account immediately cancels a web subscription, but not an App Store or Google Play subscription.
+Basic, Student and Pro are auto-renewing subscriptions (monthly or yearly) sold through the App Store (billed to your Apple ID), Google Play (billed to your Google account) and, on the web, Stripe (billed to the payment method you enter at checkout). On the web, a 3-day free trial may be offered once per account, with full access to the plan you choose; in the App Store and Google Play, the store decides whether you can get its free trial, which has its own length and a limited allowance (shown before you start). On the web, before checkout you confirm that the subscription renews automatically and that you ask us to start it immediately; a payment method is required to start the trial, but you are not charged until the trial ends. After you subscribe on the web, we confirm your subscription by email. The subscription renews automatically at the price shown unless you cancel it: for the App Store and Google Play, at least 24 hours before the end of the trial or current period; on the web, before the end of the trial or current period. When you cancel, the subscription stops renewing and you keep access until the end of the trial or of the period already paid. Manage or cancel an App Store or Google Play subscription in the account settings of that store, and a web subscription in Exama under Account → Manage billing. A subscription works on every device where you sign in to Exama, including the web version. Deleting the app does not cancel a subscription. Deleting your account immediately cancels a web subscription, but not an App Store or Google Play subscription.
 
 ## Right of withdrawal (consumers in the EU, the EEA and the UK)
 
@@ -74,7 +74,7 @@ Questions about these terms: {{email}}.
 
 # Condiciones de uso (Español)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Aceptación
 
@@ -98,7 +98,7 @@ No hagas un uso indebido de Exama: nada de contenido ilícito, intentos de acced
 
 ## Suscripciones y prueba gratuita
 
-Basic, Student y Pro son suscripciones de renovación automática (mensuales o anuales) vendidas a través del App Store (cobradas a tu Apple ID), de Google Play (cobradas a tu cuenta de Google) y, en la web, de Stripe (cobradas al método de pago que introduces al pagar). En la web puede ofrecerse una prueba gratuita de 7 días una sola vez por cuenta; en el App Store y Google Play, la tienda decide si puedes disfrutar de su prueba gratuita. La prueba incluye un límite reducido (se muestra antes de empezar). En la web, antes de pagar confirmas que la suscripción se renueva automáticamente y que nos pides que empiece de inmediato; se necesita un método de pago para empezar la prueba, pero no se te cobra nada hasta que termina. Cuando te suscribes en la web, te confirmamos la suscripción por correo electrónico. La suscripción se renueva automáticamente al precio indicado salvo que la canceles: en el App Store y Google Play, al menos 24 horas antes del final de la prueba o del periodo actual; en la web, antes del final de la prueba o del periodo actual. Si cancelas, la suscripción deja de renovarse y conservas el acceso hasta el final de la prueba o del periodo ya pagado. Gestiona o cancela una suscripción del App Store o de Google Play en los ajustes de la cuenta de esa tienda, y una suscripción web en Exama, en Cuenta → Gestionar facturación. La suscripción funciona en todos los dispositivos donde inicies sesión en Exama, incluida la versión web. Borrar la app no cancela la suscripción. Eliminar tu cuenta cancela de inmediato una suscripción web, pero no una suscripción del App Store o de Google Play.
+Basic, Student y Pro son suscripciones de renovación automática (mensuales o anuales) vendidas a través del App Store (cobradas a tu Apple ID), de Google Play (cobradas a tu cuenta de Google) y, en la web, de Stripe (cobradas al método de pago que introduces al pagar). En la web puede ofrecerse una prueba gratuita de 3 días una sola vez por cuenta, con acceso completo al plan que elijas; en el App Store y Google Play, la tienda decide si puedes disfrutar de su prueba gratuita, que tiene su propia duración y un límite reducido (se muestra antes de empezar). En la web, antes de pagar confirmas que la suscripción se renueva automáticamente y que nos pides que empiece de inmediato; se necesita un método de pago para empezar la prueba, pero no se te cobra nada hasta que termina. Cuando te suscribes en la web, te confirmamos la suscripción por correo electrónico. La suscripción se renueva automáticamente al precio indicado salvo que la canceles: en el App Store y Google Play, al menos 24 horas antes del final de la prueba o del periodo actual; en la web, antes del final de la prueba o del periodo actual. Si cancelas, la suscripción deja de renovarse y conservas el acceso hasta el final de la prueba o del periodo ya pagado. Gestiona o cancela una suscripción del App Store o de Google Play en los ajustes de la cuenta de esa tienda, y una suscripción web en Exama, en Cuenta → Gestionar facturación. La suscripción funciona en todos los dispositivos donde inicies sesión en Exama, incluida la versión web. Borrar la app no cancela la suscripción. Eliminar tu cuenta cancela de inmediato una suscripción web, pero no una suscripción del App Store o de Google Play.
 
 ## Derecho de desistimiento (consumidores de la UE, el EEE y el Reino Unido)
 
@@ -146,7 +146,7 @@ Preguntas sobre estas condiciones: {{email}}.
 
 # Conditions d’utilisation (Français)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Acceptation
 
@@ -170,7 +170,7 @@ N’utilisez pas Exama de manière abusive : aucun contenu illicite, aucune tent
 
 ## Abonnements et essai gratuit
 
-Basic, Student et Pro sont des abonnements à renouvellement automatique (mensuels ou annuels) vendus via l’App Store (facturés sur votre identifiant Apple), Google Play (facturés sur votre compte Google) et, sur le web, Stripe (facturés sur le moyen de paiement saisi lors du paiement). Sur le web, un essai gratuit de 7 jours peut être proposé une seule fois par compte ; sur l’App Store et Google Play, c’est la boutique qui décide si vous pouvez bénéficier de son essai gratuit. L’essai comprend une allocation limitée (indiquée avant de commencer). Sur le web, avant le paiement, vous confirmez que l’abonnement se renouvelle automatiquement et que vous nous demandez de le démarrer immédiatement ; un moyen de paiement est nécessaire pour démarrer l’essai, mais rien n’est débité avant la fin de l’essai. Après votre abonnement sur le web, nous vous le confirmons par e-mail. L’abonnement se renouvelle automatiquement au prix indiqué, sauf résiliation : sur l’App Store et Google Play, au moins 24 heures avant la fin de l’essai ou de la période en cours ; sur le web, avant la fin de l’essai ou de la période en cours. En cas de résiliation, l’abonnement n’est plus renouvelé et vous conservez l’accès jusqu’à la fin de l’essai ou de la période déjà payée. Gérez ou résiliez un abonnement App Store ou Google Play dans les réglages du compte de cette boutique, et un abonnement web dans Exama, sous Compte → Gérer la facturation. L’abonnement fonctionne sur tous les appareils où vous vous connectez à Exama, y compris la version web. Supprimer l’app ne résilie pas l’abonnement. Supprimer votre compte résilie immédiatement un abonnement web, mais pas un abonnement App Store ou Google Play.
+Basic, Student et Pro sont des abonnements à renouvellement automatique (mensuels ou annuels) vendus via l’App Store (facturés sur votre identifiant Apple), Google Play (facturés sur votre compte Google) et, sur le web, Stripe (facturés sur le moyen de paiement saisi lors du paiement). Sur le web, un essai gratuit de 3 jours peut être proposé une seule fois par compte, avec un accès complet à l’offre que vous choisissez ; sur l’App Store et Google Play, c’est la boutique qui décide si vous pouvez bénéficier de son essai gratuit, qui a sa propre durée et une allocation limitée (indiquée avant de commencer). Sur le web, avant le paiement, vous confirmez que l’abonnement se renouvelle automatiquement et que vous nous demandez de le démarrer immédiatement ; un moyen de paiement est nécessaire pour démarrer l’essai, mais rien n’est débité avant la fin de l’essai. Après votre abonnement sur le web, nous vous le confirmons par e-mail. L’abonnement se renouvelle automatiquement au prix indiqué, sauf résiliation : sur l’App Store et Google Play, au moins 24 heures avant la fin de l’essai ou de la période en cours ; sur le web, avant la fin de l’essai ou de la période en cours. En cas de résiliation, l’abonnement n’est plus renouvelé et vous conservez l’accès jusqu’à la fin de l’essai ou de la période déjà payée. Gérez ou résiliez un abonnement App Store ou Google Play dans les réglages du compte de cette boutique, et un abonnement web dans Exama, sous Compte → Gérer la facturation. L’abonnement fonctionne sur tous les appareils où vous vous connectez à Exama, y compris la version web. Supprimer l’app ne résilie pas l’abonnement. Supprimer votre compte résilie immédiatement un abonnement web, mais pas un abonnement App Store ou Google Play.
 
 ## Droit de rétractation (consommateurs de l’UE, de l’EEE et du Royaume-Uni)
 
@@ -218,7 +218,7 @@ Questions sur ces conditions : {{email}}.
 
 # شروط الاستخدام (العربية)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## الموافقة
 
@@ -242,7 +242,7 @@ _Last updated: 2026-10-16_
 
 ## الاشتراكات والفترة التجريبية
 
-Basic وStudent وPro اشتراكات تتجدّد تلقائيًا (شهريًا أو سنويًا) وتُباع عبر App Store (ويُحاسَب عليها معرّف Apple الخاص بك) وGoogle Play (ويُحاسَب عليها حسابك في Google)، وعبر الويب من خلال Stripe (وتُدفع بوسيلة الدفع التي تُدخلها عند الدفع). على الويب، قد تُتاح فترة تجريبية مجانية لمدة 7 أيام مرة واحدة فقط لكل حساب؛ أما في App Store وGoogle Play فيحدّد المتجر ما إذا كان بإمكانك الحصول على فترته التجريبية المجانية. تتضمن الفترة التجريبية حصة محدودة (تُعرض قبل البدء). على الويب، تؤكّد قبل الدفع أن الاشتراك يتجدّد تلقائيًا وأنك تطلب منا بدءه فورًا؛ ويلزم إدخال وسيلة دفع لبدء الفترة التجريبية، لكن لا يُخصم أي مبلغ قبل انتهائها. بعد اشتراكك عبر الويب، نؤكّد لك الاشتراك عبر البريد الإلكتروني. يتجدّد الاشتراك تلقائيًا بالسعر المعروض ما لم تُلغِه: في App Store وGoogle Play قبل 24 ساعة على الأقل من نهاية الفترة التجريبية أو الفترة الحالية، وعلى الويب قبل نهاية الفترة التجريبية أو الفترة الحالية. عند الإلغاء يتوقف تجديد الاشتراك وتحتفظ بالوصول حتى نهاية الفترة التجريبية أو الفترة المدفوعة مسبقًا. يمكنك إدارة اشتراك App Store أو Google Play أو إلغاؤه من إعدادات حسابك في ذلك المتجر، وإدارة الاشتراك عبر الويب أو إلغاؤه في Exama من الحساب ← إدارة الفوترة. يعمل الاشتراك على كل جهاز تسجّل فيه الدخول إلى Exama، بما في ذلك نسخة الويب. حذف التطبيق لا يلغي الاشتراك. أما حذف حسابك فيلغي الاشتراك عبر الويب فورًا، لكنه لا يلغي اشتراك App Store أو Google Play.
+Basic وStudent وPro اشتراكات تتجدّد تلقائيًا (شهريًا أو سنويًا) وتُباع عبر App Store (ويُحاسَب عليها معرّف Apple الخاص بك) وGoogle Play (ويُحاسَب عليها حسابك في Google)، وعبر الويب من خلال Stripe (وتُدفع بوسيلة الدفع التي تُدخلها عند الدفع). على الويب، قد تُتاح فترة تجريبية مجانية لمدة 3 أيام مرة واحدة فقط لكل حساب، مع وصول كامل إلى الخطة التي تختارها؛ أما في App Store وGoogle Play فيحدّد المتجر ما إذا كان بإمكانك الحصول على فترته التجريبية المجانية، ولها مدتها الخاصة وحصة محدودة (تُعرض قبل البدء). على الويب، تؤكّد قبل الدفع أن الاشتراك يتجدّد تلقائيًا وأنك تطلب منا بدءه فورًا؛ ويلزم إدخال وسيلة دفع لبدء الفترة التجريبية، لكن لا يُخصم أي مبلغ قبل انتهائها. بعد اشتراكك عبر الويب، نؤكّد لك الاشتراك عبر البريد الإلكتروني. يتجدّد الاشتراك تلقائيًا بالسعر المعروض ما لم تُلغِه: في App Store وGoogle Play قبل 24 ساعة على الأقل من نهاية الفترة التجريبية أو الفترة الحالية، وعلى الويب قبل نهاية الفترة التجريبية أو الفترة الحالية. عند الإلغاء يتوقف تجديد الاشتراك وتحتفظ بالوصول حتى نهاية الفترة التجريبية أو الفترة المدفوعة مسبقًا. يمكنك إدارة اشتراك App Store أو Google Play أو إلغاؤه من إعدادات حسابك في ذلك المتجر، وإدارة الاشتراك عبر الويب أو إلغاؤه في Exama من الحساب ← إدارة الفوترة. يعمل الاشتراك على كل جهاز تسجّل فيه الدخول إلى Exama، بما في ذلك نسخة الويب. حذف التطبيق لا يلغي الاشتراك. أما حذف حسابك فيلغي الاشتراك عبر الويب فورًا، لكنه لا يلغي اشتراك App Store أو Google Play.
 
 ## حق العدول (للمستهلكين في الاتحاد الأوروبي والمنطقة الاقتصادية الأوروبية والمملكة المتحدة)
 

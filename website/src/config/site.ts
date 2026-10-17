@@ -10,7 +10,7 @@ import type { Lang } from '../i18n/languages';
 const APP_URL = 'https://app.exama.app';
 
 /**
- * True only when the production web app can really sell plans with the 7-day free trial (Stripe web
+ * True only when the production web app can really sell plans with the 3-day free trial (Stripe web
  * checkout live: STRIPE_ENABLED=true on the API). Build-time setting of THIS site:
  * PUBLIC_WEB_CHECKOUT_AVAILABLE=true. While false (the default), no page promises a trial or web
  * payments: buttons say "Get started free" and lead to sign-up / the plans screen of the app.

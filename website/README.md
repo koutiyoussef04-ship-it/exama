@@ -6,7 +6,7 @@ visitors into students of the Exama app. Every button goes to the app's **`/star
 (with a link to sign in) or sign-in; after signing up or in — or straight away when already signed in — it
 continues where the button said (the plans screen, with the chosen plan pre-selected, for the pricing buttons).
 
-Whether the site advertises the **7-day free trial** is a build setting, `PUBLIC_WEB_CHECKOUT_AVAILABLE`
+Whether the site advertises the **3-day free trial** is a build setting, `PUBLIC_WEB_CHECKOUT_AVAILABLE`
 (see "Web checkout and the trial" below). It is off by default, because the trial needs live web checkout.
 
 This is a **separate, static site** next to the Exama app. It does not import, share or modify anything in
@@ -81,8 +81,8 @@ same language unless the student already chose one there.
 ### Web checkout and the trial
 
 `PUBLIC_WEB_CHECKOUT_AVAILABLE=true` (a build-time variable of this site) says the production web app can
-really sell plans with the 7-day free trial (Stripe live, `STRIPE_ENABLED=true` on the API). Only then do the
-buttons say "Start your 7-day free trial" and the hero, pricing and FAQ describe the trial and card payment.
+really sell plans with the 3-day free trial (Stripe live, `STRIPE_ENABLED=true` on the API). Only then do the
+buttons say "Start your 3-day free trial" and the hero, pricing and FAQ describe the trial and card payment.
 Unset (the default) the site makes no trial or web-payment claim: the main button is "Get started free"
 (sign-up), paid plans say "Choose Basic/Student/Pro" and lead to sign-up/sign-in and then the app's plans
 screen, and the FAQ explains the Free plan and how to choose a plan in the app. Either way the trial is only

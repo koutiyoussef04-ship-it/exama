@@ -94,7 +94,7 @@ export function isTrialPeriod(row: SubscriptionRow): boolean {
   return row.status === 'trialing' || (!!row.trialEndsAt && !!row.currentPeriodEndsAt && +row.trialEndsAt === +row.currentPeriodEndsAt);
 }
 
-/** When the trial started (trial usage is counted from here). */
+/** When the trial started (store/mock trial usage is counted from here; web trials use the plan's monthly usage). */
 export function trialStartedAt(row: SubscriptionRow): Date {
   return row.trialEndsAt ? new Date(+row.trialEndsAt - TRIAL_DAYS * 86_400_000) : row.createdAt;
 }

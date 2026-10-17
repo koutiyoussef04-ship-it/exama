@@ -18,7 +18,7 @@ const EXPECTED = {
   student: { monthlyCents: 1499, yearlyCents: 11999 },
   pro: { monthlyCents: 2499, yearlyCents: 19999 },
 };
-const EXPECTED_TRIAL_DAYS = 7;
+const EXPECTED_TRIAL_DAYS = 3; // the web (Stripe) trial: STRIPE_TRIAL_DAYS in the app
 
 let failures = 0;
 const fail = (msg) => {
@@ -52,9 +52,9 @@ if (!existsSync(billingPath)) {
   console.log('• packages/shared/src/billing.ts not found (site built outside the monorepo) — app cross-check skipped.');
 } else {
   const billing = readFileSync(billingPath, 'utf8');
-  const appTrial = billing.match(/export const TRIAL_DAYS = (\d+);/);
-  if (!appTrial || Number(appTrial[1]) !== site.trialDays) fail(`app billing.ts trial is ${appTrial?.[1] ?? '?'} days, site says ${site.trialDays}`);
-  else ok('app billing.ts: trial length matches');
+  const appTrial = billing.match(/export const STRIPE_TRIAL_DAYS = (\d+);/);
+  if (!appTrial || Number(appTrial[1]) !== site.trialDays) fail(`app billing.ts STRIPE_TRIAL_DAYS is ${appTrial?.[1] ?? '?'} days, site says ${site.trialDays}`);
+  else ok('app billing.ts: web trial length (STRIPE_TRIAL_DAYS) matches');
 
   for (const tier of Object.keys(EXPECTED)) {
     for (const [period, key] of [['monthly', 'monthlyCents'], ['yearly', 'yearlyCents']]) {

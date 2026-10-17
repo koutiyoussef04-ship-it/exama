@@ -273,6 +273,11 @@ const fr: LocaleDict = {
     trialTitle: 'Essai gratuit de {{days}} jours',
     trialSubtitle: 'Les fonctionnalités Student pendant {{days}} jours : entraînement sur vos points faibles, plan de révision adaptatif et enregistrements de cours. Aucun paiement aujourd’hui.',
     trialIncluded: '{{allowance}} inclus dans votre essai',
+    trialSubtitleWeb: 'Accès complet à l’offre que vous choisissez pendant {{days}} jours : toutes ses fonctionnalités et allocations, dès la première minute. Aucun paiement aujourd’hui.',
+    trialIncludedWeb: 'Tout ce que comprend l’offre choisie est inclus dans votre essai',
+    trialAllPlansWeb: 'L’essai inclut tout ce que comprend l’offre que vous choisissez : Basic, Student ou Pro.',
+    finePrintTrialWeb:
+      'Aucun paiement aujourd’hui. Gratuit pendant {{days}} jours, puis {{price}}{{per}}. Résiliez avant le {{date}} et vous ne serez pas débité. L’essai comprend tout ce que comprend l’offre choisie.',
     courses_one: '{{count}} cours',
     courses_other: '{{count}} cours',
     exams_one: '{{count}} examen',

@@ -1,6 +1,6 @@
 /**
  * The shape of the website's copy in one language (src/i18n/en.ts, es.ts, fr.ts, ar.ts).
- * Strings that depend on whether the web checkout (with its 7-day trial) is live come in pairs:
+ * Strings that depend on whether the web checkout (with its 3-day trial) is live come in pairs:
  * `…Trial` is only used when it is (site.webCheckoutAvailable), `…Free` otherwise.
  */
 import type { PlanId } from '../data/content';

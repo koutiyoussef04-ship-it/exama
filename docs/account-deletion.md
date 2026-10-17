@@ -7,7 +7,7 @@ account and everything it owns (`apps/api/src/services/account.ts`). Since 2026-
 ## Why
 
 Without it, a person can delete their account and sign up again at once with the same address — a new
-7-day trial (the `trial_used` flag is deleted with the account) and fresh monthly allowances.
+free trial (the `trial_used` flag is deleted with the account) and fresh monthly allowances.
 
 ## What is kept, and for how long
 

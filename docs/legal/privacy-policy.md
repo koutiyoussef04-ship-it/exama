@@ -2,7 +2,7 @@
 
 # Privacy Policy (English)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Who we are
 
@@ -58,7 +58,7 @@ We will update this policy when our practices change and show the date of the la
 
 # Política de privacidad (Español)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Quiénes somos
 
@@ -114,7 +114,7 @@ Actualizaremos esta política cuando cambien nuestras prácticas e indicaremos a
 
 # Politique de confidentialité (Français)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## Qui sommes-nous
 
@@ -170,7 +170,7 @@ Nous mettrons à jour cette politique lorsque nos pratiques évolueront et indiq
 
 # سياسة الخصوصية (العربية)
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 ## من نحن
 

@@ -47,7 +47,8 @@ const { app } = await import('../src/app.js');
 const { sql } = await import('../src/db/client.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');
 const { stripeBilling } = await import('../src/billing/index.js');
-const { getEntitlement } = await import('../src/billing/entitlements.js');
+const { getEntitlement, lectureAllowanceFor, assertCanUploadMaterial, reserveExamGeneration, releaseReservation } = await import('../src/billing/entitlements.js');
+const { LIMITS } = await import('../src/billing/limits.js');
 const { TIER_FEATURES } = await import('../src/billing/features.js');
 const { HttpError } = await import('../src/lib/errors.js');
 const { applySubscriptionUpdate, getSubscription } = await import('../src/billing/subscriptions.js');
@@ -57,7 +58,7 @@ const { emailHoldHash } = await import('../src/services/email-hold.js');
 const service = await import('../src/billing/stripe-service.js');
 const { CHECKOUT_NOTICE } = await import('../src/billing/checkout-terms.js');
 const { outbox } = await import('../src/lib/mailer.js');
-const { LEGAL_VERSION } = await import('@study/shared');
+const { LEGAL_VERSION, STRIPE_TRIAL_DAYS, TRIAL_DAYS } = await import('@study/shared');
 type Sub = import('../src/billing/providers/stripe-api.js').StripeSubscriptionLike;
 after(async () => {
   await flushAnalytics();
@@ -144,7 +145,7 @@ function makeSub(over: Partial<Sub> & { plan?: PlanId; start?: number; end?: num
     ...rest,
   };
 }
-const trialingSub = (over: Parameters<typeof makeSub>[0] = {}) => makeSub({ status: 'trialing', start: NOW - DAY, end: NOW + 6 * DAY, trialEnd: sec(NOW + 6 * DAY), ...over });
+const trialingSub = (over: Parameters<typeof makeSub>[0] = {}) => makeSub({ status: 'trialing', start: NOW - DAY, end: NOW + 2 * DAY, trialEnd: sec(NOW + 2 * DAY), ...over });
 
 // ---------------------------------------------------------------- helpers
 
@@ -218,7 +219,7 @@ const change = async (sub: Sub, type = 'customer.subscription.updated') => {
 
 // ================================================================ Checkout
 
-test('checkout: every plan and interval maps to ITS Price id, with the 7-day trial and a payment method', async () => {
+test('checkout: every plan and interval maps to ITS Price id, with the 3-day trial and a payment method', async () => {
   for (const tier of ['basic', 'student', 'pro'] as const) {
     for (const interval of ['monthly', 'yearly'] as const) {
       const u = await newUser();
@@ -231,7 +232,7 @@ test('checkout: every plan and interval maps to ITS Price id, with the 7-day tri
       const { input } = world.checkouts.at(-1)!;
       assert.equal(input.priceId, PRICES[`${tier}_${interval}` as PlanId], `${tier} ${interval} uses its own Price`);
       assert.equal(input.planId, `${tier}_${interval}`);
-      assert.equal(input.trialDays, 7, 'Stripe owns a 7-day trial (no app-side timer)');
+      assert.equal(input.trialDays, 3, 'Stripe owns a 3-day trial (no app-side timer)');
       assert.equal(input.userId, u.id);
       assert.equal(input.customerId, customerOf(u));
       assert.equal(input.successUrl, SUCCESS_URL);
@@ -248,7 +249,7 @@ test('checkout: the browser can only name a plan and an interval — never a pri
   const { input } = world.checkouts.at(-1)!;
   assert.equal(input.priceId, PRICES.basic_monthly);
   assert.notEqual(input.customerId, 'cus_EVIL');
-  assert.equal(input.trialDays, 7);
+  assert.equal(input.trialDays, 3, 'the browser cannot choose the trial length either');
   assert.equal((await getEntitlement(u.id)).tier, 'free', 'requesting checkout grants nothing');
   assert.equal(await getSubscription(u.id), null);
 });
@@ -351,7 +352,7 @@ test('checkout: Stripe is asked too, so a webhook that has not arrived yet canno
   const u = await newUser();
   assert.equal((await checkout(u, { plan: 'student', interval: 'monthly' })).status, 200);
   // The customer completed Checkout a moment ago; our database has not seen the webhook yet.
-  const sub = makeSub({ customerId: customerOf(u), status: 'trialing', trialEnd: sec(NOW + 7 * DAY) });
+  const sub = makeSub({ customerId: customerOf(u), status: 'trialing', trialEnd: sec(NOW + 3 * DAY) });
   world.subs.set(sub.id, sub);
   assert.equal(await getSubscription(u.id), null);
   const before = world.checkouts.length;
@@ -562,7 +563,92 @@ test('webhook: events this integration does not use are acknowledged and ignored
 
 // ================================================================ Webhook → entitlements
 
-test('checkout.session.completed with a trial: trialing, selected plan, full trial access — granted by the webhook only', async () => {
+test('trial length: the web trial is exactly 3 days; the stores’ trial stays 7 days', () => {
+  assert.equal(STRIPE_TRIAL_DAYS, 3);
+  assert.equal(TRIAL_DAYS, 7, 'Apple/Google offers and the store-trial limits are tied to this constant');
+});
+
+test('trial entitlements: all six plans get their OWN full tier, features and limits at once — before any payment', async () => {
+  for (const tier of ['basic', 'student', 'pro'] as const) {
+    for (const interval of ['monthly', 'yearly'] as const) {
+      const plan = `${tier}_${interval}` as PlanId;
+      const u = await newUser();
+      await subscribe(u, trialingSub({ plan })); // only checkout.session.completed: no invoice.paid, no payment yet
+      const e = await getEntitlement(u.id);
+      assert.deepEqual([e.status, e.tier, e.accessPlan, e.planId, e.isPremium, e.provider], ['trialing', tier, plan, plan, true, 'stripe'], plan);
+      assert.deepEqual(e.features, TIER_FEATURES[tier], `${plan}: every feature of the plan`);
+      assert.deepEqual(e.limits, LIMITS[tier], `${plan}: the plan’s own limits`);
+      assert.equal(e.lectureAllowance, lectureAllowanceFor(tier, TIER_FEATURES[tier], LIMITS[tier]), plan);
+      assert.deepEqual([e.usagePeriod, e.trialEligible, e.willRenew], ['month', false, true], plan);
+      assert.equal(+new Date(e.trialEndsAt!), sec(NOW + 2 * DAY) * 1000, `${plan}: reports when the trial ends`);
+    }
+  }
+  // The plan differences are preserved, trial or not.
+  assert.equal(TIER_FEATURES.basic.lectures, false);
+  assert.equal(TIER_FEATURES.student.lectures, true);
+  assert.ok(LIMITS.pro.maxQuestionsPerExam > LIMITS.student.maxQuestionsPerExam && LIMITS.student.maxQuestionsPerExam > LIMITS.trial.maxQuestionsPerExam);
+});
+
+test('trial entitlements are ENFORCED by the server: a Pro trial can do what Pro can, a Student or Basic trial only what theirs can', async () => {
+  const pro = await newUser();
+  await subscribe(pro, trialingSub({ plan: 'pro_monthly' }));
+  const student = await newUser();
+  await subscribe(student, trialingSub({ plan: 'student_monthly' }));
+  const basic = await newUser();
+  await subscribe(basic, trialingSub({ plan: 'basic_monthly' }));
+
+  // Exam length: Pro 20, Student 15, Basic 12 — all above the restricted store trial's 8.
+  const longest = async (u: U, n: number) => {
+    const r = await reserveExamGeneration(u.id, 'standard', n);
+    await releaseReservation(r);
+  };
+  await longest(pro, LIMITS.pro.maxQuestionsPerExam);
+  await longest(student, LIMITS.student.maxQuestionsPerExam);
+  await longest(basic, LIMITS.basic.maxQuestionsPerExam);
+  const tooLong = (e: unknown) => (e as { status?: number; body?: { feature?: string } }).status === 402 && (e as { body: { feature: string } }).body.feature === 'exam_length';
+  await assert.rejects(reserveExamGeneration(student.id, 'standard', LIMITS.student.maxQuestionsPerExam + 1), tooLong);
+  await assert.rejects(reserveExamGeneration(basic.id, 'standard', LIMITS.basic.maxQuestionsPerExam + 1), tooLong);
+
+  // Lectures: Student and Pro from the first moment of the trial; Basic does not include them.
+  await assertCanUploadMaterial(pro.id, 'media');
+  await assertCanUploadMaterial(student.id, 'media');
+  await assert.rejects(assertCanUploadMaterial(basic.id, 'media'), (e: unknown) => (e as { status?: number }).status === 402);
+});
+
+test('cancelling during the trial: the full plan stays until the trial ends, nothing is charged, then access ends', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'pro_monthly' }));
+  Object.assign(sub, { cancelAtPeriodEnd: true });
+  assert.equal((await change(sub)).handled, true);
+  let e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium, e.willRenew], ['cancelled', 'pro', true, false], 'cancelled, but the customer keeps what they were given until the trial ends');
+  assert.deepEqual(e.features, TIER_FEATURES.pro);
+  assert.equal(+new Date(e.currentPeriodEndsAt!), sec(NOW + 2 * DAY) * 1000);
+
+  // The trial runs out without converting: Stripe ends the subscription.
+  Object.assign(sub, { status: 'canceled', endedAt: sec(NOW - 1000), canceledAt: sec(NOW - 1000), trialEnd: sec(NOW - 1000) });
+  await change(sub, 'customer.subscription.deleted');
+  e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium, e.trialEnded, e.trialEligible], ['expired', 'free', false, true, false], 'back to Free, and the trial is not offered again');
+});
+
+test('Apple and Google trials are unchanged: they keep the restricted store-trial tier, not the full plan', async () => {
+  for (const provider of ['apple', 'google'] as const) {
+    const u = await newUser();
+    const end = new Date(NOW + 7 * DAY);
+    await applySubscriptionUpdate(
+      u.id,
+      { provider, planId: 'pro_monthly', status: 'trialing', trialEndsAt: end, currentPeriodEndsAt: end, willRenew: true, trialUsed: true, providerRef: `${provider}-${uid()}`, environment: 'production' },
+      'silent',
+    );
+    const e = await getEntitlement(u.id);
+    assert.deepEqual([e.tier, e.accessPlan, e.usagePeriod, e.isPremium], ['trial', 'trial', 'trial', false], provider);
+    assert.deepEqual(e.features, TIER_FEATURES.trial, provider);
+    assert.deepEqual(e.limits, LIMITS.trial, provider);
+  }
+});
+
+test('checkout.session.completed with a trial: trialing, the selected plan IN FULL from the first moment — granted by the webhook only', async () => {
   const u = await newUser();
   assert.equal((await checkout(u, { plan: 'student', interval: 'monthly' })).status, 200);
   assert.equal((await getEntitlement(u.id)).tier, 'free', 'before the webhook: nothing');
@@ -570,12 +656,13 @@ test('checkout.session.completed with a trial: trialing, selected plan, full tri
   const sub = trialingSub({ plan: 'student_monthly' });
   await subscribe(u, sub);
   const e = await getEntitlement(u.id);
-  assert.deepEqual([e.status, e.tier, e.accessPlan, e.provider, e.planId], ['trialing', 'trial', 'trial', 'stripe', 'student_monthly']);
-  assert.deepEqual(e.features, TIER_FEATURES.trial, 'the trial unlocks every feature');
-  assert.equal(e.usagePeriod, 'trial');
+  assert.deepEqual([e.status, e.tier, e.accessPlan, e.provider, e.planId, e.isPremium], ['trialing', 'student', 'student_monthly', 'stripe', 'student_monthly', true]);
+  assert.deepEqual(e.features, TIER_FEATURES.student, 'the trial unlocks every feature of the selected plan');
+  assert.deepEqual(e.limits, LIMITS.student, 'with the plan’s own limits, not the restricted store-trial allowance');
+  assert.equal(e.usagePeriod, 'month');
   assert.equal(e.trialEligible, false);
   assert.equal(e.willRenew, true);
-  assert.equal(+new Date(e.trialEndsAt!), sec(NOW + 6 * DAY) * 1000);
+  assert.equal(+new Date(e.trialEndsAt!), sec(NOW + 2 * DAY) * 1000);
 
   const row = await getSubscription(u.id);
   assert.deepEqual([row!.provider, row!.providerRef, row!.environment, row!.trialUsed], ['stripe', sub.id, 'sandbox', true]);
@@ -657,7 +744,8 @@ test('a trial that ends unconverted shows "trial ended" (Stripe cancels it when 
 test('trial → paid: invoice.paid converts the subscription to its paid plan', async () => {
   const u = await newUser();
   const sub = await subscribe(u, trialingSub({ plan: 'student_yearly' }));
-  assert.equal((await getEntitlement(u.id)).tier, 'trial');
+  const during = await getEntitlement(u.id);
+  assert.deepEqual([during.status, during.tier, during.planId], ['trialing', 'student', 'student_yearly'], 'full plan during the trial, before any payment');
   Object.assign(sub, { status: 'active', items: [{ priceId: PRICES.student_yearly, currentPeriodStart: sec(NOW), currentPeriodEnd: sec(NOW + 365 * DAY) }] });
   // current API shape: invoice.parent.subscription_details.subscription
   const r = await deliver({ type: 'invoice.paid', object: { id: `in_${uid()}`, customer: sub.customerId, parent: { subscription_details: { subscription: sub.id } } } });
@@ -665,6 +753,20 @@ test('trial → paid: invoice.paid converts the subscription to its paid plan', 
   const e = await getEntitlement(u.id);
   assert.deepEqual([e.status, e.tier, e.planId, e.usagePeriod], ['active', 'student', 'student_yearly', 'month']);
   assert.equal(+new Date(e.currentPeriodEndsAt!), sec(NOW + 365 * DAY) * 1000);
+  assert.equal(e.trialEndsAt, null, 'no longer a trial');
+  assert.deepEqual([e.features, e.limits], [during.features, during.limits], 'the same access before and after the first payment — no gap, no change');
+  assert.equal((await getSubscription(u.id))!.trialUsed, true);
+});
+
+test('trial → paid also works from customer.subscription.updated alone (status trialing → active, no invoice event needed)', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'pro_monthly' }));
+  assert.equal((await getEntitlement(u.id)).status, 'trialing');
+  Object.assign(sub, { status: 'active', trialEnd: sec(NOW - 1000), items: [{ priceId: PRICES.pro_monthly, currentPeriodStart: sec(NOW), currentPeriodEnd: sec(NOW + 30 * DAY) }] });
+  assert.equal((await change(sub)).handled, true);
+  const e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.trialEndsAt, e.willRenew], ['active', 'pro', null, true]);
+  assert.deepEqual(e.features, TIER_FEATURES.pro);
 });
 
 test('invoice events from older API versions (invoice.subscription) are understood too', async () => {
@@ -936,13 +1038,14 @@ test('deleting an account without web billing never calls Stripe', async () => {
 test('catalog: web now sells through Stripe; iOS and Android are unchanged', async () => {
   const catalog = async (platform: string) => (await (await app.request(`/billing/plans?platform=${platform}`)).json()) as BillingCatalog;
   const web = await catalog('web');
-  assert.deepEqual([web.provider, web.purchasesAvailable, web.testMode, web.trialDays], ['stripe', true, false, 7]);
+  assert.deepEqual([web.provider, web.purchasesAvailable, web.testMode, web.trialDays], ['stripe', true, false, 3], 'the web trial is 3 days');
   assert.equal(web.plans.length, 6);
   assert.ok(web.plans.every((p) => !JSON.stringify(p).includes('price_')), 'Stripe Price ids are never sent to clients');
   // Apple/Google are not configured in this test environment: they behave exactly as before.
   for (const platform of ['ios', 'android']) {
     const c = await catalog(platform);
     assert.deepEqual([c.provider, c.purchasesAvailable], [null, false], platform);
+    assert.equal(c.trialDays, 7, `${platform}: the store trial length is unchanged`);
   }
 });
 

@@ -54,7 +54,7 @@ export const fr: Copy = {
       { name: 'Audio', icon: 'audio', formats: 'MP3 · M4A · WAV', text: 'Enregistrements de cours. Exama transcrit le cours, puis repère les thèmes qu’il enseigne.' },
       { name: 'Vidéo', icon: 'video', formats: 'MP4 · MOV', text: 'Vidéos de cours. Exama utilise ce qui est dit : les diapositives ou schémas montrés sans être commentés à l’oral ne sont pas pris en compte.' },
     ],
-    fineTrial: 'Les cours audio et vidéo sont inclus dans Student et Pro, ainsi que dans l’essai gratuit. Free comprend un cours enregistré par compte. Basic couvre les PDF et PowerPoint.',
+    fineTrial: 'Les cours audio et vidéo sont inclus dans Student et Pro, y compris pendant leur essai gratuit. Free comprend un cours enregistré par compte. Basic couvre les PDF et PowerPoint.',
     fineFree: 'Les cours audio et vidéo sont inclus dans Student et Pro. Free comprend un cours enregistré par compte. Basic couvre les PDF et PowerPoint.',
   },
   grounded: {
@@ -95,7 +95,7 @@ export const fr: Copy = {
     loopAria: 'Le cycle de révision',
     steps: ['Révisez', 'Testez-vous', 'Repérez vos points faibles', 'Entraînez-vous', 'Progressez'],
     back: 'et on recommence',
-    fineTrial: 'L’analyse des points faibles et l’entraînement adaptatif font partie de Student et Pro, ainsi que de l’essai gratuit. Avec Free et Basic, vous vous entraînez sur tous les thèmes de votre cours.',
+    fineTrial: 'L’analyse des points faibles et l’entraînement adaptatif font partie de Student et Pro, y compris pendant leur essai gratuit. Avec Free et Basic, vous vous entraînez sur tous les thèmes de votre cours.',
     fineFree: 'L’analyse des points faibles et l’entraînement adaptatif font partie de Student et Pro. Avec Free et Basic, vous vous entraînez sur tous les thèmes de votre cours.',
   },
   plan: {
@@ -115,7 +115,7 @@ export const fr: Copy = {
       'Il se réorganise quand vous terminez, sautez ou manquez une tâche.',
       'Les tâches du jour et votre progression, au même endroit.',
     ],
-    fineTrial: 'Le plan qui s’adapte à vos résultats fait partie de Student et Pro, ainsi que de l’essai gratuit. Free et Basic comprennent un planificateur qui répartit vos thèmes de manière égale.',
+    fineTrial: 'Le plan qui s’adapte à vos résultats fait partie de Student et Pro, y compris pendant leur essai gratuit. Free et Basic comprennent un planificateur qui répartit vos thèmes de manière égale.',
     fineFree: 'Le plan qui s’adapte à vos résultats fait partie de Student et Pro. Free et Basic comprennent un planificateur qui répartit vos thèmes de manière égale.',
   },
   product: {
@@ -134,7 +134,7 @@ export const fr: Copy = {
     eyebrow: 'Tarifs',
     titleTrial: (days) => `Commencez avec ${days} jours gratuits`,
     titleFree: 'Commencez gratuitement, passez à une offre supérieure quand vous en avez besoin',
-    leadTrial: (days) => `Essayez gratuitement les fonctionnalités de Student pendant ${days} jours, avec une utilisation limitée. Aucun paiement aujourd’hui, et vous pouvez résilier à tout moment avant la fin de l’essai.`,
+    leadTrial: (days) => `Essayez gratuitement l’offre de votre choix pendant ${days} jours, avec un accès complet à tout ce qu’elle comprend. Aucun paiement aujourd’hui, et vous pouvez résilier à tout moment avant la fin de l’essai.`,
     leadFree: 'Utilisez Exama avec l’offre Free, gratuitement et sans carte. Les offres payantes ajoutent davantage de cours, les cours enregistrés et l’entraînement adaptatif.',
     recommended: 'Recommandé',
     perMonth: '/mois',
@@ -182,7 +182,7 @@ export const fr: Copy = {
         a: [
           'Des PDF, des présentations PowerPoint (.pptx), des enregistrements audio (MP3, M4A, WAV) et des vidéos (MP4, MOV). Vous pouvez les combiner dans un même cours : tout ce que vous ajoutez alimente les mêmes examens, le même entraînement et le même plan de révision.',
           trial
-            ? 'Les cours audio et vidéo sont inclus dans Student et Pro, ainsi que dans l’essai gratuit. Free comprend un cours enregistré par compte ; Basic couvre les PDF et PowerPoint.'
+            ? 'Les cours audio et vidéo sont inclus dans Student et Pro, y compris pendant leur essai gratuit. Free comprend un cours enregistré par compte ; Basic couvre les PDF et PowerPoint.'
             : 'Les cours audio et vidéo sont inclus dans Student et Pro. Free comprend un cours enregistré par compte ; Basic couvre les PDF et PowerPoint.',
         ],
       },
@@ -204,7 +204,7 @@ export const fr: Copy = {
         a: [
           'Oui. Les cours audio et vidéo sont transcrits et analysés comme n’importe quel autre support, et leurs thèmes rejoignent votre cours. Exama travaille à partir de ce qui est dit : les diapositives ou schémas montrés à l’écran sans être commentés ne sont pas pris en compte.',
           trial
-            ? 'Les cours enregistrés font partie de Student et Pro ainsi que de l’essai gratuit ; Free comprend un cours enregistré par compte, dont il utilise les 45 premières minutes.'
+            ? 'Les cours enregistrés font partie de Student et Pro, y compris pendant leur essai gratuit ; Free comprend un cours enregistré par compte, dont il utilise les 45 premières minutes.'
             : 'Les cours enregistrés font partie de Student et Pro ; Free comprend un cours enregistré par compte, dont il utilise les 45 premières minutes.',
         ],
       },
@@ -213,7 +213,7 @@ export const fr: Copy = {
             {
               q: `Comment fonctionne l’essai gratuit de ${days} jours ?`,
               a: [
-                `Chaque compte peut démarrer un essai gratuit de ${days} jours. Créez votre compte Exama sur app.exama.app, choisissez Basic, Student ou Pro et démarrez l’essai lors de la commande. Il inclut les fonctionnalités de Student — cours enregistrés, entraînement sur les points faibles et plan de révision adaptatif — avec une utilisation limitée.`,
+                `Chaque compte peut démarrer un essai gratuit de ${days} jours. Créez votre compte Exama sur app.exama.app, choisissez Basic, Student ou Pro et démarrez l’essai lors de la commande. Pendant l’essai, vous avez un accès complet à l’offre choisie, avec tout ce qu’elle comprend.`,
                 `Vous indiquez un moyen de paiement lors de la commande (géré par Stripe), mais rien n’est prélevé aujourd’hui. Si vous ne faites rien, l’offre choisie démarre automatiquement à la fin des ${days} jours. Résiliez à tout moment avant depuis Compte → Gérer la facturation et vous ne serez pas débité.`,
                 'Vous avez déjà un compte ? Connectez-vous et choisissez votre offre : l’essai vous est proposé si votre compte ne l’a pas encore utilisé. L’essai fonctionne dans n’importe quel navigateur. Un abonnement souscrit dans une app mobile, là où c’est possible, est facturé par l’App Store ou Google Play et débloque le même compte.',
               ],

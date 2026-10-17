@@ -6,9 +6,10 @@
  * A student hitting every monthly cap costs well under their subscription price; revisit these
  * numbers against `npm run analytics:report` and your Anthropic bill once real usage exists.
  *
- * The 7-day free trial is its own tier (`trial`) with deliberately small limits. Its counters
- * cover the WHOLE trial (not a month) and come from the same usage ledger, so deleting a course,
- * reinstalling or signing in again never gives anything back.
+ * The 7-day free trial of the stores (App Store / Google Play) is its own tier (`trial`) with deliberately
+ * small limits. Its counters cover the WHOLE trial (not a month) and come from the same usage ledger, so
+ * deleting a course, reinstalling or signing in again never gives anything back. Web (Stripe) trials do
+ * not use this tier: they have the selected plan's own tier and limits for the whole trial.
  *
  * Override without a code change via PLAN_LIMITS_OVERRIDE (JSON, partial; tiers free/trial/basic/student/pro), e.g.
  *   PLAN_LIMITS_OVERRIDE={"free":{"examGenerationsPerMonth":5},"trial":{"practiceQuestionsPerMonth":10}}

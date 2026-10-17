@@ -214,10 +214,13 @@ export default function Paywall() {
         <View style={{ gap: space(2.5) }}>
           {!!params.message && <Body muted>{params.message}</Body>}
           <Title style={{ fontSize: 26, lineHeight: 32 }}>{t('paywall.trialTitle', { days: trialDays })}</Title>
-          <Body>{t('paywall.trialSubtitle', { days: trialDays })}</Body>
+          {/* The web (Stripe) trial is the full selected plan; the stores' trial is a reduced allowance. */}
+          <Body>{webCheckout ? t('paywall.trialSubtitleWeb', { days: trialDays }) : t('paywall.trialSubtitle', { days: trialDays })}</Body>
           <View style={{ backgroundColor: colors.successSoft, borderRadius: 12, padding: space(3.5), gap: 2 }}>
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{t('paywall.trialIncluded', { allowance: trialAllowance(tl) })}</Text>
-            <Text style={{ color: colors.muted, fontSize: 13 }}>{t('paywall.subscribeAnytime')}</Text>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+              {webCheckout ? t('paywall.trialIncludedWeb') : t('paywall.trialIncluded', { allowance: trialAllowance(tl) })}
+            </Text>
+            {!webCheckout && <Text style={{ color: colors.muted, fontSize: 13 }}>{t('paywall.subscribeAnytime')}</Text>}
           </View>
         </View>
       ) : (
@@ -288,7 +291,7 @@ export default function Paywall() {
           </Pressable>
         );
       })}
-      {showTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.trialAllPlans')}</Body>}
+      {showTrial && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{webCheckout ? t('paywall.trialAllPlansWeb') : t('paywall.trialAllPlans')}</Body>}
 
       {managedOnWeb ? (
         <Card style={{ gap: space(2) }}>
@@ -314,7 +317,7 @@ export default function Paywall() {
           {webCheckout && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.webCheckoutCard')}</Body>}
           {plan && withTrial && (
             <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
-              {t('paywall.finePrintTrial', {
+              {t(webCheckout ? 'paywall.finePrintTrialWeb' : 'paywall.finePrintTrial', {
                 days: trialDays,
                 price: price(plan),
                 per: per(plan),

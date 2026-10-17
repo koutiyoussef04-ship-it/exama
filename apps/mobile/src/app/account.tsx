@@ -1,4 +1,4 @@
-import type { MockState } from '@study/shared';
+import { STRIPE_TRIAL_DAYS, TRIAL_DAYS, type MockState } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -100,7 +100,7 @@ export default function Account() {
                 : e.tier === 'trial'
                   ? t('account.subscribeNow')
                   : e.trialEligible
-                    ? t('account.startTrial', { days: catalog.data?.trialDays ?? 7 })
+                    ? t('account.startTrial', { days: catalog.data?.trialDays ?? (Platform.OS === 'web' ? STRIPE_TRIAL_DAYS : TRIAL_DAYS) })
                     : t('account.upgrade')
             }
             onPress={() => openPaywall(e.trialEnded ? 'trial_ended' : 'account')}

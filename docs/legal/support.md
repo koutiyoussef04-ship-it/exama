@@ -17,7 +17,7 @@ The study language set in Account → Study language (English, Spanish, French o
 iPhone: in your App Store account settings (Settings → your name → Subscriptions). Android: in Google Play (Play Store → your profile → Payments & subscriptions → Subscriptions). Or in Exama: Account → Manage subscription. Deleting the app or your Exama account does not cancel it.
 
 **What does the free trial include?**
-7 days, once per account, with every feature: 1 course, 1 PDF or PowerPoint upload, 1 exam (up to 8 questions), 5 practice questions and 1 lecture recording of up to 30 minutes. No payment is taken during the trial; cancel at least 24 hours before it ends to avoid being charged.
+On the web: 3 days, once per account, with full access to the plan you choose. You enter a payment method at checkout, nothing is charged during the trial, and the plan starts automatically when it ends unless you cancel before then (Account → Manage billing). In the iPhone and Android apps: the App Store or Google Play offers its own 7-day free trial, once per account, with a smaller allowance (shown before you start); cancel at least 24 hours before it ends to avoid being charged.
 
 **How do I delete my account?**
 In the app: Account → Delete account (you'll confirm with your password). Your courses, PDFs, exams, progress and subscription records are permanently deleted. If you can't access the app, email us from the address you signed up with.

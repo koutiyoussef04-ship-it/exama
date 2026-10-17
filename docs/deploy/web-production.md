@@ -81,7 +81,7 @@ sign-up → sign-in → forgot password (a real email must arrive) → upload a 
 Stripe Dashboard (live mode): create the 6 Prices, a webhook endpoint `https://api.exama.app/billing/stripe/webhook`, enable the Customer Portal. Then set on `exama-api`: `STRIPE_ENABLED=true`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the six `STRIPE_*_PRICE_ID`, `STRIPE_SUCCESS_URL=https://app.exama.app/checkout?status=success`, `STRIPE_CANCEL_URL=https://app.exama.app/checkout?status=cancel`, `STRIPE_PORTAL_RETURN_URL=https://app.exama.app/account`. See `docs/stripe/stripe-web-billing.md` (on the Stripe branch) for the exact procedure and test-mode run-through first.
 
 ### 8. Marketing site `exama.app` (attach last)
-`website/README.md` says: do not publish before Stripe works, because "Start 7-day free trial" leads to a Stripe checkout. When Stripe is verified: *exama-marketing* → Custom Domains → `exama.app` → in Cloudflare add a **CNAME** `@` → `exama-marketing-….onrender.com` (Cloudflare flattens it at the apex; DNS only), and let Render redirect `www`. Also fill `site.legal.supportEmail` in `website/src/config/site.ts` and publish reviewed Privacy/Terms first.
+`website/README.md` says: do not publish before Stripe works, because "Start 3-day free trial" leads to a Stripe checkout. When Stripe is verified: *exama-marketing* → Custom Domains → `exama.app` → in Cloudflare add a **CNAME** `@` → `exama-marketing-….onrender.com` (Cloudflare flattens it at the apex; DNS only), and let Render redirect `www`. Also fill `site.legal.supportEmail` in `website/src/config/site.ts` and publish reviewed Privacy/Terms first.
 
 ## Operations
 
