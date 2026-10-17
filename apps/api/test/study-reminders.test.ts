@@ -1,9 +1,11 @@
 /**
- * Daily study-plan reminder emails: who gets one (plan, confirmed address, no subscription or trial,
- * reminders on), content from the stored plan only (no AI), local time zone, one per local day even with
- * retries and overlapping runs, unsubscribe (one-click + page + preferences), and missing email config.
+ * Daily study reminder emails: who gets one (Free and never paid — no subscription, trial or Stripe record —
+ * exactly one course, confirmed address, reminders on), both emails (today's plan; no plan yet), content from
+ * stored data only (no AI), local time zone, app language, one per local day even with retries and
+ * overlapping runs, unsubscribe (one-click + page + preferences), and missing email config.
  */
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { after, beforeEach, test } from 'node:test';
 import type { AuthResponse, DocumentDetail, EmailPreferences, StudyPlan } from '@study/shared';
@@ -24,6 +26,7 @@ const { sql } = await import('../src/db/client.js');
 const { config } = await import('../src/config.js');
 const { outbox, mailTestHooks } = await import('../src/lib/mailer.js');
 const { studyAI } = await import('../src/ai/index.js');
+const { db } = await import('../src/db/client.js');
 const { addDays, localDate } = await import('../src/services/planner/dates.js');
 const reminders = await import('../src/services/study-reminders.js');
 const { resetUnsubscribeRateLimit } = await import('../src/routes/email.js');
@@ -51,19 +54,39 @@ async function newUser(verified = true): Promise<U> {
   if (verified) await sql`update users set email_verified_at = now() where id = ${r.body.user.id}`;
   return { id: r.body.user.id, token: r.body.token, email };
 }
-async function withPlan(u: U, over: Record<string, unknown> = {}) {
+/** Uploads the biology PDF as a course and waits until it's ready. */
+async function newCourse(u: U): Promise<string> {
   const form = new FormData();
   form.append('file', new File([pdf], 'biology-notes.pdf', { type: 'application/pdf' }));
   const up = await call<DocumentDetail>('/documents', { method: 'POST', body: form, token: u.token });
+  assert.equal(up.status, 201, JSON.stringify(up.body));
   for (let i = 0; i < 60; i++) {
     if ((await call<DocumentDetail>(`/documents/${up.body.id}`, { token: u.token })).body.status === 'ready') break;
     await new Promise((r) => setTimeout(r, 100));
   }
-  const tz = (over.timezone as string) ?? 'UTC';
-  const p = await call<StudyPlan>(`/documents/${up.body.id}/study-plan`, send('POST', { examDate: addDays(localDate(new Date(), tz), 10), minutesPerDay: 60, preparedLevel: 'familiar', timezone: tz, studyDays: [0, 1, 2, 3, 4, 5, 6], ...over }, u.token));
-  assert.equal(p.status, 201, JSON.stringify(p.body));
-  return { docId: up.body.id, plan: p.body };
+  return up.body.id;
 }
+async function withPlan(u: U, over: Record<string, unknown> = {}) {
+  const docId = await newCourse(u);
+  const tz = (over.timezone as string) ?? 'UTC';
+  const p = await call<StudyPlan>(`/documents/${docId}/study-plan`, send('POST', { examDate: addDays(localDate(new Date(), tz), 10), minutesPerDay: 60, preparedLevel: 'familiar', timezone: tz, studyDays: [0, 1, 2, 3, 4, 5, 6], ...over }, u.token));
+  assert.equal(p.status, 201, JSON.stringify(p.body));
+  return { docId, plan: p.body };
+}
+/** The app reports its language and the device time zone when it opens (signed in). */
+async function opened(u: U, props: { time_zone?: string; app_language?: string } = { time_zone: 'UTC' }) {
+  const r = await call('/events', send('POST', { anonymousId: randomUUID(), events: [{ name: 'app_opened', properties: { platform: 'web', authenticated: true, ...props } }] }, u.token));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+}
+/** A free student with one course and no study plan, whose app has reported a time zone. */
+async function noPlanStudent(props?: Parameters<typeof opened>[1]) {
+  const u = await newUser();
+  const docId = await newCourse(u);
+  await opened(u, props);
+  return { u, docId };
+}
+const run = (u: U | U[], when = at('09:00')) => reminders.runStudyReminders(when, { userIds: (Array.isArray(u) ? u : [u]).map((x) => x.id) });
+const sentTo = async (u: U) => (await call<EmailPreferences>('/email/preferences', { token: u.token })).body.sentToThisAccount;
 /** Reminder emails only (sign-up also sends a verification email to the same address). */
 const mailsTo = (u: U) => outbox.filter((m) => m.to === u.email && m.idempotencyKey?.startsWith('study-reminder/'));
 /** 09:00 UTC on today's UTC date: after the 08:00 send time for UTC plans. */
@@ -161,35 +184,177 @@ test('a failed send is retried on the next run (same idempotency key), at most 3
   assert.deepEqual((await rows(w)).map((x) => [x.status, x.attempts]), [['failed', 3]], 'gives up after 3 attempts');
 });
 
-test('subscribers (paid plan or trial) are excluded by the server entitlement', async () => {
-  for (const state of ['student_monthly', 'trial', 'basic_yearly'] as const) {
-    const u = await newUser();
-    await withPlan(u);
-    assert.equal((await call('/billing/mock/state', send('POST', { state }, u.token))).status, 200);
-    const r = await reminders.runStudyReminders(at('09:00'), { userIds: [u.id] });
-    assert.equal(r.subscribers, 1, state);
-    assert.equal(mailsTo(u).length, 0, state);
-    assert.equal((await rows(u)).length, 0, `${state}: nothing claimed`);
-    // The subscription ends → the next run sends.
+const DAY = 86_400_000;
+/** Server-side billing records as the providers write them (Stripe webhook rows, a started web checkout). */
+const billing: Record<string, (u: U) => Promise<unknown>> = {
+  'mock trial (active)': (u) => call('/billing/mock/state', send('POST', { state: 'trial' }, u.token)),
+  'Stripe trial (active)': (u) =>
+    sql`insert into subscriptions (user_id, provider, plan_id, status, trial_ends_at, current_period_ends_at, trial_used, provider_ref, environment)
+        values (${u.id}, 'stripe', 'student_monthly', 'trialing', ${new Date(Date.now() + 3 * DAY).toISOString()}, ${new Date(Date.now() + 3 * DAY).toISOString()}, true, ${`sub_t_${u.id}`}, 'production')`,
+  'paid plan (active)': (u) => call('/billing/mock/state', send('POST', { state: 'student_monthly' }, u.token)),
+  'paid Stripe plan, cancelled (access until period end)': (u) =>
+    sql`insert into subscriptions (user_id, provider, plan_id, status, current_period_ends_at, will_renew, trial_used, provider_ref, environment)
+        values (${u.id}, 'stripe', 'pro_yearly', 'cancelled', ${new Date(Date.now() + 20 * DAY).toISOString()}, false, true, ${`sub_c_${u.id}`}, 'production')`,
+  'previously paid, now expired': async (u) => {
+    await call('/billing/mock/state', send('POST', { state: 'basic_yearly' }, u.token));
     await call('/billing/mock/state', send('POST', { state: 'expired' }, u.token));
-    const next = await reminders.runStudyReminders(at('09:00'), { userIds: [u.id] });
-    assert.equal(next.sent, 1, `${state} → expired`);
+  },
+  'trial ended without paying (row kept: fail closed)': (u) =>
+    sql`insert into subscriptions (user_id, provider, plan_id, status, trial_ends_at, current_period_ends_at, will_renew, trial_used, environment)
+        values (${u.id}, 'apple', 'student_monthly', 'expired', ${new Date(Date.now() - DAY).toISOString()}, ${new Date(Date.now() - DAY).toISOString()}, false, true, 'production')`,
+  'Stripe customer only (web checkout started; payment not ruled out)': (u) =>
+    sql`insert into stripe_customers (user_id, stripe_customer_id) values (${u.id}, ${`cus_${u.id}`})`,
+};
+
+test('billing: active trials, paid, cancelled and previously paid accounts, and any Stripe customer never get the email', async () => {
+  for (const [name, apply] of Object.entries(billing)) {
+    for (const withStudyPlan of [true, false]) {
+      const u = await newUser();
+      if (withStudyPlan) await withPlan(u);
+      else await newCourse(u);
+      await opened(u);
+      await apply(u);
+      const r = await run(u);
+      assert.equal(r.subscribers, 1, `${name} (plan: ${withStudyPlan}) ${JSON.stringify(r)}`);
+      assert.equal(r.sent, 0, name);
+      assert.equal(mailsTo(u).length, 0, name);
+      assert.equal((await rows(u)).length, 0, `${name}: nothing claimed`);
+      assert.equal(await sentTo(u), false, `${name}: preferences say this account doesn't get it`);
+    }
+  }
+  // Ending a subscription or trial doesn't make an account eligible again.
+  const u = await newUser();
+  await withPlan(u);
+  await call('/billing/mock/state', send('POST', { state: 'trial' }, u.token));
+  await call('/billing/mock/state', send('POST', { state: 'free' }, u.token)); // trial used: the row stays
+  assert.equal((await run(u)).subscribers, 1);
+  assert.equal(mailsTo(u).length, 0);
+});
+
+test('billing: owner access is excluded, and an error while checking billing fails closed', async () => {
+  const owner = await newUser();
+  await withPlan(owner);
+  const saved = [...config.OWNER_USER_IDS];
+  config.OWNER_USER_IDS.push(owner.id);
+  try {
+    assert.equal((await run(owner)).subscribers, 1);
+    assert.equal(mailsTo(owner).length, 0);
+  } finally {
+    config.OWNER_USER_IDS.splice(0, config.OWNER_USER_IDS.length, ...saved);
+  }
+
+  const u = await newUser();
+  await withPlan(u);
+  assert.deepEqual(await reminders.billingEligibility(u.id), { ok: true, canCreatePlan: false }, 'plan already made this month');
+  const select = db.select;
+  (db as { select: unknown }).select = () => {
+    throw new Error('billing records unavailable');
+  };
+  try {
+    assert.deepEqual(await reminders.billingEligibility(u.id), { ok: false, reason: 'unknown' });
+  } finally {
+    (db as { select: unknown }).select = select;
   }
 });
 
-test('no plan, unconfirmed address, or reminders off → no email', async () => {
-  const noPlan = await newUser();
+test('zero courses, several courses, unconfirmed address, or reminders off → no email', async () => {
+  const noCourse = await newUser();
+  await opened(noCourse);
+  const two = await newUser();
+  const { docId: planned } = await withPlan(two);
+  const second = await newCourse(two);
+  await opened(two);
+  const twoNoPlan = await newUser();
+  await newCourse(twoNoPlan);
+  await newCourse(twoNoPlan);
+  await opened(twoNoPlan);
   const unverified = await newUser(false);
   await withPlan(unverified);
+  await opened(unverified);
   const off = await newUser();
   await withPlan(off);
+  await opened(off);
   await call('/email/preferences', send('PATCH', { studyReminders: false }, off.token));
-  const r = await reminders.runStudyReminders(at('09:00'), { userIds: [noPlan.id, unverified.id, off.id] });
-  assert.equal(r.sent, 0);
-  for (const u of [noPlan, unverified, off]) {
+  const offNoPlan = await newUser();
+  await newCourse(offNoPlan);
+  await opened(offNoPlan);
+  await call('/email/preferences', send('PATCH', { studyReminders: false }, offNoPlan.token));
+
+  const all = [noCourse, two, twoNoPlan, unverified, off, offNoPlan];
+  const r = await run(all);
+  assert.equal(r.sent, 0, JSON.stringify(r));
+  for (const u of all) {
     assert.equal(mailsTo(u).length, 0);
     assert.equal((await rows(u)).length, 0);
   }
+  // Back to exactly one course → the next day's email goes out (its plan's email).
+  assert.equal((await call(`/documents/${second}`, { method: 'DELETE', token: two.token })).status, 204);
+  assert.equal((await run(two)).sent, 1);
+  assert.ok(mailsTo(two)[0]!.text.includes(`https://app.exama.test/plan/${planned}`));
+});
+
+test('no study plan: a nudge back to the course, from stored data only, with a link to create a plan', async () => {
+  const { u, docId } = await noPlanStudent({ time_zone: 'UTC', app_language: 'en' });
+  await sql`update documents set title = ${'Biology <b>&</b> "Cells"'} where id = ${docId}`;
+  const r = await withoutAI(() => run(u));
+  assert.equal(r.sent, 1, JSON.stringify(r));
+  const [mail] = mailsTo(u);
+  assert.ok(mail);
+  assert.equal(mail.subject, 'Pick up where you left off: Biology <b>&</b> "Cells"');
+  assert.ok(mail.text.includes(`Continue studying: https://app.exama.test/documents/${docId}`), mail.text);
+  assert.ok(mail.text.includes(`Create a study plan: https://app.exama.test/plan/setup?id=${docId}`), mail.text);
+  assert.ok(mail.html.includes(`href="https://app.exama.test/documents/${docId}"`));
+  assert.ok(mail.html.includes('Biology &#60;b&#62;&#38;&#60;/b&#62; &#34;Cells&#34;') && !mail.html.includes('<b>&</b>'));
+  // No tasks are made up, and nothing is sold.
+  assert.doesNotMatch(mail.text, /\bmin\b|minutes|Learn:|Review:|Practice:/);
+  assert.doesNotMatch(`${mail.subject}\n${mail.text}`.replace(/https?:\/\/\S+/g, ''), /trial|subscri(be|ption)|upgrade|premium|price|€|\$|offer|discount/i);
+  assert.match(mail.text, /https:\/\/app\.exama\.test\/unsubscribe#token=[0-9a-f-]{36}\.[\w-]{32}/);
+  assert.equal(mail.headers?.['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+  const date = localDate(at('09:00'), 'UTC');
+  assert.equal(mail.idempotencyKey, `study-reminder/${u.id}/${date}`);
+  assert.deepEqual((await rows(u)).map((x) => [x.local_date, x.status]), [[date, 'sent']]);
+  assert.equal(await sentTo(u), true);
+
+  // The Free plan's study plan for this month is used up: no "create a plan" link (the course link stays).
+  const { u: v, docId: d2 } = await noPlanStudent();
+  await sql`insert into usage_ledger (user_id, kind, amount) values (${v.id}, 'study_plan_generation', 1)`;
+  await run(v);
+  const [m2] = mailsTo(v);
+  assert.ok(m2 && m2.text.includes(`/documents/${d2}`));
+  assert.ok(!m2.text.includes('/plan/setup') && !m2.html.includes('/plan/setup'));
+
+  // A course that isn't ready (still processing, or failed): nothing to send that day.
+  const { u: w, docId: d3 } = await noPlanStudent();
+  await sql`update documents set status = 'failed' where id = ${d3}`;
+  assert.equal((await run(w)).skipped, 1);
+  assert.equal(mailsTo(w).length, 0);
+});
+
+test('no study plan: needs a known local time zone; 08:00 local; one email per local day', async () => {
+  // Never reported a time zone (and no plan to take one from) → never sent; an invalid zone is ignored.
+  const u = await newUser();
+  await newCourse(u);
+  assert.equal((await run(u)).noTimeZone, 1);
+  await opened(u, { time_zone: 'Not/AZone' });
+  assert.equal((await run(u)).noTimeZone, 1);
+  assert.equal((await rows(u)).length, 0);
+
+  // Tokyo (UTC+9): 22:30 UTC is 07:30 there — not yet; 23:30 UTC is 08:30 on the next local date.
+  await opened(u, { time_zone: 'Asia/Tokyo' });
+  assert.equal((await run(u, at('22:30'))).notDue, 1);
+  const night = at('23:30');
+  assert.equal((await run(u, night)).sent, 1);
+  assert.deepEqual((await rows(u)).map((x) => x.local_date), [localDate(night, 'Asia/Tokyo')]);
+
+  // Same local day: later and overlapping runs send nothing more; the next local day sends again.
+  const { u: v } = await noPlanStudent();
+  const both = await Promise.all([run(v), run(v)]);
+  assert.equal(both[0].sent + both[1].sent, 1);
+  await run(v, at('15:00'));
+  await run(v, at('23:59'));
+  assert.equal(mailsTo(v).length, 1);
+  assert.equal((await run(v, at('09:00', 1))).sent, 1);
+  assert.deepEqual(new Set(mailsTo(v).map((m) => m.idempotencyKey)).size, 2);
 });
 
 test('local time: nothing before 08:00 in the plan’s time zone; the date is the student’s local date', async () => {
@@ -209,10 +374,29 @@ test('local time: nothing before 08:00 in the plan’s time zone; the date is th
   assert.equal(r.sent, 1, JSON.stringify(r));
   assert.deepEqual((await rows(tokyo)).map((x) => x.local_date), [local]);
   assert.equal(reminders.localHour(night, 'Asia/Tokyo'), 8);
-  assert.equal(reminders.reminderZone([{ timezone: 'Not/AZone', updatedAt: new Date() }]), 'UTC', 'invalid zone → UTC');
+  // The plan's zone wins over the device's (the plan's "today" is computed there).
+  const both = await newUser();
+  await withPlan(both, { timezone: 'Asia/Tokyo' });
+  await opened(both, { time_zone: 'America/New_York' });
+  assert.equal((await run(both, night)).sent, 1);
 });
 
-test('the email follows the plan language (en, es, fr, ar; Arabic right-to-left)', async () => {
+test('language: the app language the app reported; else the plan’s / course’s (en, es, fr, ar; Arabic right-to-left)', async () => {
+  // App language beats the plan's language.
+  const p = await newUser();
+  await withPlan(p, { language: 'es' });
+  await opened(p, { time_zone: 'UTC', app_language: 'fr' });
+  await run(p);
+  assert.match(mailsTo(p)[0]!.subject, /Votre plan de révision|Votre examen/);
+  // No plan: Arabic app → Arabic, right-to-left; French app → French.
+  const { u: ar } = await noPlanStudent({ time_zone: 'UTC', app_language: 'ar' });
+  const { u: fr } = await noPlanStudent({ time_zone: 'UTC', app_language: 'fr' });
+  await run([ar, fr]);
+  assert.match(mailsTo(ar)[0]!.subject, /تابع من حيث توقفت/);
+  assert.ok(mailsTo(ar)[0]!.html.includes('dir="rtl"'));
+  assert.match(mailsTo(fr)[0]!.subject, /^Reprenez là où vous en étiez/);
+  assert.ok(mailsTo(fr)[0]!.html.includes('dir="ltr"'));
+  // App never reported a language: the plan's language (below).
   const want = { es: /Tu plan de estudio de hoy|Tu examen/, fr: /Votre plan de révision|Votre examen/, ar: /خطة مذاكرتك|اختبارك/ } as const;
   for (const language of ['es', 'fr', 'ar'] as const) {
     const u = await newUser();

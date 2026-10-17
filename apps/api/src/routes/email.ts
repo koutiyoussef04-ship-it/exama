@@ -2,13 +2,12 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { updateEmailPreferencesSchema, type EmailPreferences } from '@study/shared';
 import { requireAuth, type AuthEnv } from '../auth/auth.js';
-import { getEntitlement } from '../billing/entitlements.js';
 import { db } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { RateLimiter } from '../lib/rate-limit.js';
 import { config } from '../config.js';
-import { hasActiveSubscription, remindersAvailable, unsubscribePageUrl, unsubscribeWithToken } from '../services/study-reminders.js';
+import { billingEligibility, remindersAvailable, unsubscribePageUrl, unsubscribeWithToken } from '../services/study-reminders.js';
 
 const unsubscribeLimiter = new RateLimiter(30, 15 * 60_000, 'Too many attempts. Please wait a little and try again.');
 const clientKey = (c: { req: { header: (n: string) => string | undefined } }) =>
@@ -21,7 +20,8 @@ async function preferences(userId: string): Promise<EmailPreferences> {
     studyReminders: u.on,
     available: remindersAvailable().ok,
     emailVerified: !!u.verifiedAt,
-    sentToThisAccount: !hasActiveSubscription(await getEntitlement(userId)),
+    // Free and never paid (any subscription, trial or Stripe checkout record excludes the account for good).
+    sentToThisAccount: (await billingEligibility(userId)).ok,
   };
 }
 

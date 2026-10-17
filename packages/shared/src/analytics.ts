@@ -46,6 +46,8 @@ export const clientEventSchema = z.discriminatedUnion('name', [
       // Optional so older app builds keep working.
       app_language: languageSchema.optional(),
       ai_language: aiLanguageSchema.optional(),
+      /** Device time zone (IANA name): the daily study email is sent from 08:00 in it when there's no study plan. */
+      time_zone: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_+\-/]+$/).optional(),
     }),
   }),
   z.object({

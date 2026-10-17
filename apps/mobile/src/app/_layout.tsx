@@ -93,6 +93,16 @@ function useLegacyReminderCleanup() {
   }, []);
 }
 
+/** The device's IANA time zone, when the platform reports one (sets the daily study email's local send time). */
+function deviceZone(): { time_zone?: string } {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && zone.length <= 64 && /^[A-Za-z0-9_+\-/]+$/.test(zone) ? { time_zone: zone } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** app_opened on launch (once the session is restored) and whenever the app returns from the background. */
 function useAppOpenedTracking(authenticated: boolean | null) {
   const { appLanguage, aiLanguage } = usePreferences();
@@ -103,7 +113,7 @@ function useAppOpenedTracking(authenticated: boolean | null) {
   const send = () => {
     const p = props.current;
     if (p.authenticated === null) return;
-    track('app_opened', { platform, authenticated: p.authenticated, app_language: p.appLanguage, ai_language: p.aiLanguage });
+    track('app_opened', { platform, authenticated: p.authenticated, app_language: p.appLanguage, ai_language: p.aiLanguage, ...deviceZone() });
   };
 
   useEffect(() => {

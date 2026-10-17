@@ -10,7 +10,8 @@ export const normalizeEmail = (email: string): string => email.toLowerCase();
 /**
  * Email preferences (GET/PATCH /email/preferences, signed in). `studyReminders`: the daily study-plan email
  * (on by default). `available`: the server sends these emails at all. `emailVerified`: they only go to a
- * confirmed address. Students with an active subscription or trial don't get them (`sentToThisAccount` false).
+ * confirmed address. Only Free accounts that have never had a subscription, trial or web checkout get them
+ * (`sentToThisAccount` false otherwise).
  */
 export type EmailPreferences = { studyReminders: boolean; available: boolean; emailVerified: boolean; sentToThisAccount: boolean };
 export const updateEmailPreferencesSchema = z.object({ studyReminders: z.boolean() }).strict();

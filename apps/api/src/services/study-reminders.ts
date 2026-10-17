@@ -1,32 +1,43 @@
 /**
- * Daily study-plan reminder emails — the web-first replacement for the app's local notifications.
+ * Daily study reminder emails — re-engagement for free students who have never paid.
  *
- * Who gets one (all checked on the server, every run):
+ * Who gets one (all checked on the server, every run; anything that can't be established → no email):
  *   - the feature is on (STUDY_REMINDER_EMAILS_ENABLED=true) and email can be sent (EMAIL_PROVIDER and a
  *     web app origin for the links); otherwise the run logs why once and does nothing;
- *   - the account has at least one study plan, a confirmed email address, and reminders switched on
- *     (`users.study_reminder_emails`, off via Account or the unsubscribe link);
- *   - no active subscription: paid plans, the free trial and owner (complimentary) access are excluded,
- *     from the server's entitlement — never from anything the client says;
- *   - its plans have pending tasks on the student's local date (rest days and passed exams: no email).
+ *   - a confirmed email address and reminders switched on (`users.study_reminder_emails`, off via Account
+ *     or the unsubscribe link);
+ *   - exactly ONE course (`documents`, counted like the plan limit counts courses); none or several: no email;
+ *   - the Free plan and NO billing history at all, from the server's own records (`billingEligibility`):
+ *     no `subscriptions` row in any state (that row is the only record of paid plans and trials, from every
+ *     store, and is overwritten in place — so a cancelled or expired row can't prove a payment never
+ *     happened), no Stripe customer (a started web checkout: payment can't be ruled out locally), no owner
+ *     access, and the entitlement says Free. Never anything the client says. Errors → no email.
  *
- * When: from STUDY_REMINDER_LOCAL_HOUR (default 08:00) in the plan's own time zone (stored with the plan
- * from the device; the most recently updated plan's zone when there are several; UTC if none is valid).
+ * Two emails:
+ *   - the course has a study plan → today's pending tasks and stored focus notes (as before). A day with
+ *     nothing pending (rest day, all done, exam passed) sends nothing;
+ *   - no study plan → a short nudge to come back to the course, with a link to it, and a link to create a
+ *     study plan when the student can still create one this month.
  *
- * Content: only stored data — the day's tasks (re-planned deterministically for the new day exactly as
- * opening the plan does, planner/schedule.ts) and the focus notes saved when the plan was made. No AI call.
+ * When: from STUDY_REMINDER_LOCAL_HOUR (default 08:00) local time — the plan's time zone (stored from the
+ * device), else the device time zone the app reports with `app_opened`. No known zone → no email (we
+ * can't know it's 08:00 there).
+ *
+ * Language: the app language the app last reported (`app_opened`), else the plan's / course's language.
+ *
+ * Content: only stored data — no AI call, no offers, prices or upgrade prompts.
  *
  * At most one per user and local day: a `study_reminder_emails` row is claimed before sending (primary key
  * user + date), and Resend gets an idempotency key for the same pair, so overlapping runs, retries and
  * restarts can't send twice. A failed send is retried on later runs that day (3 attempts at most).
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Entitlement, StudyPlan, TaskActivity } from '@study/shared';
-import { and, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
-import { getEntitlement } from '../billing/entitlements.js';
+import type { StudyPlan, TaskActivity } from '@study/shared';
+import { and, count, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { getEntitlement, isOwner } from '../billing/entitlements.js';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
-import { documents, studyPlans, studyReminderEmails, users } from '../db/schema.js';
+import { analyticsEvents, documents, stripeCustomers, studyPlans, studyReminderEmails, subscriptions, users } from '../db/schema.js';
 import { sendMail, type Mail } from '../lib/mailer.js';
 import { isValidTimeZone, localDate } from './planner/dates.js';
 import { getStudyPlan } from './study-plans.js';
@@ -35,12 +46,37 @@ export const MAX_ATTEMPTS = 3;
 const PURGE_DAYS = 14;
 const RUN_EVERY_MS = 15 * 60_000;
 type Lang = 'en' | 'es' | 'fr' | 'ar';
-const asLang = (l: string | null | undefined): Lang => (l === 'es' || l === 'fr' || l === 'ar' ? l : 'en');
+const isLang = (l: unknown): l is Lang => l === 'en' || l === 'es' || l === 'fr' || l === 'ar';
+const asLang = (l: string | null | undefined): Lang => (isLang(l) ? l : 'en');
 
 // ---------------------------------------------------------------- eligibility
 
-/** A paid plan, the free trial or owner access: these students don't get reminder emails. */
-export const hasActiveSubscription = (e: Pick<Entitlement, 'isPremium' | 'tier'>) => e.isPremium || e.tier === 'trial';
+export type BillingEligibility =
+  | { ok: true; /** The Free plan still allows creating a study plan this month. */ canCreatePlan: boolean }
+  | { ok: false; reason: 'owner' | 'subscription_record' | 'stripe_customer' | 'not_free' | 'unknown' };
+
+/**
+ * Free plan and never paid, from the server's billing records only. Fails closed: any record of a
+ * subscription or trial (active, cancelled or expired, any store), any Stripe customer, owner access, an
+ * entitlement other than plain Free, or an error while checking → not eligible.
+ */
+export async function billingEligibility(userId: string): Promise<BillingEligibility> {
+  try {
+    if (await isOwner(userId)) return { ok: false, reason: 'owner' };
+    const [[sub], [customer]] = await Promise.all([
+      db.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1),
+      db.select({ id: stripeCustomers.stripeCustomerId }).from(stripeCustomers).where(eq(stripeCustomers.userId, userId)).limit(1),
+    ]);
+    if (sub) return { ok: false, reason: 'subscription_record' };
+    if (customer) return { ok: false, reason: 'stripe_customer' };
+    const e = await getEntitlement(userId);
+    if (e.tier !== 'free' || e.isPremium || e.status !== 'free' || e.planId !== null) return { ok: false, reason: 'not_free' };
+    const plansLeft = e.limits.studyPlansPerMonth === null || e.usage.studyPlansThisMonth < e.limits.studyPlansPerMonth;
+    return { ok: true, canCreatePlan: plansLeft };
+  } catch {
+    return { ok: false, reason: 'unknown' };
+  }
+}
 
 export type Availability = { ok: true } | { ok: false; reason: 'disabled' | 'email_disabled' | 'no_web_app_url' };
 export function remindersAvailable(): Availability {
@@ -54,12 +90,6 @@ const WHY: Record<Exclude<Availability, { ok: true }>['reason'], string> = {
   email_disabled: 'not sent: EMAIL_PROVIDER is disabled — set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM',
   no_web_app_url: 'not sent: no web app origin for the links — set WEB_APP_URL (e.g. https://app.exama.app)',
 };
-
-/** The time zone reminders follow: the most recently updated plan's, else UTC. */
-export function reminderZone(plans: { timezone: string; updatedAt: Date }[]): string {
-  const p = [...plans].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).find((x) => isValidTimeZone(x.timezone));
-  return p?.timezone ?? 'UTC';
-}
 
 export function localHour(now: Date, tz: string): number {
   const h = new Intl.DateTimeFormat('en-GB', { timeZone: isValidTimeZone(tz) ? tz : 'UTC', hour: '2-digit', hourCycle: 'h23' }).format(now);
@@ -268,44 +298,187 @@ export function buildReminderEmail(input: {
     `<a href="${escapeHtml(input.unsubscribeUrl)}" style="color:#5B4CF5">${escapeHtml(t.stop)}</a> ${escapeHtml(t.manage)}</p></div>`;
 
   // RFC 8058 one-click unsubscribe when the API has a public https URL; the web page otherwise.
-  const headers: Record<string, string> = input.oneClickUrl
-    ? { 'List-Unsubscribe': `<${input.oneClickUrl}>, <${input.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-    : { 'List-Unsubscribe': `<${input.unsubscribeUrl}>` };
-  return { to: input.to, subject, text, html, headers };
+  return { to: input.to, subject, text, html, headers: unsubscribeHeaders(input.unsubscribeUrl, input.oneClickUrl) };
+}
+
+/** The "no study plan yet" email: come back to the course; create a plan when one can still be made. */
+const R: Record<
+  Lang,
+  {
+    subject: (course: string) => string;
+    hello: (name: string) => string;
+    intro: (course: string) => string;
+    keepGoing: string;
+    cta: string;
+    planTip: string;
+    planCta: string;
+    why: string;
+    stop: string;
+    manage: string;
+  }
+> = {
+  en: {
+    subject: (c) => `Pick up where you left off: ${c}`,
+    hello: (n) => `Hi ${n},`,
+    intro: (c) => `Your course “${c}” is waiting for you in Exama.`,
+    keepGoing: 'A short study session today helps you keep what you’ve learned fresh.',
+    cta: 'Continue studying',
+    planTip: 'Have an exam coming up? A study plan spreads your topics over the days you have left and tells you what to do each day.',
+    planCta: 'Create a study plan',
+    why: 'You get this email because you have a course in Exama.',
+    stop: 'Stop these emails',
+    manage: 'or turn them off in Account → Study reminders.',
+  },
+  es: {
+    subject: (c) => `Retoma donde lo dejaste: ${c}`,
+    hello: (n) => `Hola, ${n}:`,
+    intro: (c) => `Tu curso «${c}» te espera en Exama.`,
+    keepGoing: 'Una sesión de estudio corta hoy te ayuda a mantener fresco lo que has aprendido.',
+    cta: 'Seguir estudiando',
+    planTip: '¿Tienes un examen pronto? Un plan de estudio reparte tus temas en los días que te quedan y te dice qué hacer cada día.',
+    planCta: 'Crear un plan de estudio',
+    why: 'Recibes este correo porque tienes un curso en Exama.',
+    stop: 'Dejar de recibir estos correos',
+    manage: 'o desactívalos en Cuenta → Recordatorios de estudio.',
+  },
+  fr: {
+    subject: (c) => `Reprenez là où vous en étiez : ${c}`,
+    hello: (n) => `Bonjour ${n},`,
+    intro: (c) => `Votre cours « ${c} » vous attend dans Exama.`,
+    keepGoing: 'Une courte séance de révision aujourd’hui vous aide à garder en tête ce que vous avez appris.',
+    cta: 'Continuer à réviser',
+    planTip: 'Un examen approche ? Un plan de révision répartit vos thèmes sur les jours qui restent et vous dit quoi faire chaque jour.',
+    planCta: 'Créer un plan de révision',
+    why: 'Vous recevez cet e-mail parce que vous avez un cours dans Exama.',
+    stop: 'Ne plus recevoir ces e-mails',
+    manage: 'ou désactivez-les dans Compte → Rappels de révision.',
+  },
+  ar: {
+    subject: (c) => `تابع من حيث توقفت: ${c}`,
+    hello: (n) => `مرحبًا ${n}،`,
+    intro: (c) => `مقررك «${c}» بانتظارك في Exama.`,
+    keepGoing: 'جلسة مذاكرة قصيرة اليوم تساعدك على تثبيت ما تعلّمته.',
+    cta: 'تابع المذاكرة',
+    planTip: 'هل لديك اختبار قريب؟ خطة المذاكرة توزّع موضوعاتك على الأيام المتبقية وتخبرك بما تفعله كل يوم.',
+    planCta: 'أنشئ خطة مذاكرة',
+    why: 'تصلك هذه الرسالة لأن لديك مقررًا في Exama.',
+    stop: 'إيقاف هذه الرسائل',
+    manage: 'أو أوقفها من الحساب ← تذكيرات المذاكرة.',
+  },
+};
+
+const unsubscribeHeaders = (unsubscribeUrl: string, oneClick: string | null): Record<string, string> =>
+  oneClick
+    ? { 'List-Unsubscribe': `<${oneClick}>, <${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+    : { 'List-Unsubscribe': `<${unsubscribeUrl}>` };
+
+export function buildReturnEmail(input: {
+  to: string;
+  name: string;
+  language: string;
+  course: { title: string; documentId: string };
+  courseUrl: string;
+  /** Only when the student can still create a study plan. */
+  createPlanUrl: string | null;
+  unsubscribeUrl: string;
+  oneClickUrl: string | null;
+}): Mail {
+  const lang = asLang(input.language);
+  const t = R[lang];
+  const name = input.name.trim().split(/\s+/)[0] || input.name;
+  const title = input.course.title.trim() || 'Exama';
+  const text = [
+    t.hello(name),
+    '',
+    t.intro(title),
+    t.keepGoing,
+    '',
+    `${t.cta}: ${input.courseUrl}`,
+    ...(input.createPlanUrl ? ['', t.planTip, `${t.planCta}: ${input.createPlanUrl}`] : []),
+    '',
+    '—',
+    t.why,
+    `${t.stop}: ${input.unsubscribeUrl}`,
+    t.manage,
+  ].join('\n');
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
+  const html =
+    `<div dir="${dir}" lang="${lang}" style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:16px;line-height:1.5;color:#15173F;max-width:560px">` +
+    `<p>${escapeHtml(t.hello(name))}</p><p>${escapeHtml(t.intro(title))}</p><p>${escapeHtml(t.keepGoing)}</p>` +
+    `<p style="margin:16px 0"><a href="${escapeHtml(input.courseUrl)}" style="display:inline-block;background:#5B4CF5;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:10px">${escapeHtml(t.cta)}</a></p>` +
+    (input.createPlanUrl
+      ? `<p>${escapeHtml(t.planTip)} <a href="${escapeHtml(input.createPlanUrl)}" style="color:#5B4CF5;font-weight:600">${escapeHtml(t.planCta)}</a></p>`
+      : '') +
+    `<p style="font-size:13px;color:#646A7E;border-top:1px solid #E3E5EE;padding-top:12px">${escapeHtml(t.why)} ` +
+    `<a href="${escapeHtml(input.unsubscribeUrl)}" style="color:#5B4CF5">${escapeHtml(t.stop)}</a> ${escapeHtml(t.manage)}</p></div>`;
+  return { to: input.to, subject: t.subject(title), text, html, headers: unsubscribeHeaders(input.unsubscribeUrl, input.oneClickUrl) };
 }
 
 // ---------------------------------------------------------------- the daily run
 
 type PlanRow = typeof studyPlans.$inferSelect;
-export type RunResult = { sent: number; failed: number; skipped: number; notDue: number; subscribers: number; unavailable?: Exclude<Availability, { ok: true }>['reason'] };
+export type RunResult = {
+  sent: number;
+  failed: number;
+  /** Nothing to send today (plan with nothing pending, course not ready). */
+  skipped: number;
+  notDue: number;
+  /** Excluded by billing: any subscription/trial record, a Stripe customer, owner access, or not plain Free. */
+  subscribers: number;
+  /** No known local time zone (no plan, and the app hasn't reported one): never sent. */
+  noTimeZone: number;
+  unavailable?: Exclude<Availability, { ok: true }>['reason'];
+};
 
-/** Today's work across the student's plans: pending tasks on each plan's local date (exam not passed). */
-async function coursesForToday(userId: string, plans: PlanRow[], now: Date): Promise<{ date: string; language: string; courses: ReminderCourse[] }> {
-  const titles = new Map(
-    (await db.select({ id: documents.id, title: documents.title }).from(documents).where(inArray(documents.id, plans.map((p) => p.documentId)))).map((d) => [d.id, d.title]),
-  );
-  const courses: ReminderCourse[] = [];
-  let language = 'en';
-  for (const p of plans) {
-    let plan: StudyPlan;
-    try {
-      plan = await getStudyPlan(userId, p.documentId, now); // deterministic re-plan for the new day; no AI
-    } catch {
-      continue; // course deleted meanwhile
-    }
-    if (plan.daysUntilExam < 0) continue;
-    const tasks = plan.tasks.filter((x) => x.date === plan.today && x.status === 'pending');
-    if (!tasks.length) continue;
-    const topics = [...new Set(tasks.map((x) => x.topic).filter((x): x is string => !!x))];
-    const focus = topics
-      .map((topic) => ({ topic, text: plan.topics.find((i) => i.topic === topic)?.focus?.trim() ?? '' }))
-      .filter((f) => f.text)
-      .slice(0, 2);
-    if (!courses.length) language = plan.language;
-    courses.push({ title: titles.get(p.documentId) ?? '', documentId: p.documentId, daysUntilExam: plan.daysUntilExam, tasks: tasks.map((x) => ({ activity: x.activity, topic: x.topic, minutes: x.minutes })), focus });
+/** Today's pending tasks of the plan on its local date (exam not passed). Null: nothing to send today. */
+async function planForToday(userId: string, p: PlanRow, title: string, now: Date): Promise<{ language: string; course: ReminderCourse } | null> {
+  let plan: StudyPlan;
+  try {
+    plan = await getStudyPlan(userId, p.documentId, now); // deterministic re-plan for the new day; no AI
+  } catch {
+    return null; // course deleted meanwhile
   }
-  return { date: localDate(now, reminderZone(plans)), language, courses };
+  if (plan.daysUntilExam < 0) return null;
+  const tasks = plan.tasks.filter((x) => x.date === plan.today && x.status === 'pending');
+  if (!tasks.length) return null;
+  const topics = [...new Set(tasks.map((x) => x.topic).filter((x): x is string => !!x))];
+  const focus = topics
+    .map((topic) => ({ topic, text: plan.topics.find((i) => i.topic === topic)?.focus?.trim() ?? '' }))
+    .filter((f) => f.text)
+    .slice(0, 2);
+  return {
+    language: plan.language,
+    course: { title, documentId: p.documentId, daysUntilExam: plan.daysUntilExam, tasks: tasks.map((x) => ({ activity: x.activity, topic: x.topic, minutes: x.minutes })), focus },
+  };
 }
+
+/**
+ * What the app last reported about the device (`app_opened`, signed in): its app language and time zone.
+ * Only these two fields are read; invalid values are ignored.
+ */
+async function deviceSignals(userId: string): Promise<{ language: Lang | null; timeZone: string | null }> {
+  const events = await db
+    .select({ properties: analyticsEvents.properties })
+    .from(analyticsEvents)
+    .where(and(eq(analyticsEvents.userId, userId), eq(analyticsEvents.name, 'app_opened'), eq(analyticsEvents.source, 'client')))
+    .orderBy(desc(analyticsEvents.createdAt))
+    .limit(20);
+  let language: Lang | null = null;
+  let timeZone: string | null = null;
+  for (const { properties: e } of events) {
+    if (!language && isLang(e.app_language)) language = e.app_language;
+    if (!timeZone && typeof e.time_zone === 'string' && isValidTimeZone(e.time_zone)) timeZone = e.time_zone;
+    if (language && timeZone) break;
+  }
+  return { language, timeZone };
+}
+
+/** Absolute link into the web app (WEB_APP_URL is validated as an absolute origin, https in production). */
+const appLink = (path: string, params?: Record<string, string>) => {
+  const u = new URL(path, `${config.WEB_APP_URL!.replace(/\/+$/, '')}/`);
+  for (const [k, v] of Object.entries(params ?? {})) u.searchParams.set(k, v);
+  return u.toString();
+};
 
 /** Claims (user, date) for sending. False when another run already did, or the day is done. */
 async function claim(userId: string, date: string): Promise<boolean> {
@@ -326,7 +499,7 @@ let running = false;
 
 /** One pass over all eligible accounts (`userIds` limits it, for tests). */
 export async function runStudyReminders(now = new Date(), opts: { userIds?: string[] } = {}): Promise<RunResult> {
-  const result: RunResult = { sent: 0, failed: 0, skipped: 0, notDue: 0, subscribers: 0 };
+  const result: RunResult = { sent: 0, failed: 0, skipped: 0, notDue: 0, subscribers: 0, noTimeZone: 0 };
   const available = remindersAvailable();
   if (!available.ok) {
     if (lastUnavailable !== available.reason) console[available.reason === 'disabled' ? 'log' : 'error'](`[study-reminders] Daily study-plan emails are ${WHY[available.reason]}.`);
@@ -337,54 +510,79 @@ export async function runStudyReminders(now = new Date(), opts: { userIds?: stri
   if (running) return result;
   running = true;
   try {
-    // Accounts with a plan, a confirmed address and reminders on.
+    // Accounts with a confirmed address, reminders on and exactly one course (all of the user's documents
+    // count, like the plan's course limit).
+    const courseCounts = db.select({ userId: documents.userId, n: count().as('n') }).from(documents).groupBy(documents.userId).as('course_counts');
     const rows = await db
-      .select({ plan: studyPlans, email: users.email, name: users.name })
-      .from(studyPlans)
-      .innerJoin(users, eq(users.id, studyPlans.userId))
+      .select({ userId: users.id, email: users.email, name: users.name, doc: { id: documents.id, title: documents.title, status: documents.status, aiLanguage: documents.aiLanguage, summaryLanguage: documents.summaryLanguage }, plan: studyPlans })
+      .from(users)
+      .innerJoin(courseCounts, and(eq(courseCounts.userId, users.id), eq(courseCounts.n, 1)))
+      .innerJoin(documents, eq(documents.userId, users.id))
+      .leftJoin(studyPlans, eq(studyPlans.documentId, documents.id))
       .where(and(eq(users.studyReminderEmails, true), isNotNull(users.emailVerifiedAt), ...(opts.userIds ? [inArray(users.id, opts.userIds)] : [])));
-    const byUser = new Map<string, { email: string; name: string; plans: PlanRow[] }>();
-    for (const r of rows) {
-      const u = byUser.get(r.plan.userId) ?? { email: r.email, name: r.name, plans: [] };
-      u.plans.push(r.plan);
-      byUser.set(r.plan.userId, u);
-    }
 
-    for (const [userId, u] of byUser) {
-      const zone = reminderZone(u.plans);
-      const date = localDate(now, zone);
-      if (localHour(now, zone) < config.STUDY_REMINDER_LOCAL_HOUR) {
-        result.notDue++;
-        continue;
-      }
-      const [done] = await db
-        .select({ status: studyReminderEmails.status, attempts: studyReminderEmails.attempts })
-        .from(studyReminderEmails)
-        .where(and(eq(studyReminderEmails.userId, userId), eq(studyReminderEmails.localDate, date)));
-      if (done && (done.status !== 'failed' || done.attempts >= MAX_ATTEMPTS)) continue;
+    for (const u of rows) {
+      const { userId } = u;
       try {
-        if (hasActiveSubscription(await getEntitlement(userId))) {
+        const device = await deviceSignals(userId);
+        // The plan's zone (its "today" is computed there), else the device's; unknown → never sent.
+        const zone = u.plan && isValidTimeZone(u.plan.timezone) ? u.plan.timezone : device.timeZone;
+        if (!zone) {
+          result.noTimeZone++;
+          continue;
+        }
+        const date = localDate(now, zone);
+        if (localHour(now, zone) < config.STUDY_REMINDER_LOCAL_HOUR) {
+          result.notDue++;
+          continue;
+        }
+        const [done] = await db
+          .select({ status: studyReminderEmails.status, attempts: studyReminderEmails.attempts })
+          .from(studyReminderEmails)
+          .where(and(eq(studyReminderEmails.userId, userId), eq(studyReminderEmails.localDate, date)));
+        if (done && (done.status !== 'failed' || done.attempts >= MAX_ATTEMPTS)) continue;
+
+        const billing = await billingEligibility(userId);
+        if (!billing.ok) {
           result.subscribers++;
           continue;
         }
-        const today = await coursesForToday(userId, u.plans, now);
+
+        const token = unsubscribeToken(userId);
+        const courseLanguage = u.doc.aiLanguage !== 'source' ? u.doc.aiLanguage : u.doc.summaryLanguage;
+        let mail: Mail | null = null;
+        if (u.plan) {
+          const today = await planForToday(userId, u.plan, u.doc.title, now);
+          if (today)
+            mail = buildReminderEmail({
+              to: u.email,
+              name: u.name,
+              language: device.language ?? today.language,
+              date,
+              courses: [today.course],
+              planUrl: (id) => appLink(`plan/${id}`),
+              unsubscribeUrl: unsubscribePageUrl(token),
+              oneClickUrl: oneClickUrl(token),
+            });
+        } else if (u.doc.status === 'ready') {
+          mail = buildReturnEmail({
+            to: u.email,
+            name: u.name,
+            language: device.language ?? courseLanguage ?? 'en',
+            course: { title: u.doc.title, documentId: u.doc.id },
+            courseUrl: appLink(`documents/${u.doc.id}`),
+            createPlanUrl: billing.canCreatePlan ? appLink('plan/setup', { id: u.doc.id }) : null,
+            unsubscribeUrl: unsubscribePageUrl(token),
+            oneClickUrl: oneClickUrl(token),
+          });
+        }
+
         if (!(await claim(userId, date))) continue;
-        if (!today.courses.length) {
+        if (!mail) {
           await mark(userId, date, 'skipped');
           result.skipped++;
           continue;
         }
-        const token = unsubscribeToken(userId);
-        const mail = buildReminderEmail({
-          to: u.email,
-          name: u.name,
-          language: today.language,
-          date: today.date,
-          courses: today.courses,
-          planUrl: (id) => `${config.WEB_APP_URL}/plan/${id}`,
-          unsubscribeUrl: unsubscribePageUrl(token),
-          oneClickUrl: oneClickUrl(token),
-        });
         try {
           await sendMail({ ...mail, idempotencyKey: `study-reminder/${userId}/${date}` });
           await mark(userId, date, 'sent');
@@ -398,7 +596,7 @@ export async function runStudyReminders(now = new Date(), opts: { userIds?: stri
         console.error('[study-reminders] skipped one account after an error:', err instanceof Error ? err.message : err);
       }
     }
-    if (result.sent || result.failed) console.log(`[study-reminders] sent ${result.sent}, failed ${result.failed}, nothing planned ${result.skipped}.`);
+    if (result.sent || result.failed) console.log(`[study-reminders] sent ${result.sent}, failed ${result.failed}, nothing to send ${result.skipped}.`);
     await db.delete(studyReminderEmails).where(lt(studyReminderEmails.updatedAt, new Date(now.getTime() - PURGE_DAYS * 86_400_000)));
     return result;
   } finally {
