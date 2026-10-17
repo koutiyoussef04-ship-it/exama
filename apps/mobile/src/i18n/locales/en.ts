@@ -432,6 +432,7 @@ const en = {
     usageTrial: 'Your free trial',
     usageCourses: 'Courses',
     adminDashboard: 'Admin dashboard',
+    administration: 'Administration',
     usageExams: 'Exams',
     usagePractice: 'Practice questions',
     usageUploads: 'PDF & PowerPoint uploads',

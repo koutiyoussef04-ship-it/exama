@@ -37,8 +37,9 @@ const { config } = await import('../src/config.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');
 const { stripeBilling } = await import('../src/billing/index.js');
 const { getEntitlement } = await import('../src/billing/entitlements.js');
-const { summarizeStripe, clearStripeCache, resolveRange } = await import('../src/admin/service.js');
+const { summarizeStripe, clearStripeCache, resolveRange, aiCoverage, isUnusual, summarizeCustomerCharges, clearCustomerChargeCache } = await import('../src/admin/service.js');
 const { recordAIUsage, flushAIUsage } = await import('../src/admin/ai-usage-recorder.js');
+const { toChargeLike } = await import('../src/billing/providers/stripe-api.js');
 const { estimateAICostMicroUsd, AI_PRICING_VERSION } = await import('../src/billing/ai-pricing.js');
 const { withAIUsage } = await import('../src/ai/usage.js');
 const { AnthropicProvider } = await import('../src/ai/providers/anthropic.js');
@@ -168,6 +169,10 @@ test('validation: pagination limits, filters and date ranges', async () => {
     '/admin/customers?signupFrom=2026-10-10&signupTo=2026-10-01',
     '/admin/customers?signupFrom=yesterday',
     `/admin/customers?q=${'a'.repeat(101)}`,
+    '/admin/customers?plan=gold',
+    '/admin/customers?plan=owner',
+    '/admin/customers?sort=password',
+    '/admin/customers?sort=ai_cost_desc;drop',
     '/admin/overview?range=1y',
     '/admin/overview?from=2025-01-01&to=2026-06-01',
     '/admin/overview?from=2026-10-01',
@@ -379,4 +384,194 @@ test('live Stripe reads: concurrent views of a range share one Stripe read, then
   assert.equal(stripeCalls.length, 1, 'one listCharges for three concurrent views');
   assert.equal((await call('/admin/billing?range=30d', { token: owner.token })).status, 200);
   assert.equal(stripeCalls.length, 1, 'served from the cache');
+});
+
+test('customer directory: email search, plan and status filters, sorting by signup, email, activity and AI cost', async () => {
+  const ids = (r: { body: AdminCustomersPage }) => r.body.items.map((c) => c.id);
+  const get = (qs: string) => call<AdminCustomersPage>(`/admin/customers?q=${RUN}&limit=100&${qs}`, { token: owner.token });
+
+  // Email search: one exact account; case-insensitive.
+  const one = await call<AdminCustomersPage>(`/admin/customers?q=${encodeURIComponent(paid.email.toUpperCase())}`, { token: owner.token });
+  assert.deepEqual(ids(one), [paid.id]);
+  assert.equal(one.body.items[0]!.email, paid.email);
+
+  // Plan = the tier the account has now; owner accounts never match a plan filter.
+  // (Other accounts of this run, e.g. from the funnel test, may also match; only the known ones are checked.)
+  const known = [owner, free, trial, paid, cancelling, lapsed, stripeTrial, google];
+  const expectPlan = async (plan: string, expected: { id: string }[]) => {
+    const got = new Set(ids(await get(`plan=${plan}`)));
+    for (const u of known) assert.equal(got.has(u.id), expected.includes(u), `plan=${plan}: ${u.email}`);
+  };
+  await expectPlan('student', [paid, google]);
+  await expectPlan('pro', [cancelling, stripeTrial]);
+  await expectPlan('trial', [trial]);
+  await expectPlan('free', [free, lapsed]);
+  await expectPlan('basic', []);
+  const proTrialing = new Set(ids(await get('plan=pro&status=trialing')));
+  assert.ok(proTrialing.has(stripeTrial.id) && !proTrialing.has(cancelling.id), 'plan and status combine');
+
+  // Known AI usage for sorting: free 3 calls now ($0.50 in total), lapsed one older call ($2, 40 days ago),
+  // stripeTrial $1.20 in the last 7 days with no earlier usage (unusual).
+  await sql`insert into ai_usage (user_id, feature, provider, model, input_tokens, output_tokens, latency_ms, success, estimated_cost_micro_usd, pricing_version)
+    values (${free.id}, 'exam_generation', 'anthropic', 'claude-sonnet-5', 1000, 100, 50, true, 200000, ${AI_PRICING_VERSION}),
+           (${free.id}, 'exam_generation', 'anthropic', 'claude-sonnet-5', 1000, 100, 50, true, 200000, ${AI_PRICING_VERSION}),
+           (${free.id}, 'flashcards', 'anthropic', 'claude-sonnet-5', 500, 50, 50, true, 100000, ${AI_PRICING_VERSION}),
+           (${stripeTrial.id}, 'document_processing', 'anthropic', 'claude-sonnet-5', 5000, 500, 50, true, 1200000, ${AI_PRICING_VERSION})`;
+  await sql`insert into ai_usage (user_id, feature, provider, model, input_tokens, output_tokens, latency_ms, success, estimated_cost_micro_usd, pricing_version, created_at)
+    values (${lapsed.id}, 'study_plan', 'anthropic', 'claude-sonnet-5', 9000, 900, 50, true, 2000000, ${AI_PRICING_VERSION}, now() - interval '40 days')`;
+
+  const pos = (list: string[], id: string) => list.indexOf(id);
+  const byCost = ids(await get('sort=ai_cost_desc'));
+  assert.ok(pos(byCost, lapsed.id) < pos(byCost, stripeTrial.id) && pos(byCost, stripeTrial.id) < pos(byCost, free.id) && pos(byCost, free.id) < pos(byCost, paid.id) && pos(byCost, paid.id) < pos(byCost, trial.id));
+  const by30 = ids(await get('sort=ai_cost_30d_desc'));
+  assert.ok(pos(by30, stripeTrial.id) < pos(by30, free.id) && pos(by30, free.id) < pos(by30, lapsed.id), 'the 40-day-old call does not count for 30 days');
+  const byCalls = ids(await get('sort=ai_calls_desc'));
+  assert.ok(pos(byCalls, free.id) < pos(byCalls, paid.id) && pos(byCalls, paid.id) < pos(byCalls, lapsed.id));
+  const emails = (await get('sort=email_asc')).body.items.map((c) => c.email.toLowerCase());
+  assert.deepEqual(emails, [...emails].sort());
+  const asc = ids(await get('sort=signup_asc'));
+  const desc = ids(await get('sort=signup_desc'));
+  assert.deepEqual(asc, [...desc].reverse());
+  const active = (await get('sort=last_active_desc')).body.items.map((c) => c.lastActivityAt);
+  const firstNull = active.indexOf(null);
+  assert.ok(firstNull === -1 || active.slice(firstNull).every((a) => a === null), 'accounts without activity come last');
+  for (let i = 1; i < (firstNull === -1 ? active.length : firstNull); i++) assert.ok(active[i - 1]! >= active[i]!);
+
+  // Per-row AI figures: recorded calls, 30-day window, unpriced calls, unusual flag.
+  const all = new Map((await get('')).body.items.map((c) => [c.id, c]));
+  const f = all.get(free.id)!.ai;
+  assert.deepEqual([f.calls, f.estimatedUsd, f.last30dCalls, f.last30dUsd, f.unpricedCalls, f.unusual], [4, 0.5, 4, 0.5, 1, false]); // + the unpriced call from the AI test
+  const l = all.get(lapsed.id)!.ai;
+  assert.deepEqual([l.calls, l.estimatedUsd, l.last30dCalls, l.last30dUsd], [1, 2, 0, 0]);
+  assert.equal(all.get(stripeTrial.id)!.ai.unusual, true, '$1.20 in 7 days with no earlier usage');
+  assert.equal(all.get(trial.id)!.ai.calls, 0);
+  assert.equal(all.get(trial.id)!.ai.coverage, 'full', 'signed up after recording started: 0 really means none');
+});
+
+test('coverage: no recorded usage is told apart from usage that was never measured', async () => {
+  const since = new Date('2026-10-17T22:31:00Z');
+  assert.equal(aiCoverage(new Date('2026-10-18T00:00:00Z'), since), 'full');
+  assert.equal(aiCoverage(new Date('2026-10-01T00:00:00Z'), since), 'partial');
+  assert.equal(aiCoverage(new Date('2026-10-18T00:00:00Z'), null), 'not_tracked');
+  assert.equal(isUnusual(1_000_000, 0), true);
+  assert.equal(isUnusual(999_999, 0), false);
+  assert.equal(isUnusual(300_000, 100_000), true);
+  assert.equal(isUnusual(200_000, 50_000), false, 'below $0.25 is never unusual');
+
+  // An account older than the first recorded call: its earlier AI usage is unknown, not zero.
+  await sql`update users set created_at = '2020-01-01T00:00:00Z' where id = ${google.id}`;
+  const g = (await call<AdminCustomerDetail>(`/admin/customers/${google.id}`, { token: owner.token })).body;
+  assert.equal(g.customer.ai.coverage, 'partial');
+  assert.equal(g.aiUsage.coverage, 'partial');
+  assert.ok(g.aiUsage.trackedSince && new Date(g.aiUsage.trackedSince) > new Date('2020-01-01'));
+});
+
+test('customer detail: AI usage by window, feature, model and day; transcription minutes; tokens are recorded, costs estimated', async () => {
+  await sql`insert into usage_ledger (user_id, kind, amount) values (${free.id}, 'media_minutes', 12)`;
+  await sql`insert into usage_ledger (user_id, kind, amount, created_at) values (${free.id}, 'media_minutes', 8, now() - interval '45 days')`;
+  const d = (await call<AdminCustomerDetail>(`/admin/customers/${free.id}`, { token: owner.token })).body;
+  const a = d.aiUsage;
+  assert.equal(a.source, 'estimate');
+  assert.equal(a.coverage, 'full');
+  assert.ok(a.trackedSince);
+  assert.deepEqual(a.pricingVersions, [AI_PRICING_VERSION]);
+  assert.deepEqual(a.allTime, { calls: 4, failedCalls: 0, inputTokens: 2600, outputTokens: 350, estimatedUsd: 0.5, unpricedCalls: 1 });
+  assert.deepEqual(a.last7d, a.allTime);
+  assert.deepEqual(a.last30d, a.allTime);
+  // Recorded estimates match the versioned price table ($2/M input, $10/M output for claude-sonnet-5).
+  assert.equal(estimateAICostMicroUsd('claude-sonnet-5', { inputTokens: 1000, outputTokens: 100 }), 3000);
+  const models = new Map(a.byModel.map((m) => [m.model, m]));
+  assert.deepEqual([models.get('claude-sonnet-5')?.calls, models.get('claude-sonnet-5')?.estimatedUsd], [3, 0.5]);
+  assert.deepEqual([models.get('unpriced-model')?.calls, models.get('unpriced-model')?.unpricedCalls, models.get('unpriced-model')?.estimatedUsd], [1, 1, 0]);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(a.daily.find((x) => x.day === today), { day: today, calls: 4, estimatedUsd: 0.5 });
+  assert.ok(d.aiByFeature.some((x) => x.feature === 'flashcards' && x.calls === 1));
+  assert.deepEqual(a.transcription, { source: 'estimate', minutes: 20, minutesLast30d: 12, estimatedUsd: 0.07, usdPerMinute: 0.0035 });
+
+  const l = (await call<AdminCustomerDetail>(`/admin/customers/${lapsed.id}`, { token: owner.token })).body.aiUsage;
+  assert.deepEqual([l.allTime.calls, l.allTime.estimatedUsd, l.last30d.calls, l.last7d.calls, l.daily.length], [1, 2, 0, 0, 0]);
+
+  const none = (await call<AdminCustomerDetail>(`/admin/customers/${trial.id}`, { token: owner.token })).body.aiUsage;
+  assert.deepEqual([none.allTime.calls, none.byModel.length, none.daily.length, none.coverage], [0, 0, 0, 'full']);
+});
+
+test('customer payments: live Stripe charges for that customer only, refunds and failures; store and missing customers are unavailable', async () => {
+  const listed: string[] = [];
+  const now = Math.floor(Date.now() / 1000);
+  Object.assign(stripeBilling!.api, {
+    async listCustomerCharges(customerId: string, max: number) {
+      listed.push(customerId);
+      assert.ok(max <= 100);
+      if (customerId.startsWith('cus_broken')) throw new Error('stripe down');
+      return {
+        items: [
+          { id: 'ch_c1', created: now - 50, amount: 2000, amountRefunded: 500, currency: 'eur', status: 'succeeded', customerId, fee: 60, failureCode: null, livemode: false, captured: true, disputed: false },
+          { id: 'ch_c2', created: now - 90, amount: 999, amountRefunded: 0, currency: 'eur', status: 'failed', customerId, fee: null, failureCode: 'card_declined', livemode: false },
+          // An authorisation never captured is not money received.
+          { id: 'ch_c3', created: now - 95, amount: 5000, amountRefunded: 0, currency: 'eur', status: 'succeeded', customerId, fee: null, failureCode: null, livemode: false, captured: false },
+          // Never shown for this customer, even if Stripe returned it.
+          { id: 'ch_other', created: now - 99, amount: 7777, amountRefunded: 0, currency: 'eur', status: 'succeeded', customerId: 'cus_someone_else', fee: 1, failureCode: null, livemode: false },
+        ],
+        truncated: false,
+      };
+    },
+  });
+  clearCustomerChargeCache();
+  const d = (await call<AdminCustomerDetail>(`/admin/customers/${stripeTrial.id}`, { token: owner.token })).body;
+  assert.ok(d.payments.available);
+  if (d.payments.available) {
+    assert.equal(d.payments.source, 'stripe');
+    assert.deepEqual(d.payments.byCurrency, [{ currency: 'eur', grossCents: 2000, refundedCents: 500, feesCents: 60, netCents: 1440, successfulPayments: 1, failedPayments: 1, refunds: 1 }]);
+    assert.deepEqual(d.payments.charges.map((c) => [c.id, c.status, c.failureCode]), [['ch_c1', 'succeeded', null], ['ch_c2', 'failed', 'card_declined'], ['ch_c3', 'uncaptured', null]]);
+    assert.ok(!JSON.stringify(d.payments).includes('ch_other'), "another customer's charge is never shown");
+    assert.ok(d.payments.charges[0]!.url.startsWith('https://dashboard.stripe.com/test/payments/ch_c1'));
+  }
+  assert.deepEqual(listed, [`cus_${RUN}`], "only this customer's Stripe id is read");
+  await call(`/admin/customers/${stripeTrial.id}`, { token: owner.token });
+  assert.equal(listed.length, 1, 'cached for 60 s');
+
+  const g = (await call<AdminCustomerDetail>(`/admin/customers/${google.id}`, { token: owner.token })).body.payments;
+  assert.ok(!g.available && /Google Play/.test(g.reason));
+  const f = (await call<AdminCustomerDetail>(`/admin/customers/${free.id}`, { token: owner.token })).body.payments;
+  assert.ok(!f.available && /No Stripe customer/.test(f.reason));
+  assert.equal(listed.length, 1, 'no Stripe call without a Stripe customer');
+
+  await sql`insert into stripe_customers (user_id, stripe_customer_id) values (${cancelling.id}, ${`cus_broken_${RUN}`})`;
+  const broken = (await call<AdminCustomerDetail>(`/admin/customers/${cancelling.id}`, { token: owner.token }));
+  assert.equal(broken.status, 200, 'a Stripe failure does not break the customer page');
+  assert.ok(!broken.body.payments.available);
+  assert.ok(!broken.text.includes('stripe down'), 'no raw Stripe error');
+
+  // Fee source: the charge's balance transaction, only when it is in the charge's own currency.
+  const charge = (over: Record<string, unknown>) =>
+    toChargeLike({ id: 'ch_x', created: 1, amount: 1000, amount_refunded: 0, currency: 'eur', status: 'succeeded', customer: 'cus_x', failure_code: null, livemode: true, captured: true, disputed: false, balance_transaction: null, ...over } as never);
+  assert.equal(charge({ balance_transaction: { id: 'txn_1', fee: 45, currency: 'eur' } }).fee, 45);
+  assert.equal(charge({ balance_transaction: { id: 'txn_2', fee: 40, currency: 'usd' } }).fee, null, 'a fee settled in another currency is unknown, not converted');
+  assert.equal(charge({ balance_transaction: 'txn_3' }).fee, null, 'not expanded: unknown');
+  assert.equal(charge({}).fee, null, 'no balance transaction: unknown');
+  assert.deepEqual([charge({ disputed: true }).disputed, charge({ captured: false }).captured, charge({ customer: { id: 'cus_obj' } }).customerId], [true, false, 'cus_obj']);
+  const known = summarizeCustomerCharges([
+    { id: 'a', created: 1, amount: 1000, amountRefunded: 300, currency: 'eur', status: 'succeeded', customerId: null, fee: 30, failureCode: null, livemode: true },
+    { id: 'b', created: 1, amount: 500, amountRefunded: 0, currency: 'eur', status: 'succeeded', customerId: null, fee: 15, failureCode: null, livemode: true },
+    { id: 'c', created: 1, amount: 900, amountRefunded: 0, currency: 'usd', status: 'failed', customerId: null, fee: null, failureCode: 'expired_card', livemode: true },
+  ]);
+  assert.deepEqual(known, [
+    { currency: 'eur', grossCents: 1500, refundedCents: 300, feesCents: 45, netCents: 1155, successfulPayments: 2, failedPayments: 0, refunds: 1 },
+    { currency: 'usd', grossCents: 0, refundedCents: 0, feesCents: 0, netCents: 0, successfulPayments: 0, failedPayments: 1, refunds: 0 },
+  ], 'currencies are never mixed; a failed payment adds nothing to gross or fees');
+  // The range summary (Overview / Billing) also ignores uncaptured authorisations.
+  assert.equal(summarizeStripe([{ id: 'u', created: 1, amount: 5000, amountRefunded: 0, currency: 'eur', status: 'succeeded', customerId: null, fee: null, failureCode: null, livemode: true, captured: false }], [])[0]!.grossCents, 0);
+
+  // Pure summary: a refund belongs to its charge; an unknown fee makes fees and net unknown, never 0.
+  const sum = summarizeCustomerCharges([
+    { id: 'a', created: 1, amount: 1000, amountRefunded: 1000, currency: 'eur', status: 'succeeded', customerId: null, fee: null, failureCode: null, livemode: true },
+    { id: 'b', created: 1, amount: 700, amountRefunded: 0, currency: 'eur', status: 'pending', customerId: null, fee: null, failureCode: null, livemode: true },
+  ]);
+  assert.deepEqual(sum, [{ currency: 'eur', grossCents: 1000, refundedCents: 1000, feesCents: null, netCents: null, successfulPayments: 1, failedPayments: 0, refunds: 1 }]);
+
+  // Ordinary users never reach any of this.
+  for (const path of [`/admin/customers/${stripeTrial.id}`, `/admin/customers?q=${RUN}&sort=ai_cost_desc`]) {
+    assert.equal((await call(path, { token: free.token })).status, 403, path);
+    assert.equal((await call(path)).status, 401, path);
+  }
 });

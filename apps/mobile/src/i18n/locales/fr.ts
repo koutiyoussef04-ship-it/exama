@@ -428,6 +428,7 @@ const fr: LocaleDict = {
     usageTrial: 'Votre essai gratuit',
     usageCourses: 'Cours',
     adminDashboard: 'Tableau de bord administrateur',
+    administration: 'Administration',
     usageExams: 'Examens',
     usagePractice: 'Questions d’entraînement',
     usageUploads: 'Imports de PDF et PowerPoint',

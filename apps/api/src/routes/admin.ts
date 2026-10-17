@@ -22,7 +22,7 @@ type AdminEnv = AuthEnv & { Variables: { auditTarget?: string } };
  * Only these query keys are kept in the audit log, each cut to 100 characters (never tokens or bodies).
  * The search text can be a customer's email, so only its length is kept.
  */
-const AUDITED_KEYS = ['range', 'from', 'to', 'interval', 'q', 'category', 'status', 'signupFrom', 'signupTo', 'activity', 'page', 'limit'];
+const AUDITED_KEYS = ['range', 'from', 'to', 'interval', 'q', 'category', 'status', 'signupFrom', 'signupTo', 'activity', 'plan', 'sort', 'page', 'limit'];
 const auditParams = (query: Record<string, string>) =>
   Object.fromEntries(
     Object.entries(query)

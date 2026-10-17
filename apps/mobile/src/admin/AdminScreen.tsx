@@ -10,19 +10,24 @@ import type {
   AdminBillingReport,
   AdminCategory,
   AdminCustomer,
+  AdminCustomerAI,
   AdminCustomerDetail,
+  AdminCustomerSort,
+  AdminUsageWindow,
   AdminCustomersPage,
   AdminHealth,
   AdminOverview,
   AdminRange,
   AdminSource,
   Point,
+  StripeMoney,
   StripeSummary,
+  Tier,
 } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Chips } from '@/components/planner';
 import { Badge, Body, Button, Card, colors, ErrorState, Loading, Screen, SectionLabel, space, Title } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -125,9 +130,11 @@ function Table({ columns, rows, onRowPress }: { columns: string[]; rows: (string
       {typeof c === 'string' ? <Text style={{ fontSize: 13, color: header ? colors.muted : colors.text, fontWeight: header ? '600' : '400' }} numberOfLines={2}>{c}</Text> : c}
     </View>
   );
+  // Scrolls sideways when the columns don't fit (narrow screens, wide tables) instead of overflowing the card.
   return (
-    <View>
-      <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border }}>{columns.map((c, j) => cell(c, j, true))}</View>
+    <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>
+      <View style={{ flexGrow: 1, minWidth: (columns.length + 1) * 90 }}>
+        <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border }}>{columns.map((c, j) => cell(c, j, true))}</View>
       {rows.map((r, i) => {
         const content = <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border }}>{r.map((c, j) => cell(c, j))}</View>;
         return onRowPress ? (
@@ -138,7 +145,8 @@ function Table({ columns, rows, onRowPress }: { columns: string[]; rows: (string
           <View key={i}>{content}</View>
         );
       })}
-    </View>
+      </View>
+    </ScrollView>
   );
 }
 function Loader<T>({ query, children }: { query: { data?: T; error: unknown; isLoading: boolean; refetch: () => unknown }; children: (data: T) => ReactNode }) {
@@ -150,6 +158,17 @@ function Loader<T>({ query, children }: { query: { data?: T; error: unknown; isL
 
 // ---------------------------------------------------------------- sections
 
+/** Fees come from Stripe's balance transactions; when any is missing the total is unavailable, never 0. */
+function FeeAndNetStats({ m }: { m: StripeMoney }) {
+  const known = m.feesCents != null;
+  return (
+    <>
+      <Stat label="Stripe fees" value={known ? money(m.feesCents, m.currency) : 'Unavailable'} hint={known ? 'From Stripe balance transactions' : 'Stripe did not report a fee in this currency for every payment'} />
+      <Stat label="Net after refunds and fees" value={known ? money(m.netCents, m.currency) : 'Unavailable'} hint="Not profit: excludes taxes, disputes, payouts and all other costs" />
+    </>
+  );
+}
+
 function StripeBlock({ stripe }: { stripe: StripeSummary }) {
   if (!stripe.available) return <Unavailable reason={stripe.reason} />;
   if (!stripe.byCurrency.length) return <Body muted style={{ fontSize: 13 }}>No Stripe payments in this range{stripe.livemode ? '' : ' (test mode)'}.</Body>;
@@ -160,8 +179,7 @@ function StripeBlock({ stripe }: { stripe: StripeSummary }) {
         <Stats key={m.currency}>
           <Stat label={`Gross payments (${m.currency.toUpperCase()})`} value={money(m.grossCents, m.currency)} hint={`${m.successfulPayments} successful`} />
           <Stat label="Refunds" value={money(m.refundedCents, m.currency)} hint={`${m.refunds} refunds`} />
-          <Stat label="Stripe fees" value={money(m.feesCents, m.currency)} />
-          <Stat label="Net after refunds and fees" value={money(m.netCents, m.currency)} hint="Not profit: excludes taxes and other costs" />
+          <FeeAndNetStats m={m} />
           <Stat label="Failed payments" value={int(m.failedPayments)} />
         </Stats>
       ))}
@@ -223,18 +241,61 @@ function OverviewTab({ range }: { range: AdminRange }) {
 const CATEGORY_TONE: Record<AdminCategory, 'neutral' | 'primary' | 'success' | 'warning'> = { free: 'neutral', trial: 'warning', paid: 'success', owner: 'primary' };
 const ALL = '' as const;
 
-function CustomersTab() {
+type SubscriptionStatusFilter = '' | 'none' | 'trialing' | 'active' | 'cancelled' | 'expired';
+const PLAN_OPTIONS: { value: Tier | typeof ALL; label: string }[] = [
+  { value: ALL, label: 'Any plan' },
+  ...(['free', 'trial', 'basic', 'student', 'pro'] as const).map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) })),
+];
+const STATUS_OPTIONS: { value: SubscriptionStatusFilter; label: string }[] = [
+  { value: '', label: 'Any status' },
+  { value: 'none', label: 'No subscription' },
+  { value: 'trialing', label: 'Trialing' },
+  { value: 'active', label: 'Active' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'expired', label: 'Expired' },
+];
+const SORT_OPTIONS: { value: AdminCustomerSort; label: string }[] = [
+  { value: 'signup_desc', label: 'Newest' },
+  { value: 'signup_asc', label: 'Oldest' },
+  { value: 'email_asc', label: 'Email A–Z' },
+  { value: 'last_active_desc', label: 'Recently active' },
+  { value: 'ai_cost_desc', label: 'AI cost (all time)' },
+  { value: 'ai_cost_30d_desc', label: 'AI cost (30 days)' },
+  { value: 'ai_calls_desc', label: 'AI calls' },
+];
+
+/** AI cost for a directory row: never shows 0 when nothing could have been recorded. */
+function aiCell(ai: AdminCustomerAI) {
+  if (ai.coverage === 'not_tracked') return 'not tracked';
+  const text = `${dollars(ai.estimatedUsd)} / ${dollars(ai.last30dUsd)}${ai.coverage === 'partial' ? ' *' : ''}`;
+  return ai.unusual ? (
+    <View key="ai" style={{ gap: space(1) }}>
+      <Text style={{ fontSize: 13, color: colors.text }}>{text}</Text>
+      <Badge label="Unusual" tone="warning" />
+    </View>
+  ) : (
+    text
+  );
+}
+
+function CustomersTab({ selected, onSelect }: { selected: string | null; onSelect: (id: string | null) => void }) {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<AdminCategory | typeof ALL>(ALL);
+  const [plan, setPlan] = useState<Tier | typeof ALL>(ALL);
+  const [status, setStatus] = useState<SubscriptionStatusFilter>('');
   const [activity, setActivity] = useState<'' | 'active_7d' | 'active_30d' | 'inactive_30d'>('');
+  const [sort, setSort] = useState<AdminCustomerSort>('signup_desc');
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<string | null>(null);
   const list = useQuery({
-    queryKey: ['admin', 'customers', q, category, activity, page],
-    queryFn: () => api.admin<AdminCustomersPage>('customers', { q, category, activity, page, limit: 25 }),
+    queryKey: ['admin', 'customers', q, category, plan, status, activity, sort, page],
+    queryFn: () => api.admin<AdminCustomersPage>('customers', { q, category, plan, status, activity, sort, page, limit: 25 }),
   });
-  if (selected) return <CustomerDetail id={selected} onBack={() => setSelected(null)} />;
+  const reset = <T,>(set: (v: T) => void) => (v: T) => {
+    set(v);
+    setPage(1);
+  };
+  if (selected) return <CustomerDetail id={selected} onBack={() => onSelect(null)} />;
   return (
     <>
       <Card style={{ gap: space(3) }}>
@@ -253,7 +314,7 @@ function CustomersTab() {
           style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: space(3), fontSize: 15, color: colors.text }}
         />
         <Chips
-          options={[{ value: ALL as AdminCategory | typeof ALL, label: 'All plans' }, ...(['free', 'trial', 'paid', 'owner'] as const).map((c) => ({ value: c, label: c[0]!.toUpperCase() + c.slice(1) }))]}
+          options={[{ value: ALL as AdminCategory | typeof ALL, label: 'All accounts' }, ...(['free', 'trial', 'paid', 'owner'] as const).map((c) => ({ value: c, label: c[0]!.toUpperCase() + c.slice(1) }))]}
           value={category}
           onChange={(v) => {
             setCategory(v);
@@ -273,12 +334,22 @@ function CustomersTab() {
             setPage(1);
           }}
         />
+        <SectionLabel>Current plan</SectionLabel>
+        <Chips options={PLAN_OPTIONS} value={plan} onChange={reset(setPlan)} />
+        <SectionLabel>Subscription status</SectionLabel>
+        <Chips options={STATUS_OPTIONS} value={status} onChange={reset(setStatus)} />
+        <SectionLabel>Sort by</SectionLabel>
+        <Chips options={SORT_OPTIONS} value={sort} onChange={reset(setSort)} />
       </Card>
       <Loader query={list}>
         {(p) => (
-          <Section title={`Customers · ${int(p.total)}`} source="database" note="Usage counts are all-time; AI cost is an estimate from recorded calls. Tap a row for details.">
+          <Section
+            title={`Customers · ${int(p.total)}`}
+            source="database"
+            note="Usage counts are all-time. AI is an estimate from recorded calls (all time / last 30 days); * = account older than AI recording, so earlier usage is unknown. Tap a row for details."
+          >
             <Table
-              columns={['Email', 'Plan', 'Status', 'Signed up', 'Last active', 'Usage', 'AI est.']}
+              columns={['Email', 'Plan', 'Status', 'Signed up', 'Last active', 'Usage', 'AI est. all / 30d']}
               rows={p.items.map((c: AdminCustomer) => [
                 `${c.email}${c.emailVerified ? '' : ' (unverified)'}`,
                 <Badge key="b" label={`${c.category} · ${c.entitlementTier}`} tone={CATEGORY_TONE[c.category]} />,
@@ -286,9 +357,9 @@ function CustomersTab() {
                 date(c.signupAt),
                 date(c.lastActivityAt),
                 `${c.usage.coursesCreated} courses · ${c.usage.exams} exams`,
-                dollars(c.ai.estimatedUsd),
+                aiCell(c.ai),
               ])}
-              onRowPress={(i) => setSelected(p.items[i]!.id)}
+              onRowPress={(i) => onSelect(p.items[i]!.id)}
             />
             <View style={{ flexDirection: 'row', gap: space(2), justifyContent: 'space-between', alignItems: 'center' }}>
               <Button variant="secondary" title="Previous" onPress={() => setPage((x) => Math.max(1, x - 1))} disabled={page <= 1} />
@@ -346,9 +417,8 @@ function CustomerDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <Section title="Usage by month (last 12)" source="database">
               <Table columns={['Month', 'Kind', 'Total']} rows={d.usageByMonth.map((u) => [u.month, u.kind, int(u.total)])} />
             </Section>
-            <Section title="AI usage" source="estimate">
-              <Table columns={['Feature', 'Calls', 'Tokens in / out', 'Est. cost']} rows={d.aiByFeature.map((a) => [a.feature, int(a.calls), `${int(a.inputTokens)} / ${int(a.outputTokens)}`, dollars(a.estimatedUsd)])} />
-            </Section>
+            <CustomerAISection d={d} />
+            <CustomerPaymentsSection payments={d.payments} />
             <Section title="Recent events" source="analytics">
               <Table columns={['Event', 'Source', 'When']} rows={d.recentEvents.map((e) => [e.name, e.source, new Date(e.createdAt).toISOString().replace('T', ' ').slice(0, 16)])} />
             </Section>
@@ -359,7 +429,108 @@ function CustomerDetail({ id, onBack }: { id: string; onBack: () => void }) {
   );
 }
 
-function AITab({ range }: { range: AdminRange }) {
+const COVERAGE_NOTE: Record<AdminCustomerAI['coverage'], string> = {
+  full: 'This account was created after AI recording started, so these figures cover all of its AI usage.',
+  partial: 'This account is older than AI recording: usage before that date was never measured and is unknown (not zero).',
+  not_tracked: 'No AI calls have been recorded on this server yet, so AI usage is unavailable.',
+};
+
+function UsageWindowStat({ label, w }: { label: string; w: AdminUsageWindow }) {
+  return (
+    <Stat
+      label={label}
+      value={dollars(w.estimatedUsd)}
+      hint={`${int(w.calls)} calls${w.failedCalls ? ` (${int(w.failedCalls)} failed)` : ''} · ${int(w.inputTokens)} in / ${int(w.outputTokens)} out tokens${w.unpricedCalls ? ` · ${int(w.unpricedCalls)} unpriced` : ''}`}
+    />
+  );
+}
+
+function CustomerAISection({ d }: { d: AdminCustomerDetail }) {
+  const a = d.aiUsage;
+  const note = `${COVERAGE_NOTE[a.coverage]} ${a.trackedSince ? `Recording started ${date(a.trackedSince)}.` : ''} Token counts are reported by the AI provider; costs are estimates${a.pricingVersions.length ? ` (price table ${a.pricingVersions.join(', ')})` : ''}, not invoices.`;
+  return (
+    <>
+      <Section title="AI usage" source="estimate" note={note}>
+        {a.coverage === 'not_tracked' ? (
+          <Unavailable reason="No AI calls have been recorded on this server yet." />
+        ) : (
+          <>
+            {d.customer.ai.unusual && <Badge label="Unusual consumption in the last 7 days" tone="warning" />}
+            <Stats>
+              <UsageWindowStat label="Last 7 days" w={a.last7d} />
+              <UsageWindowStat label="Last 30 days" w={a.last30d} />
+              <UsageWindowStat label={a.coverage === 'partial' ? 'Since recording started' : 'All time'} w={a.allTime} />
+            </Stats>
+            {a.allTime.calls === 0 ? (
+              <Body muted style={{ fontSize: 13 }}>No AI calls recorded for this customer.</Body>
+            ) : (
+              <>
+                <SectionLabel>Estimated cost per day (last 30 days)</SectionLabel>
+                <Bars points={a.daily.map((x) => ({ bucket: x.day, count: x.estimatedUsd }))} format={(n) => dollars(n)} />
+                <SectionLabel>By feature</SectionLabel>
+                <Table columns={['Feature', 'Calls', 'Tokens in / out', 'Est. cost']} rows={d.aiByFeature.map((x) => [x.feature, int(x.calls), `${int(x.inputTokens)} / ${int(x.outputTokens)}`, dollars(x.estimatedUsd)])} />
+                <SectionLabel>By model</SectionLabel>
+                <Table
+                  columns={['Model', 'Calls', 'Tokens in / out', 'Est. cost', 'Unpriced']}
+                  rows={a.byModel.map((m) => [`${m.provider} · ${m.model}`, int(m.calls), `${int(m.inputTokens)} / ${int(m.outputTokens)}`, dollars(m.estimatedUsd), int(m.unpricedCalls)])}
+                />
+              </>
+            )}
+          </>
+        )}
+      </Section>
+      <Section title="Lecture transcription" source="estimate" note={`Billed lecture minutes from the usage ledger × $${a.transcription.usdPerMinute}/min. An estimate, not the transcription provider's invoice.`}>
+        <Stats>
+          <Stat label="Minutes (all time)" value={int(a.transcription.minutes)} hint={`${int(a.transcription.minutesLast30d)} in the last 30 days`} />
+          <Stat label="Transcription cost (estimate)" value={dollars(a.transcription.estimatedUsd)} />
+        </Stats>
+      </Section>
+    </>
+  );
+}
+
+function CustomerPaymentsSection({ payments }: { payments: AdminCustomerDetail['payments'] }) {
+  return (
+    <Section
+      title="Payments"
+      source="stripe"
+      note="Read live from Stripe for this customer only. Gross = captured, successful payments; refunded = what Stripe reports refunded on those payments (each counted once, on its own payment); failed, pending and uncaptured payments are not money received. Gross and net are not profit."
+    >
+      {!payments.available ? (
+        <Unavailable reason={payments.reason} />
+      ) : (
+        <>
+          {!payments.livemode && <Badge label="Stripe test mode" tone="warning" />}
+          {payments.byCurrency.length ? (
+            payments.byCurrency.map((m) => (
+              <Stats key={m.currency}>
+                <Stat label={`Gross payments (${m.currency.toUpperCase()})`} value={money(m.grossCents, m.currency)} hint={`${m.successfulPayments} successful`} />
+                <Stat label="Refunded" value={money(m.refundedCents, m.currency)} hint={`${m.refunds} refunded payments`} />
+                <FeeAndNetStats m={m} />
+                <Stat label="Failed payments" value={int(m.failedPayments)} />
+              </Stats>
+            ))
+          ) : (
+            <Body muted style={{ fontSize: 13 }}>No Stripe payments for this customer.</Body>
+          )}
+          <Table
+            columns={['Date', 'Amount', 'Refunded', 'Status', '']}
+            rows={payments.charges.map((c) => [
+              date(c.created),
+              money(c.amountCents, c.currency),
+              c.refundedCents ? money(c.refundedCents, c.currency) : '—',
+              `${c.failureCode ? `${c.status} (${c.failureCode})` : c.status}${c.disputed ? ' · disputed' : ''}`,
+              <Button key="open" variant="secondary" title="Open in Stripe" onPress={() => openUrl(c.url)} />,
+            ])}
+          />
+          {payments.truncated && <Body muted style={{ fontSize: 12 }}>Only the latest 100 payments were read; totals are partial.</Body>}
+        </>
+      )}
+    </Section>
+  );
+}
+
+function AITab({ range, onOpenCustomer }: { range: AdminRange; onOpenCustomer: (id: string) => void }) {
   const q = useQuery({ queryKey: ['admin', 'ai', range], queryFn: () => api.admin<AdminAIReport>('ai', { range }) });
   return (
     <Loader query={q}>
@@ -390,10 +561,21 @@ function AITab({ range }: { range: AdminRange }) {
             <Table columns={['Model', 'Calls', 'Tokens in / out', 'Est. cost', 'Unpriced']} rows={a.byModel.map((m) => [`${m.provider} · ${m.model}`, int(m.calls), `${int(m.inputTokens)} / ${int(m.outputTokens)}`, dollars(m.estimatedUsd), int(m.unpricedCalls)])} />
           </Section>
           <Section title="Highest-cost customers">
-            <Table columns={['Customer', 'Calls', 'Est. cost']} rows={a.topUsers.map((u) => [u.email ?? (u.userId ? 'deleted account' : 'not attributed'), int(u.calls), dollars(u.estimatedUsd)])} />
+            <Table
+              columns={['Customer', 'Calls', 'Est. cost']}
+              rows={a.topUsers.map((u) => [u.email ?? (u.userId ? 'deleted account' : 'not attributed'), int(u.calls), dollars(u.estimatedUsd)])}
+              onRowPress={(i) => {
+                const u = a.topUsers[i]!;
+                if (u.userId && u.email) onOpenCustomer(u.userId);
+              }}
+            />
           </Section>
           <Section title="Unusual consumption" note="Last 7 days at least 3× the customer's weekly average of the 4 weeks before (and at least $0.25), or $1+ with no earlier usage.">
-            <Table columns={['Customer', 'Last 7 days', 'Previous weekly average']} rows={a.anomalies.map((x) => [x.email ?? x.userId, dollars(x.last7dUsd), dollars(x.previousWeeklyAvgUsd)])} />
+            <Table
+              columns={['Customer', 'Last 7 days', 'Previous weekly average']}
+              rows={a.anomalies.map((x) => [x.email ?? x.userId, dollars(x.last7dUsd), dollars(x.previousWeeklyAvgUsd)])}
+              onRowPress={(i) => onOpenCustomer(a.anomalies[i]!.userId)}
+            />
           </Section>
         </>
       )}
@@ -545,6 +727,11 @@ function HealthTab() {
 export default function AdminScreen() {
   const [tab, setTab] = useState<Tab>('overview');
   const [range, setRange] = useState<AdminRange>('30d');
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const openCustomer = (id: string) => {
+    setCustomerId(id);
+    setTab('customers');
+  };
   const access = useQuery({ queryKey: ['admin-access'], queryFn: api.adminAccess, retry: false });
   const denied = access.error instanceof ApiError && (access.error.status === 403 || access.error.status === 401);
   return (
@@ -566,8 +753,8 @@ export default function AdminScreen() {
           <Chips options={TABS} value={tab} onChange={setTab} />
           {tab !== 'customers' && tab !== 'health' && <Chips options={RANGES} value={range} onChange={setRange} />}
           {tab === 'overview' && <OverviewTab range={range} />}
-          {tab === 'customers' && <CustomersTab />}
-          {tab === 'ai' && <AITab range={range} />}
+          {tab === 'customers' && <CustomersTab selected={customerId} onSelect={setCustomerId} />}
+          {tab === 'ai' && <AITab range={range} onOpenCustomer={openCustomer} />}
           {tab === 'billing' && <BillingTab range={range} />}
           {tab === 'analytics' && <AnalyticsTab range={range} />}
           {tab === 'health' && <HealthTab />}

@@ -48,9 +48,17 @@ export type StripeChargeLike = {
   /** succeeded | pending | failed */
   status: string;
   customerId: string | null;
+  /**
+   * Stripe's total fee for this charge (balance transaction `fee`), in the charge's currency. null when
+   * Stripe returned no balance transaction (failed / not yet settled) or settled it in another currency.
+   */
   fee: number | null;
   failureCode: string | null;
   livemode: boolean;
+  /** false: authorised but not captured (not money received). Missing = captured. */
+  captured?: boolean;
+  /** A dispute was opened on this charge (its outcome is not reflected in gross or net). */
+  disputed?: boolean;
 };
 /** A refund, for the owner dashboard (read-only). */
 export type StripeRefundLike = { id: string; created: number; amount: number; currency: string; status: string; chargeId: string | null };
@@ -100,6 +108,8 @@ export interface StripeApi {
   listCharges(range: { from: number; to: number }, max: number): Promise<StripeListResult<StripeChargeLike>>;
   /** Owner dashboard, read-only: refunds created in [from, to], at most `max`. */
   listRefunds(range: { from: number; to: number }, max: number): Promise<StripeListResult<StripeRefundLike>>;
+  /** Owner dashboard, read-only: one Customer's charges (all time), newest first, at most `max`. */
+  listCustomerCharges(customerId: string, max: number): Promise<StripeListResult<StripeChargeLike>>;
 }
 
 const idOf = (v: unknown): string | null => (typeof v === 'string' ? v : v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string' ? (v as { id: string }).id : null);
@@ -137,6 +147,27 @@ function unavailable(err: unknown): never {
   const e = err as { type?: string; code?: string; statusCode?: number };
   console.error(`[stripe] API call failed (${e.type ?? 'error'}${e.code ? `/${e.code}` : ''}${e.statusCode ? ` ${e.statusCode}` : ''})`);
   throw new HttpError(502, 'Billing is temporarily unavailable. Please try again in a moment.', 'billing_unavailable');
+}
+
+/** Only the fields the owner dashboard shows — never card, billing-address or receipt details. */
+export function toChargeLike(c: Stripe.Charge): StripeChargeLike {
+  const bt = c.balance_transaction && typeof c.balance_transaction === 'object' ? c.balance_transaction : null;
+  // A fee settled in another currency can't be added to this charge's currency: unknown, never converted.
+  const fee = bt && bt.currency === c.currency ? bt.fee : null;
+  return {
+    id: c.id,
+    created: c.created,
+    amount: c.amount,
+    amountRefunded: c.amount_refunded,
+    currency: c.currency,
+    status: c.status,
+    customerId: idOf(c.customer),
+    fee,
+    failureCode: c.failure_code ?? null,
+    livemode: c.livemode,
+    captured: c.captured,
+    disputed: c.disputed,
+  };
 }
 
 export function createStripeApi(opts: { secretKey: string; webhookSecret: string }): StripeApi {
@@ -258,19 +289,20 @@ export function createStripeApi(opts: { secretKey: string; webhookSecret: string
         const items: StripeChargeLike[] = [];
         for await (const c of stripe.charges.list({ created: { gte: range.from, lte: range.to }, limit: 100, expand: ['data.balance_transaction'] })) {
           if (items.length >= max) return { items, truncated: true };
-          const bt = c.balance_transaction && typeof c.balance_transaction === 'object' ? c.balance_transaction : null;
-          items.push({
-            id: c.id,
-            created: c.created,
-            amount: c.amount,
-            amountRefunded: c.amount_refunded,
-            currency: c.currency,
-            status: c.status,
-            customerId: idOf(c.customer),
-            fee: bt ? bt.fee : null,
-            failureCode: c.failure_code ?? null,
-            livemode: c.livemode,
-          });
+          items.push(toChargeLike(c));
+        }
+        return { items, truncated: false };
+      } catch (err) {
+        return unavailable(err);
+      }
+    },
+
+    async listCustomerCharges(customerId, max) {
+      try {
+        const items: StripeChargeLike[] = [];
+        for await (const c of stripe.charges.list({ customer: customerId, limit: Math.min(100, max), expand: ['data.balance_transaction'] })) {
+          if (items.length >= max) return { items, truncated: true };
+          items.push(toChargeLike(c));
         }
         return { items, truncated: false };
       } catch (err) {

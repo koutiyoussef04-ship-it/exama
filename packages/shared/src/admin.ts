@@ -7,6 +7,7 @@
  * Missing data is returned as `null` with a reason, never as 0.
  */
 import { z } from 'zod';
+import { TIERS } from './billing';
 
 export const ADMIN_RANGES = ['7d', '30d', '90d', 'all'] as const;
 export type AdminRange = (typeof ADMIN_RANGES)[number];
@@ -15,6 +16,10 @@ export type AdminInterval = (typeof ADMIN_INTERVALS)[number];
 /** Account categories, from the subscription state (a trial is never "paid"). */
 export const ADMIN_CATEGORIES = ['free', 'trial', 'paid', 'owner'] as const;
 export type AdminCategory = (typeof ADMIN_CATEGORIES)[number];
+
+/** Directory sort orders. AI orders use recorded calls only (see AdminCustomerAI.coverage). */
+export const ADMIN_CUSTOMER_SORTS = ['signup_desc', 'signup_asc', 'email_asc', 'last_active_desc', 'ai_cost_desc', 'ai_cost_30d_desc', 'ai_calls_desc'] as const;
+export type AdminCustomerSort = (typeof ADMIN_CUSTOMER_SORTS)[number];
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** Either a preset range or an explicit from/to (both YYYY-MM-DD, at most 366 days apart). */
@@ -35,6 +40,9 @@ export const adminCustomersQuerySchema = z
     signupFrom: isoDate.optional(),
     signupTo: isoDate.optional(),
     activity: z.enum(['active_7d', 'active_30d', 'inactive_30d']).optional(),
+    /** The tier the account has now (same rule as the entitlement resolver; owner accounts never match). */
+    plan: z.enum(TIERS).optional(),
+    sort: z.enum(ADMIN_CUSTOMER_SORTS).default('signup_desc'),
     page: z.coerce.number().int().min(1).max(1000).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(25),
   })
@@ -117,8 +125,63 @@ export type AdminCustomer = {
   willRenew: boolean | null;
   usage: { coursesNow: number; coursesCreated: number; exams: number; practiceQuestions: number; studyPlans: number; lectureUploads: number; lectureMinutes: number };
   lastActivityAt: string | null;
-  ai: { calls: number; estimatedUsd: number };
+  ai: AdminCustomerAI;
 };
+
+/**
+ * Per-customer AI usage from ai_usage (provider-reported tokens; cost is an estimate).
+ * `coverage` says how much of the customer's history that covers:
+ *   - "not_tracked": nothing has been recorded on this server yet — usage is UNAVAILABLE, not zero;
+ *   - "partial": the account existed before recording started (`trackedSince`); earlier usage is unknown;
+ *   - "full": the account was created after recording started, so 0 calls really means no AI usage.
+ */
+export type AdminCustomerAI = {
+  calls: number;
+  estimatedUsd: number;
+  last30dCalls: number;
+  last30dUsd: number;
+  /** Calls with tokens but no price for their model (not in estimatedUsd). */
+  unpricedCalls: number;
+  /** Same rule as the AI tab's "Unusual consumption". */
+  unusual: boolean;
+  coverage: 'not_tracked' | 'partial' | 'full';
+};
+
+export type AdminUsageWindow = { calls: number; failedCalls: number; inputTokens: number; outputTokens: number; estimatedUsd: number; unpricedCalls: number };
+export type AdminCustomerAIDetail = {
+  source: 'estimate';
+  trackedSince: string | null;
+  coverage: AdminCustomerAI['coverage'];
+  pricingVersions: string[];
+  allTime: AdminUsageWindow;
+  last7d: AdminUsageWindow;
+  last30d: AdminUsageWindow;
+  byModel: { provider: string; model: string; calls: number; inputTokens: number; outputTokens: number; estimatedUsd: number; unpricedCalls: number }[];
+  /** Last 30 days, one row per UTC day with calls. */
+  daily: { day: string; calls: number; estimatedUsd: number }[];
+  /** Billed lecture minutes from the usage ledger (recorded since lecture uploads launched) × the transcription price. */
+  transcription: { source: 'estimate'; minutes: number; minutesLast30d: number; estimatedUsd: number; usdPerMinute: number };
+};
+
+/**
+ * One customer's Stripe charges, read live (Charges API filtered by that Stripe customer id).
+ *   - gross: captured, succeeded charges only (pending, failed and uncaptured are not money received);
+ *   - refunded: each charge's `amount_refunded` (on the charge it belongs to, so never counted twice);
+ *   - fees: the charge's balance-transaction fee in the same currency, else unknown (null) for that currency;
+ *   - net = gross − refunded − fees (null when fees are unknown). Not profit: no taxes, disputes, payouts or other costs.
+ */
+export type AdminCustomerPayments =
+  | {
+      available: true;
+      source: 'stripe';
+      livemode: boolean;
+      byCurrency: StripeMoney[];
+      /** status: succeeded | pending | failed | uncaptured (authorised, never captured: not received). */
+      charges: { id: string; created: string; amountCents: number; refundedCents: number; currency: string; status: string; failureCode: string | null; disputed: boolean; url: string }[];
+      truncated: boolean;
+      fetchedAt: string;
+    }
+  | Unavailable;
 export type AdminCustomersPage = { items: AdminCustomer[]; page: number; limit: number; total: number; hasMore: boolean };
 
 export type AdminEvent = { name: string; source: string; createdAt: string; properties: Record<string, unknown> };
@@ -142,6 +205,8 @@ export type AdminCustomerDetail = {
   planHistory: AdminEvent[];
   usageByMonth: { month: string; kind: string; total: number }[];
   aiByFeature: { feature: string; calls: number; inputTokens: number; outputTokens: number; estimatedUsd: number }[];
+  aiUsage: AdminCustomerAIDetail;
+  payments: AdminCustomerPayments;
   recentEvents: AdminEvent[];
 };
 

@@ -10,7 +10,7 @@
  *   - No password hashes, tokens, keys, card data, document content or AI text is ever selected.
  */
 import { readFileSync } from 'node:fs';
-import { PLANS, type AdminAICostTotals, type AdminAIReport, type AdminAnalyticsReport, type AdminBillingReport, type AdminCategory, type AdminCustomer, type AdminCustomerDetail, type AdminCustomersPage, type AdminEvent, type AdminHealth, type AdminInterval, type AdminOverview, type AdminRangeInfo, type Point, type StripeMoney, type StripeSummary } from '@study/shared';
+import { PLANS, type AdminAICostTotals, type AdminAIReport, type AdminAnalyticsReport, type AdminBillingReport, type AdminCategory, type AdminCustomer, type AdminCustomerAI, type AdminCustomerAIDetail, type AdminCustomerDetail, type AdminCustomerPayments, type AdminUsageWindow, type AdminCustomersPage, type AdminEvent, type AdminHealth, type AdminInterval, type AdminOverview, type AdminRangeInfo, type Point, type StripeMoney, type StripeSummary } from '@study/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { AI_MODEL_PRICES, AI_PRICING_VERSION, TRANSCRIPTION_USD_PER_MINUTE } from '../billing/ai-pricing.js';
@@ -124,6 +124,9 @@ async function stripeData(r: Range) {
   }
 }
 
+/** Money actually received: a succeeded charge that was captured (an uncaptured authorisation is not). */
+const isReceived = (c: StripeChargeLike) => c.status === 'succeeded' && c.captured !== false;
+
 /** Sums per currency. Refunds are counted when they were made (in the range), not against the original charge's date. */
 export function summarizeStripe(charges: StripeChargeLike[], refunds: StripeRefundLike[]): StripeMoney[] {
   const by = new Map<string, StripeMoney>();
@@ -134,7 +137,7 @@ export function summarizeStripe(charges: StripeChargeLike[], refunds: StripeRefu
   };
   for (const c of charges) {
     const m = get(c.currency);
-    if (c.status === 'succeeded') {
+    if (isReceived(c)) {
       m.successfulPayments++;
       m.grossCents += c.amount;
       if (c.fee == null) m.feesCents = null;
@@ -293,25 +296,47 @@ function customerFilters(q: z.output<typeof adminCustomersQuerySchema>): SQL[] {
   if (q.activity === 'active_30d') f.push(sql`exists (select 1 from analytics_events a where a.user_id = u.id and a.created_at > now() - interval '30 days')`);
   if (q.activity === 'inactive_30d') f.push(sql`not exists (select 1 from analytics_events a where a.user_id = u.id and a.created_at > now() - interval '30 days')`);
   if (q.category) f.push(sql`${categorySql()} = ${q.category}`);
+  if (q.plan) f.push(sql`${tierSql()} = ${q.plan}`);
   return f;
 }
 
 /** Aggregates for a page of accounts: a fixed number of queries per page (never one per customer). */
 async function pageAggregates(ids: string[]) {
   const empty = new Map<string, Row>();
-  if (!ids.length) return { docs: empty, created: empty, ledger: new Map<string, Row[]>(), activity: empty, ai: empty };
+  if (!ids.length) return { docs: empty, created: empty, ledger: new Map<string, Row[]>(), activity: empty, ai: empty, trackedSince: null };
   const idList = sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `);
-  const [docs, created, ledger, activity, ai] = await Promise.all([
+  const [docs, created, ledger, activity, ai, trackedSince] = await Promise.all([
     rows(sql`select user_id, count(*) as n from documents where user_id in (${idList}) group by 1`),
     rows(sql`select user_id, count(*) as n from course_creations where user_id in (${idList}) group by 1`),
     rows(sql`select user_id, kind, sum(amount) as total from usage_ledger where user_id in (${idList}) group by 1, 2`),
     rows(sql`select user_id, max(created_at) as last from analytics_events where user_id in (${idList}) group by 1`),
-    rows(sql`select user_id, count(*) as calls, coalesce(sum(estimated_cost_micro_usd), 0) as cost from ai_usage where user_id in (${idList}) group by 1`),
+    rows(sql`select user_id, count(*) as calls, coalesce(sum(estimated_cost_micro_usd), 0) as cost,
+        count(*) filter (where created_at > now() - interval '30 days') as calls30,
+        coalesce(sum(estimated_cost_micro_usd) filter (where created_at > now() - interval '30 days'), 0) as cost30,
+        count(*) filter (where estimated_cost_micro_usd is null and input_tokens is not null) as unpriced,
+        coalesce(sum(estimated_cost_micro_usd) filter (where created_at > now() - interval '7 days'), 0) as last7,
+        coalesce(sum(estimated_cost_micro_usd) filter (where created_at <= now() - interval '7 days' and created_at > now() - interval '35 days'), 0) / 4.0 as prev_avg
+      from ai_usage where user_id in (${idList}) group by 1`),
+    aiTrackedSince(),
   ]);
   const byUser = (rs: Row[]) => new Map(rs.map((x) => [String(x.user_id), x]));
   const ledgerBy = new Map<string, Row[]>();
   for (const l of ledger) ledgerBy.set(String(l.user_id), [...(ledgerBy.get(String(l.user_id)) ?? []), l]);
-  return { docs: byUser(docs), created: byUser(created), ledger: ledgerBy, activity: byUser(activity), ai: byUser(ai) };
+  return { docs: byUser(docs), created: byUser(created), ledger: ledgerBy, activity: byUser(activity), ai: byUser(ai), trackedSince };
+}
+
+/** The first recorded AI call on this server: AI usage before it was never measured. */
+async function aiTrackedSince(): Promise<Date | null> {
+  const [first] = await rows(sql`select min(created_at) as first from ai_usage`);
+  return first?.first ? new Date(first.first as string) : null;
+}
+
+/** Same thresholds as the AI tab's anomaly list (aiReport). Micro-USD inputs. */
+export const isUnusual = (last7: number, prevAvg: number) => (prevAvg > 0 && last7 >= 3 * prevAvg && last7 >= 250_000) || (prevAvg === 0 && last7 >= 1_000_000);
+
+export function aiCoverage(signupAt: Date, trackedSince: Date | null): AdminCustomerAI['coverage'] {
+  if (!trackedSince) return 'not_tracked';
+  return signupAt < trackedSince ? 'partial' : 'full';
 }
 
 const customerColumns = () => sql`u.id, u.email, u.created_at, u.email_verified_at is not null as verified,
@@ -323,6 +348,7 @@ function toCustomer(x: Row, agg: Awaited<ReturnType<typeof pageAggregates>>): Ad
   const l = agg.ledger.get(id) ?? [];
   const sumKind = (k: string) => num(l.find((r) => r.kind === k)?.total);
   const createdN = num(agg.created.get(id)?.n);
+  const ai = agg.ai.get(id);
   const nowN = num(agg.docs.get(id)?.n);
   return {
     id,
@@ -347,7 +373,15 @@ function toCustomer(x: Row, agg: Awaited<ReturnType<typeof pageAggregates>>): Ad
       lectureMinutes: sumKind('media_minutes'),
     },
     lastActivityAt: iso(agg.activity.get(id)?.last),
-    ai: { calls: num(agg.ai.get(id)?.calls), estimatedUsd: usd(agg.ai.get(id)?.cost) },
+    ai: {
+      calls: num(ai?.calls),
+      estimatedUsd: usd(ai?.cost),
+      last30dCalls: num(ai?.calls30),
+      last30dUsd: usd(ai?.cost30),
+      unpricedCalls: num(ai?.unpriced),
+      unusual: ai ? isUnusual(num(ai.last7), num(ai.prev_avg)) : false,
+      coverage: aiCoverage(new Date(x.created_at as string), agg.trackedSince),
+    },
   };
 }
 
@@ -358,17 +392,126 @@ export function parseCustomersQuery(query: unknown) {
   return q.data;
 }
 
+/**
+ * ORDER BY for each directory sort. The AI and activity orders use a per-account subquery on the
+ * (user_id, created_at) indexes of ai_usage / analytics_events, computed only for the chosen sort.
+ */
+function customerOrder(sort: z.output<typeof adminCustomersQuerySchema>['sort']): SQL {
+  switch (sort) {
+    case 'signup_asc':
+      return sql`u.created_at asc, u.id asc`;
+    case 'email_asc':
+      return sql`lower(u.email) asc, u.id asc`;
+    case 'last_active_desc':
+      return sql`(select max(a.created_at) from analytics_events a where a.user_id = u.id) desc nulls last, u.created_at desc, u.id desc`;
+    case 'ai_cost_desc':
+      return sql`(select coalesce(sum(x.estimated_cost_micro_usd), 0) from ai_usage x where x.user_id = u.id) desc, u.created_at desc, u.id desc`;
+    case 'ai_cost_30d_desc':
+      return sql`(select coalesce(sum(x.estimated_cost_micro_usd), 0) from ai_usage x where x.user_id = u.id and x.created_at > now() - interval '30 days') desc, u.created_at desc, u.id desc`;
+    case 'ai_calls_desc':
+      return sql`(select count(*) from ai_usage x where x.user_id = u.id) desc, u.created_at desc, u.id desc`;
+    default:
+      return sql`u.created_at desc, u.id desc`;
+  }
+}
+
 export async function customers(q: z.output<typeof adminCustomersQuerySchema>): Promise<AdminCustomersPage> {
   const where = customerFilters(q);
   const cond = where.length ? sql.join(where, sql` and `) : sql`true`;
   const page = await rows(sql`select ${customerColumns()}, count(*) over () as total_count
     from users u left join subscriptions s on s.user_id = u.id
     where ${cond}
-    order by u.created_at desc, u.id desc
+    order by ${customerOrder(q.sort)}
     limit ${q.limit} offset ${(q.page - 1) * q.limit}`);
   const total = page.length ? num(page[0]!.total_count) : num((await rows(sql`select count(*) as n from users u left join subscriptions s on s.user_id = u.id where ${cond}`))[0]?.n);
   const agg = await pageAggregates(page.map((x) => String(x.id)));
   return { items: page.map((x) => toCustomer(x, agg)), page: q.page, limit: q.limit, total, hasMore: q.page * q.limit < total };
+}
+
+// ---------------------------------------------------------------- one customer's Stripe payments (live)
+
+const CUSTOMER_CHARGES_MAX = 100;
+const customerChargeCache = new Map<string, { at: number; value: StripeListResult<StripeChargeLike> }>();
+const customerChargeInFlight = new Map<string, Promise<StripeListResult<StripeChargeLike>>>();
+export const clearCustomerChargeCache = () => customerChargeCache.clear();
+
+/** Gross, refunds (on the charge they belong to), fees and failures per currency for one customer's charges. */
+export function summarizeCustomerCharges(charges: StripeChargeLike[]): StripeMoney[] {
+  const by = new Map<string, StripeMoney>();
+  for (const c of charges) {
+    let m = by.get(c.currency);
+    if (!m) by.set(c.currency, (m = { currency: c.currency, grossCents: 0, refundedCents: 0, feesCents: 0, netCents: 0, successfulPayments: 0, failedPayments: 0, refunds: 0 }));
+    if (isReceived(c)) {
+      m.successfulPayments++;
+      m.grossCents += c.amount;
+      if (c.amountRefunded > 0) {
+        m.refunds++;
+        m.refundedCents += c.amountRefunded;
+      }
+      if (c.fee == null) m.feesCents = null;
+      else if (m.feesCents != null) m.feesCents += c.fee;
+    } else if (c.status === 'failed') m.failedPayments++;
+  }
+  for (const m of by.values()) m.netCents = m.feesCents == null ? null : m.grossCents - m.refundedCents - m.feesCents;
+  return [...by.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+}
+
+async function customerPayments(stripeCustomerId: string | null, provider: string | null): Promise<AdminCustomerPayments> {
+  if (!stripeCustomerId) {
+    const store = provider === 'apple' ? 'App Store Connect' : provider === 'google' ? 'Google Play Console' : null;
+    return {
+      available: false,
+      reason: store
+        ? `This customer pays through ${store}; store payments are not available here.`
+        : 'No Stripe customer for this account, so there are no Stripe payments to show.',
+    };
+  }
+  if (!stripeBilling) return { available: false, reason: 'Stripe billing is not enabled on this server.' };
+  const api = stripeBilling.api;
+  const now = Date.now();
+  for (const [k, v] of customerChargeCache) if (now - v.at >= STRIPE_CACHE_MS) customerChargeCache.delete(k);
+  let list: StripeListResult<StripeChargeLike>;
+  try {
+    const hit = customerChargeCache.get(stripeCustomerId);
+    if (hit) list = hit.value;
+    else {
+      let pending = customerChargeInFlight.get(stripeCustomerId);
+      if (!pending) {
+        pending = api
+          .listCustomerCharges(stripeCustomerId, CUSTOMER_CHARGES_MAX)
+          // Defence in depth: only charges Stripe attributes to this customer are ever shown for them.
+          .then((r) => ({ ...r, items: r.items.filter((c) => c.customerId === stripeCustomerId) }))
+          .then((value) => {
+            customerChargeCache.set(stripeCustomerId, { at: Date.now(), value });
+            return value;
+          })
+          .finally(() => customerChargeInFlight.delete(stripeCustomerId));
+        customerChargeInFlight.set(stripeCustomerId, pending);
+      }
+      list = await pending;
+    }
+  } catch {
+    return { available: false, reason: 'Stripe could not return this customer’s payments just now. Try again in a moment.' };
+  }
+  return {
+    available: true,
+    source: 'stripe',
+    livemode: api.livemode,
+    byCurrency: summarizeCustomerCharges(list.items),
+    charges: list.items.slice(0, 20).map((c) => ({
+      id: c.id,
+      created: new Date(c.created * 1000).toISOString(),
+      amountCents: c.amount,
+      refundedCents: c.amountRefunded,
+      currency: c.currency,
+      status: c.status === 'succeeded' && c.captured === false ? 'uncaptured' : c.status,
+      failureCode: c.failureCode,
+      disputed: c.disputed === true,
+      url: stripeUrl('payments', c.id, c.livemode),
+    })),
+    truncated: list.truncated,
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 const eventRow = (e: Row): AdminEvent => ({ name: String(e.name), source: String(e.source), createdAt: iso(e.created_at)!, properties: (e.properties as Record<string, unknown>) ?? {} });
@@ -377,7 +520,7 @@ export async function customerDetail(userId: string): Promise<AdminCustomerDetai
   if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new HttpError(404, 'Customer not found', 'not_found');
   const [x] = await rows(sql`select ${customerColumns()} from users u left join subscriptions s on s.user_id = u.id where u.id = ${userId}::uuid`);
   if (!x) throw new HttpError(404, 'Customer not found', 'not_found');
-  const [agg, [sub], [cust], [onb], device, history, usageByMonth, aiByFeature, recent] = await Promise.all([
+  const [agg, [sub], [cust], [onb], device, history, usageByMonth, aiByFeature, recent, [aiWin], aiByModel, aiDaily, [media]] = await Promise.all([
     pageAggregates([userId]),
     rows(sql`select provider, plan_id, status, environment, trial_ends_at, current_period_ends_at, will_renew, trial_used, provider_ref, created_at, updated_at from subscriptions where user_id = ${userId}::uuid`),
     rows(sql`select stripe_customer_id from stripe_customers where user_id = ${userId}::uuid`),
@@ -392,12 +535,58 @@ export async function customerDetail(userId: string): Promise<AdminCustomerDetai
     rows(sql`select feature, count(*) as calls, coalesce(sum(input_tokens), 0) as input, coalesce(sum(output_tokens), 0) as output, coalesce(sum(estimated_cost_micro_usd), 0) as cost
       from ai_usage where user_id = ${userId}::uuid group by 1 order by cost desc`),
     rows(sql`select name, source, created_at, properties from analytics_events where user_id = ${userId}::uuid order by created_at desc limit 50`),
+    rows(sql`select ${sql.join(
+      (['all', '7', '30'] as const).map((w) => {
+        const f = w === 'all' ? sql`true` : sql`created_at > now() - ${`${w} days`}::interval`;
+        return sql`count(*) filter (where ${f}) as ${sql.raw(`w${w}_calls`)}, count(*) filter (where ${f} and not success) as ${sql.raw(`w${w}_failed`)},
+          coalesce(sum(input_tokens) filter (where ${f}), 0) as ${sql.raw(`w${w}_in`)}, coalesce(sum(output_tokens) filter (where ${f}), 0) as ${sql.raw(`w${w}_out`)},
+          coalesce(sum(estimated_cost_micro_usd) filter (where ${f}), 0) as ${sql.raw(`w${w}_cost`)},
+          count(*) filter (where ${f} and estimated_cost_micro_usd is null and input_tokens is not null) as ${sql.raw(`w${w}_unpriced`)}`;
+      }),
+      sql`, `,
+    )}, coalesce(array_agg(distinct pricing_version) filter (where pricing_version is not null), '{}') as versions
+      from ai_usage where user_id = ${userId}::uuid`),
+    rows(sql`select provider, model, count(*) as calls, coalesce(sum(input_tokens), 0) as input, coalesce(sum(output_tokens), 0) as output,
+        coalesce(sum(estimated_cost_micro_usd), 0) as cost, count(*) filter (where estimated_cost_micro_usd is null and input_tokens is not null) as unpriced
+      from ai_usage where user_id = ${userId}::uuid group by 1, 2 order by cost desc, calls desc`),
+    rows(sql`select to_char(date_trunc('day', created_at at time zone 'UTC'), 'YYYY-MM-DD') as day, count(*) as calls, coalesce(sum(estimated_cost_micro_usd), 0) as cost
+      from ai_usage where user_id = ${userId}::uuid and created_at > now() - interval '30 days' group by 1 order by 1`),
+    rows(sql`select coalesce(sum(amount), 0) as total, coalesce(sum(amount) filter (where created_at > now() - interval '30 days'), 0) as last30
+      from usage_ledger where user_id = ${userId}::uuid and kind = 'media_minutes'`),
   ]);
   const livemode = stripeBilling?.api.livemode ?? false;
   const stripeSubId = sub?.provider === 'stripe' ? ((sub.provider_ref as string) ?? null) : null;
   const stripeCustomerId = (cust?.stripe_customer_id as string) ?? null;
+  const customer = toCustomer(x, agg);
+  const win = (w: 'all' | '7' | '30'): AdminUsageWindow => ({
+    calls: num(aiWin?.[`w${w}_calls`]),
+    failedCalls: num(aiWin?.[`w${w}_failed`]),
+    inputTokens: num(aiWin?.[`w${w}_in`]),
+    outputTokens: num(aiWin?.[`w${w}_out`]),
+    estimatedUsd: usd(aiWin?.[`w${w}_cost`]),
+    unpricedCalls: num(aiWin?.[`w${w}_unpriced`]),
+  });
+  const minutes = num(media?.total);
+  const aiUsage: AdminCustomerAIDetail = {
+    source: 'estimate',
+    trackedSince: agg.trackedSince?.toISOString() ?? null,
+    coverage: customer.ai.coverage,
+    pricingVersions: (aiWin?.versions as string[] | undefined) ?? [],
+    allTime: win('all'),
+    last7d: win('7'),
+    last30d: win('30'),
+    byModel: aiByModel.map((m) => ({ provider: String(m.provider), model: String(m.model), calls: num(m.calls), inputTokens: num(m.input), outputTokens: num(m.output), estimatedUsd: usd(m.cost), unpricedCalls: num(m.unpriced) })),
+    daily: aiDaily.map((d) => ({ day: String(d.day), calls: num(d.calls), estimatedUsd: usd(d.cost) })),
+    transcription: {
+      source: 'estimate',
+      minutes,
+      minutesLast30d: num(media?.last30),
+      estimatedUsd: Math.round(minutes * TRANSCRIPTION_USD_PER_MINUTE * 10_000) / 10_000,
+      usdPerMinute: TRANSCRIPTION_USD_PER_MINUTE,
+    },
+  };
   return {
-    customer: { ...toCustomer(x, agg), language: (device[0]?.lang as string) ?? null, timeZone: (device[0]?.tz as string) ?? null, onboarding: (onb?.status as string) ?? null },
+    customer: { ...customer, language: (device[0]?.lang as string) ?? null, timeZone: (device[0]?.tz as string) ?? null, onboarding: (onb?.status as string) ?? null },
     subscription: sub
       ? {
           provider: String(sub.provider),
@@ -425,6 +614,8 @@ export async function customerDetail(userId: string): Promise<AdminCustomerDetai
     planHistory: history.map(eventRow),
     usageByMonth: usageByMonth.map((u) => ({ month: String(u.month), kind: String(u.kind), total: num(u.total) })),
     aiByFeature: aiByFeature.map((a) => ({ feature: String(a.feature), calls: num(a.calls), inputTokens: num(a.input), outputTokens: num(a.output), estimatedUsd: usd(a.cost) })),
+    aiUsage,
+    payments: await customerPayments(stripeCustomerId, sub ? String(sub.provider) : null),
     recentEvents: recent.map(eventRow),
   };
 }
