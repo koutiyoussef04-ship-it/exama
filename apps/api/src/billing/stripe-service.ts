@@ -125,6 +125,8 @@ export async function createStripeCheckout(ctx: StripeBilling, userId: string, b
     // Repeated clicks within a minute get the same Checkout Session instead of a new one.
     `checkout-${userId}-${planId}-${trialEligible ? 't' : 'p'}-${language}-${Math.floor(Date.now() / 60_000)}`,
   );
+  // Funnel only: a Checkout page was opened. Not a payment, not a subscription.
+  void track('checkout_started', userId, { plan_id: planId, with_trial: trialEligible, provider: 'stripe' });
   return { url: session.url };
 }
 
@@ -158,6 +160,20 @@ export function invoiceSubscriptionId(invoice: Record<string, unknown>): string 
   return idOf(parent?.subscription_details?.subscription) ?? idOf(invoice.subscription);
 }
 
+/**
+ * Funnel only: Stripe says the Checkout finished. `payment_status` tells a paid checkout ("paid") from a
+ * trial that charged nothing yet ("no_payment_required") — the dashboard never counts the latter as revenue.
+ */
+async function trackCheckoutCompleted(obj: Record<string, unknown>, userHint: string | null) {
+  const userId = userHint && /^[0-9a-f-]{36}$/i.test(userHint) ? ((await db.select({ id: users.id }).from(users).where(eq(users.id, userHint)))[0]?.id ?? null) : null;
+  const paymentStatus = str(obj.payment_status);
+  void track('checkout_completed', userId, {
+    provider: 'stripe',
+    mode: str(obj.mode) ?? 'unknown',
+    payment_status: paymentStatus === 'paid' || paymentStatus === 'no_payment_required' || paymentStatus === 'unpaid' ? paymentStatus : 'unknown',
+  });
+}
+
 export type WebhookResult = { received: true; handled: boolean; duplicate?: boolean; note?: string };
 
 /**
@@ -184,6 +200,7 @@ export async function handleStripeWebhook(ctx: StripeBilling, rawBody: Buffer, s
     if (event.type === 'checkout.session.completed') {
       const subscriptionId = obj.mode === 'subscription' ? idOf(obj.subscription) : null;
       const metadataUser = (obj.metadata as { exama_user_id?: unknown } | null | undefined)?.exama_user_id;
+      await trackCheckoutCompleted(obj, str(obj.client_reference_id) ?? str(metadataUser));
       result = subscriptionId
         ? await syncSubscription(ctx, subscriptionId, { customerId: idOf(obj.customer), userHint: str(obj.client_reference_id) ?? str(metadataUser) })
         : { handled: false, note: 'not_a_subscription_checkout' };

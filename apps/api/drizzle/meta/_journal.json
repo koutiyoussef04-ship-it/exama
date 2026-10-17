@@ -127,6 +127,13 @@
       "when": 1792265957099,
       "tag": "0017_course_creations",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792273685043,
+      "tag": "0018_admin_dashboard",
+      "breakpoints": true
     }
   ]
 }

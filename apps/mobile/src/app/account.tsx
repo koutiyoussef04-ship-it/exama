@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, ListRow, Loading, ProgressBar, Screen, SectionLabel, space, TextButton, Title } from '@/components/ui';
+import { AdminEntry } from '@/admin/AdminEntry';
 import { appVersion, isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
 import { ReminderSettingsCard } from '@/components/reminders';
@@ -149,6 +150,9 @@ export default function Account() {
       </Card>
 
       <ReminderSettingsCard />
+
+      {/* Owners only (the server decides; see src/admin). */}
+      <AdminEntry />
 
       <Card style={{ gap: 0 }}>
         <SectionLabel>{t('account.settings')}</SectionLabel>

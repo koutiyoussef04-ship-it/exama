@@ -38,6 +38,25 @@ export type StripeSubscriptionLike = {
   metadata: Record<string, string>;
 };
 
+/** A charge, for the owner dashboard (read-only). Amounts in minor units; `fee` = Stripe's processing fee when known. */
+export type StripeChargeLike = {
+  id: string;
+  created: number;
+  amount: number;
+  amountRefunded: number;
+  currency: string;
+  /** succeeded | pending | failed */
+  status: string;
+  customerId: string | null;
+  fee: number | null;
+  failureCode: string | null;
+  livemode: boolean;
+};
+/** A refund, for the owner dashboard (read-only). */
+export type StripeRefundLike = { id: string; created: number; amount: number; currency: string; status: string; chargeId: string | null };
+/** A bounded page of results: `truncated` when the period had more than the cap. */
+export type StripeListResult<T> = { items: T[]; truncated: boolean };
+
 /** A verified webhook event. `object` is Stripe's payload; only ids are read from it (state is re-fetched). */
 export type StripeEventLike = { id: string; type: string; livemode: boolean; object: Record<string, unknown> };
 
@@ -77,6 +96,10 @@ export interface StripeApi {
   cancelSubscription(id: string): Promise<void>;
   /** Deletes the Customer (Stripe also cancels its subscriptions). Already-missing is not an error. */
   deleteCustomer(id: string): Promise<void>;
+  /** Owner dashboard, read-only: charges created in [from, to] (Unix seconds), newest first, at most `max`. */
+  listCharges(range: { from: number; to: number }, max: number): Promise<StripeListResult<StripeChargeLike>>;
+  /** Owner dashboard, read-only: refunds created in [from, to], at most `max`. */
+  listRefunds(range: { from: number; to: number }, max: number): Promise<StripeListResult<StripeRefundLike>>;
 }
 
 const idOf = (v: unknown): string | null => (typeof v === 'string' ? v : v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string' ? (v as { id: string }).id : null);
@@ -226,6 +249,44 @@ export function createStripeApi(opts: { secretKey: string; webhookSecret: string
         await stripe.customers.del(id);
       } catch (err) {
         if (isMissing(err)) return;
+        return unavailable(err);
+      }
+    },
+
+    async listCharges(range, max) {
+      try {
+        const items: StripeChargeLike[] = [];
+        for await (const c of stripe.charges.list({ created: { gte: range.from, lte: range.to }, limit: 100, expand: ['data.balance_transaction'] })) {
+          if (items.length >= max) return { items, truncated: true };
+          const bt = c.balance_transaction && typeof c.balance_transaction === 'object' ? c.balance_transaction : null;
+          items.push({
+            id: c.id,
+            created: c.created,
+            amount: c.amount,
+            amountRefunded: c.amount_refunded,
+            currency: c.currency,
+            status: c.status,
+            customerId: idOf(c.customer),
+            fee: bt ? bt.fee : null,
+            failureCode: c.failure_code ?? null,
+            livemode: c.livemode,
+          });
+        }
+        return { items, truncated: false };
+      } catch (err) {
+        return unavailable(err);
+      }
+    },
+
+    async listRefunds(range, max) {
+      try {
+        const items: StripeRefundLike[] = [];
+        for await (const r of stripe.refunds.list({ created: { gte: range.from, lte: range.to }, limit: 100 })) {
+          if (items.length >= max) return { items, truncated: true };
+          items.push({ id: r.id, created: r.created, amount: r.amount, currency: r.currency, status: r.status ?? 'unknown', chargeId: idOf(r.charge) });
+        }
+        return { items, truncated: false };
+      } catch (err) {
         return unavailable(err);
       }
     },

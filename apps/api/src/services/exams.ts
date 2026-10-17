@@ -12,6 +12,8 @@ import { MaterialIndex, validateQuestions } from '../lib/grounding.js';
 import { getOwnedDocument } from './documents.js';
 import { getLeastPractisedTopics, getRecentMisses, getWeakTopics, updateMastery } from './progress.js';
 import { linkExamToTask, onExamGraded, taskForExam } from './study-plans.js';
+import { withAIUsage } from '../ai/usage.js';
+import type { ShortAnswerToGrade } from '../ai/types.js';
 
 type ExamRow = typeof exams.$inferSelect;
 type QuestionRow = typeof questions.$inferSelect;
@@ -167,7 +169,8 @@ async function generateExam(
   // Keep only well-formed, non-repeated questions whose supporting quote really comes from the material.
   const kept: GeneratedQuestion[] = [];
   const generate = async (count: number) => {
-    const raw = await studyAI.generateQuestions({ ...request, count, avoid: kept.map((q) => q.prompt) });
+    const feature = input.kind === 'follow_up' ? 'practice_generation' : 'exam_generation';
+    const raw = await withAIUsage({ userId, feature }, () => studyAI.generateQuestions({ ...request, count, avoid: kept.map((q) => q.prompt) }));
     const checked = validateQuestions(raw, { material, allowedTopics, alreadyKept: kept });
     if (checked.kept.length < raw.length) console.warn(`[exam] dropped ${raw.length - checked.kept.length}/${raw.length} generated questions`, checked.rejected);
     kept.push(...checked.kept);
@@ -235,7 +238,7 @@ export async function submitExam(userId: string, examId: string, input: SubmitEx
   const given = new Map(input.answers.map((a) => [a.questionId, a.answer.trim()]));
 
   const results = new Map<string, { score: number; feedback: string }>();
-  const shortAnswers = [];
+  const shortAnswers: ShortAnswerToGrade[] = [];
   const fb = feedbackFor(exam.language);
   for (const q of qs) {
     const userAnswer = given.get(q.id) ?? '';
@@ -248,7 +251,7 @@ export async function submitExam(userId: string, examId: string, input: SubmitEx
       shortAnswers.push({ id: q.id, prompt: q.prompt, correctAnswer: q.correctAnswer, sourceQuote: q.sourceQuote, userAnswer });
     }
   }
-  for (const g of await studyAI.gradeShortAnswers(shortAnswers, { language: exam.language })) {
+  for (const g of await withAIUsage({ userId, feature: 'grading' }, () => studyAI.gradeShortAnswers(shortAnswers, { language: exam.language }))) {
     if (results.has(g.id) || !qs.some((q) => q.id === g.id)) continue;
     results.set(g.id, { score: Math.max(0, Math.min(1, g.score)), feedback: g.feedback });
   }

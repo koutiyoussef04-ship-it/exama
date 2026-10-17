@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AIError } from '../errors.js';
 import type { LLMProvider } from '../types.js';
+import { currentAIUsage, type AIUsageSink } from '../usage.js';
 
 type Options = {
   apiKey: string;
@@ -16,15 +17,19 @@ type Options = {
   workspaceId?: string;
   /** Override for tests (points the SDK at a fake server). */
   baseURL?: string;
+  /** Called after every request with the token counts Anthropic reported (admin cost reporting). Must not throw. */
+  onUsage?: AIUsageSink;
 };
 
 export class AnthropicProvider implements LLMProvider {
   readonly name = 'anthropic';
   readonly model: string;
   private client: Anthropic;
+  private onUsage?: AIUsageSink;
 
   constructor(opts: Options) {
     this.model = opts.model;
+    this.onUsage = opts.onUsage;
     this.client = new Anthropic({
       apiKey: opts.apiKey,
       baseURL: opts.baseURL,
@@ -36,6 +41,7 @@ export class AnthropicProvider implements LLMProvider {
 
   async complete({ system, prompt, maxTokens = 4000 }: { system: string; prompt: string; maxTokens?: number }) {
     let res: Anthropic.Message;
+    const started = Date.now();
     try {
       res = await this.client.messages.create({
         model: this.model,
@@ -44,8 +50,13 @@ export class AnthropicProvider implements LLMProvider {
         messages: [{ role: 'user', content: prompt }],
       });
     } catch (err) {
-      throw toAIError(err, this.model);
+      const aiErr = toAIError(err, this.model);
+      this.report(started, null, aiErr.code);
+      throw aiErr;
     }
+    // Tokens are billed even when the answer is unusable (truncated, refused, empty): always reported.
+    const failure = res.stop_reason === 'max_tokens' || res.stop_reason === 'refusal' ? 'bad_output' : null;
+    this.report(started, res.usage, failure);
 
     const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
     if (res.stop_reason === 'max_tokens') {
@@ -56,6 +67,29 @@ export class AnthropicProvider implements LLMProvider {
     }
     if (!text.trim()) throw new AIError('bad_output', 'Empty response');
     return text;
+  }
+
+  /** Reports usage to the sink without ever failing the request. */
+  private report(started: number, usage: Anthropic.Usage | null, errorCode: string | null) {
+    if (!this.onUsage) return;
+    try {
+      this.onUsage(
+        {
+          provider: this.name,
+          model: this.model,
+          inputTokens: usage?.input_tokens ?? null,
+          outputTokens: usage?.output_tokens ?? null,
+          cacheReadTokens: usage?.cache_read_input_tokens ?? null,
+          cacheWriteTokens: usage?.cache_creation_input_tokens ?? null,
+          latencyMs: Date.now() - started,
+          success: errorCode === null,
+          errorCode,
+        },
+        currentAIUsage(),
+      );
+    } catch {
+      // never let reporting break a student's request
+    }
   }
 }
 

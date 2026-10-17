@@ -96,6 +96,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+const adminQuery = (q: Record<string, string | number | undefined>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') p.set(k, String(v));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+};
+
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 
@@ -231,6 +238,12 @@ export const api = {
   skipOnboarding: () => post<OnboardingState>('/onboarding/skip', {}),
 
   sendEvents: (input: TrackEventsInput) => post<{ accepted: number }>('/events', input),
+
+  // Owner-only dashboard (the server refuses everyone else with 403). `query` values are sent as given.
+  adminAccess: () => request<{ owner: true }>('/admin/access'),
+  admin: <T>(section: 'overview' | 'customers' | 'ai' | 'billing' | 'analytics' | 'health', query: Record<string, string | number | undefined> = {}) =>
+    request<T>(`/admin/${section}${adminQuery(query)}`),
+  adminCustomer: <T>(id: string) => request<T>(`/admin/customers/${encodeURIComponent(id)}`),
 
   createExam: (documentId: string, input: CreateExamInput) => post<Exam>(`/documents/${documentId}/exams`, input),
 

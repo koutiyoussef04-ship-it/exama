@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { LLMStudyAI } from './llm-study-ai.js';
 import { MockStudyAI } from './mock-study-ai.js';
 import { AnthropicProvider } from './providers/anthropic.js';
+import { recordAIUsage } from '../admin/ai-usage-recorder.js';
 import type { StudyAI } from './types.js';
 
 /**
@@ -17,6 +18,7 @@ function createStudyAI(): StudyAI {
           apiKey: config.ANTHROPIC_API_KEY!,
           model: config.AI_MODEL,
           workspaceId: config.ANTHROPIC_WORKSPACE_ID, // optional; only sent when set
+          onUsage: recordAIUsage, // token counts for the admin dashboard's cost estimates (ai_usage)
         }),
       );
     case 'mock':

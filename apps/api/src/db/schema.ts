@@ -42,6 +42,8 @@ export const users = pgTable('users', {
   studyReminderEmails: boolean('study_reminder_emails').notNull().default(true),
 }, (t) => [
   check('users_age_range_check', sql`${t.ageRange} is null or ${t.ageRange} in ('13_17', '18_24', '25_34', '35_plus')`),
+  // Signups over time (admin dashboard).
+  index('users_created_idx').on(t.createdAt),
 ]);
 
 /**
@@ -547,4 +549,57 @@ export const flashcards = pgTable(
     check('flashcards_round_result_check', sql`${t.roundResult} is null or ${t.roundResult} in ('known', 'practice')`),
     check('flashcards_last_result_check', sql`${t.lastResult} is null or ${t.lastResult} in ('known', 'practice')`),
   ],
+);
+
+// ---------------- Admin / operations ----------------
+
+/**
+ * One row per AI provider call (recorded by the provider, best effort): who it was for, which feature,
+ * the model and the token counts the provider reported, latency and outcome. Never prompts, answers or
+ * course content. `estimated_cost_micro_usd` is an ESTIMATE from the pricing table version stored with
+ * it (billing/ai-pricing.ts) — null when the model has no known price. Kept with the account; the user
+ * link is cleared when the account is deleted (counts stay for cost reporting).
+ */
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    id: id(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** document_processing | exam_generation | practice_generation | grading | study_plan | flashcards | material_processing | unknown */
+    feature: text('feature').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWriteTokens: integer('cache_write_tokens'),
+    latencyMs: integer('latency_ms').notNull(),
+    success: boolean('success').notNull(),
+    /** Provider-neutral error category (AIError code) — never the message. */
+    errorCode: text('error_code'),
+    estimatedCostMicroUsd: integer('estimated_cost_micro_usd'),
+    pricingVersion: text('pricing_version'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_usage_time_idx').on(t.createdAt), index('ai_usage_user_time_idx').on(t.userId, t.createdAt)],
+);
+
+/**
+ * Owner access to the admin dashboard: who, which endpoint, the (bounded, non-secret) query parameters,
+ * the outcome. Refused attempts by non-owners are recorded too. Read-only actions only in this phase.
+ */
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id: id(),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    /** The customer looked at, for customer-detail views. */
+    targetUserId: uuid('target_user_id'),
+    params: jsonb('params').$type<Record<string, string>>().notNull().default({}),
+    allowed: boolean('allowed').notNull(),
+    status: integer('status'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('admin_audit_time_idx').on(t.createdAt), index('admin_audit_actor_time_idx').on(t.actorUserId, t.createdAt)],
 );

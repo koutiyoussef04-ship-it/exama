@@ -9,6 +9,7 @@ import { detectDocumentFormat, extractDocumentPages, formatForMime, MIME_BY_FORM
 import { chunkPages } from '../lib/pdf.js';
 import { storage } from '../storage/index.js';
 import { resolveOutputLanguage } from '../ai/language.js';
+import { withAIUsage } from '../ai/usage.js';
 
 type DocumentRow = typeof documents.$inferSelect;
 
@@ -103,7 +104,9 @@ export async function processDocument(documentId: string) {
     const pages = await extractDocumentPages(await storage.get(doc.fileKey), format);
     const chunks = chunkPages(pages);
     if (chunks.length === 0) throw noTextError(format);
-    const analysis = await studyAI.analyzeDocument(chunks.map((c) => c.content).join('\n\n'), { language: doc.aiLanguage });
+    const analysis = await withAIUsage({ userId: doc.userId, feature: 'document_processing' }, () =>
+      studyAI.analyzeDocument(chunks.map((c) => c.content).join('\n\n'), { language: doc.aiLanguage }),
+    );
     const summaryLanguage = resolveOutputLanguage(doc.aiLanguage, analysis.sourceLanguage);
 
     await db.transaction(async (tx) => {

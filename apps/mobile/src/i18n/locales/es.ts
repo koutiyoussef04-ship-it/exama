@@ -427,6 +427,7 @@ const es: LocaleDict = {
     usageMonth: 'Este mes',
     usageTrial: 'Tu prueba gratuita',
     usageCourses: 'Cursos',
+    adminDashboard: 'Panel de administración',
     usageExams: 'Exámenes',
     usagePractice: 'Preguntas de práctica',
     usageUploads: 'Subidas de PDF y PowerPoint',

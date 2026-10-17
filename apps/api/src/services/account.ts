@@ -23,7 +23,7 @@ import { stripeBilling } from '../billing/index.js';
 import { cancelStripeBillingForAccountDeletion } from '../billing/stripe-service.js';
 import { db } from '../db/client.js';
 import type { DeleteAccountResult } from '@study/shared';
-import { analyticsEvents, users } from '../db/schema.js';
+import { adminAuditLog, analyticsEvents, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { storage } from '../storage/index.js';
 import { holdDeletedEmail } from './email-hold.js';
@@ -58,6 +58,8 @@ export async function deleteAccount(userId: string, password: string): Promise<D
         .set({ anonymousId: null })
         .where(and(inArray(analyticsEvents.anonymousId, ids), isNull(analyticsEvents.userId)));
     }
+    // The owner's audit trail keeps the access record, but no longer points at the deleted account.
+    await tx.update(adminAuditLog).set({ targetUserId: null }).where(eq(adminAuditLog.targetUserId, userId));
     await tx.delete(users).where(eq(users.id, userId)); // cascades to all user-owned rows
     return holdDeletedEmail(tx, user.email);
   });

@@ -9,6 +9,7 @@
  * (a lecture whose AI step failed is never transcribed — or charged — twice). Every write checks that
  * the material still exists: deleting the material or its course mid-way stops the job cleanly.
  */
+import { withAIUsage } from '../../ai/usage.js';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { MaterialKnowledge } from '@study/shared';
 import { AIError, studyAI } from '../../ai/index.js';
@@ -190,13 +191,15 @@ async function analyze(m: MaterialRow, pdf: Awaited<ReturnType<typeof readPdf>> 
   const text = segments.map((s) => s.text).join('\n\n');
   const source = m.sourceLanguage ?? null;
   const language = resolveOutputLanguage(m.aiLanguage, source, doc.summaryLanguage ?? 'en');
-  const raw = await studyAI.extractKnowledge({
-    text,
-    kind: m.kind,
-    existingTopics: doc.topics,
-    topicLanguage: doc.summaryLanguage ?? language,
-    language: m.aiLanguage === 'source' ? 'source' : language,
-  });
+  const raw = await withAIUsage({ userId: m.userId, feature: 'material_processing' }, () =>
+    studyAI.extractKnowledge({
+      text,
+      kind: m.kind,
+      existingTopics: doc.topics,
+      topicLanguage: doc.summaryLanguage ?? language,
+      language: m.aiLanguage === 'source' ? 'source' : language,
+    }),
+  );
   const { summary, topics, rejected } = sanitizeKnowledge(raw, { existingTopics: doc.topics, segments });
   if (rejected) console.warn(`[materials] ${m.id}: dropped ${rejected} ungrounded/duplicate topic(s)`);
   if (!topics.length) throw new MaterialFailure('material_no_topics');

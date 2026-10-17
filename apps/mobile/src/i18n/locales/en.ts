@@ -431,6 +431,7 @@ const en = {
     usageMonth: 'This month',
     usageTrial: 'Your free trial',
     usageCourses: 'Courses',
+    adminDashboard: 'Admin dashboard',
     usageExams: 'Exams',
     usagePractice: 'Practice questions',
     usageUploads: 'PDF & PowerPoint uploads',

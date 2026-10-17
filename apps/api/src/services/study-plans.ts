@@ -29,6 +29,7 @@ import { HttpError } from '../lib/errors.js';
 import { getOwnedDocument } from './documents.js';
 import { addDays, diffDays, isValidTimeZone, localDate } from './planner/dates.js';
 import { availableDays, buildSchedule, type PlannerTopic } from './planner/schedule.js';
+import { withAIUsage } from '../ai/usage.js';
 
 type PlanRow = typeof studyPlans.$inferSelect;
 type TaskRow = typeof studyTasks.$inferSelect;
@@ -296,7 +297,8 @@ async function generateInsights(userId: string, doc: DocRow, language: string, r
   const reservation = await reserveStudyPlanGeneration(userId);
   try {
     if (doc.topics.length === 0) return [];
-    const raw = await studyAI.planTopics({ topics: doc.topics, summary: doc.summary ?? '', excerpts: await sampleExcerpts(doc.id), language });
+    const excerpts = await sampleExcerpts(doc.id);
+    const raw = await withAIUsage({ userId, feature: 'study_plan' }, () => studyAI.planTopics({ topics: doc.topics, summary: doc.summary ?? '', excerpts, language }));
     return sanitizeInsights(doc.topics, raw);
   } catch (err) {
     await releaseReservation(reservation);

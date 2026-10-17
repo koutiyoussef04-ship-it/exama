@@ -152,6 +152,10 @@ export type ServerEvents = {
   flashcards_round_completed: { document_id: string; deck_id: string; round: number; card_count: number; known_count: number; practice_count: number };
   /** The student confirmed their email address with the emailed link. */
   email_verified: Record<string, never>;
+  /** A web Checkout page was created (Stripe). Funnel only — not a payment or a subscription. */
+  checkout_started: { plan_id: PlanId; with_trial: boolean; provider: 'stripe' };
+  /** Stripe reported the Checkout finished. payment_status "no_payment_required" = a trial start, nothing charged. */
+  checkout_completed: { provider: 'stripe'; mode: string; payment_status: 'paid' | 'no_payment_required' | 'unpaid' | 'unknown' };
   upload_succeeded: { document_id: string; file_size_kb: number; ai_language: AiLanguage };
   document_processing_completed: {
     document_id: string;

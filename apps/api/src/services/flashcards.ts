@@ -26,6 +26,7 @@ import { MaterialIndex, normalizeText } from '../lib/grounding.js';
 import { RateLimiter } from '../lib/rate-limit.js';
 import { usableChunks } from './chunks.js';
 import { getOwnedDocument } from './documents.js';
+import { withAIUsage } from '../ai/usage.js';
 
 /** Same source-text budget as an exam. */
 const EXCERPT_BUDGET_CHARS = 40_000;
@@ -141,7 +142,7 @@ export async function createFlashcardDeck(userId: string, documentId: string, in
     try {
       const topics = doc.topics.length ? doc.topics : ['General'];
       // Ask for a couple extra: some may be discarded by the checks below.
-      const raw = await studyAI.generateFlashcards({ excerpts, topics, count: reservation.questionCount + 2, language });
+      const raw = await withAIUsage({ userId, feature: 'flashcards' }, () => studyAI.generateFlashcards({ excerpts, topics, count: reservation.questionCount + 2, language }));
       const { kept, rejected } = validateFlashcards(raw, { material: new MaterialIndex(excerpts), topics });
       if (raw.length !== kept.length) console.warn(`[flashcards] dropped ${raw.length - kept.length}/${raw.length} generated cards`, rejected);
       if (kept.length === 0) throw new AIError('bad_output', `No valid grounded flashcards (rejected: ${JSON.stringify(rejected)})`);

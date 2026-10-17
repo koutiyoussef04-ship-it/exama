@@ -205,3 +205,4 @@ export * from './onboarding';
 export * from './email';
 export * from './email-verification';
 export * from './flashcards';
+export * from './admin';

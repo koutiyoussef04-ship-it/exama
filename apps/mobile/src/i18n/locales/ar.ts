@@ -587,6 +587,7 @@ const ar: LocaleDict = {
     usageMonth: 'هذا الشهر',
     usageTrial: 'فترتك التجريبية المجانية',
     usageCourses: 'المقررات',
+    adminDashboard: 'لوحة الإدارة',
     usageExams: 'الاختبارات',
     usagePractice: 'الأسئلة التدريبية',
     usageUploads: 'عمليات رفع PDF وPowerPoint',

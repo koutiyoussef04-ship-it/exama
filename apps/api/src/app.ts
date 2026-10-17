@@ -6,6 +6,7 @@ import { AIError } from './ai/errors.js';
 import { aiInfo, config } from './config.js';
 import { HttpError } from './lib/errors.js';
 import { LimitError } from './billing/errors.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { billingRoutes } from './routes/billing.js';
 import { documentRoutes } from './routes/documents.js';
@@ -39,7 +40,9 @@ export const app = new Hono()
   .route('/email', emailRoutes)
   .route('/events', eventRoutes)
   .route('/onboarding', onboardingRoutes)
-  .route('/billing', billingRoutes);
+  .route('/billing', billingRoutes)
+  // Owner-only dashboard (server-side owner check on every route; see routes/admin.ts).
+  .route('/admin', adminRoutes);
 
 app.onError((err, c) => {
   if (err instanceof LimitError) return c.json(err.body, 402);
