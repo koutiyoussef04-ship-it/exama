@@ -112,20 +112,16 @@ test('free user: 1 course, monthly upload/exam/practice caps, exam length, with 
   assert.equal(second.status, 402);
   assert.deepEqual([second.body.code, second.body.feature, second.body.limit, second.body.used, second.body.tier], ['limit_reached', 'courses', 1, 1, 'free']);
 
-  // Deleting and re-uploading still counts against the monthly upload allowance.
-  let current = docId;
-  for (let i = 1; i < LIMITS.free.courseUploadsPerMonth!; i++) {
-    assert.equal((await call(`/documents/${current}`, { method: 'DELETE', token })).status, 204);
-    current = await readyCourse(token);
-  }
-  assert.equal((await call(`/documents/${current}`, { method: 'DELETE', token })).status, 204);
-  const overUploads = await upload(token);
-  assert.equal(overUploads.status, 402);
-  assert.equal(overUploads.body.feature, 'course_uploads');
+  // The Free course is one per account: deleting it doesn't give it back (see course-limit.test.ts).
+  assert.equal((await call(`/documents/${docId}`, { method: 'DELETE', token })).status, 204);
+  const afterDelete = await upload(token);
+  assert.equal(afterDelete.status, 402);
+  assert.deepEqual([afterDelete.body.code, afterDelete.body.feature, afterDelete.body.limit, afterDelete.body.used, afterDelete.body.tier], ['limit_reached', 'courses', 1, 1, 'free']);
 
   // Exams: premium-only length, then the monthly cap.
-  // (Simulate a new month for uploads so we can test the exam caps on a fresh course.)
+  // (Test-only reset of the course and upload counters so we can test the exam caps on a fresh course.)
   await sql`delete from usage_ledger where user_id = ${id} and kind = 'course_upload'`;
+  await sql`delete from course_creations where user_id = ${id}`;
   const d2 = await readyCourse(token);
   const tooLong = await exam(token, d2, LIMITS.free.maxQuestionsPerExam + 1);
   assert.equal(tooLong.status, 402);

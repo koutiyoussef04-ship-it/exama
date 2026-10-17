@@ -159,6 +159,27 @@ export const documents = pgTable(
   (t) => [index('documents_user_idx').on(t.userId)],
 );
 
+/**
+ * Every course an account has created (one row per course, kept after the course is deleted). The Free
+ * plan's course allowance counts these over the account's whole history, so deleting a course and
+ * creating another doesn't get around it. Written in the same transaction as the course (and the plan
+ * check), so a refused or failed upload leaves no row. A course whose processing failed and that the
+ * student deletes gives its row back (it never became a usable course). Deleted with the account.
+ */
+export const courseCreations = pgTable(
+  'course_creations',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** The course created (no foreign key: the row outlives the course). */
+    documentId: uuid('document_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('course_creations_user_idx').on(t.userId), uniqueIndex('course_creations_document_uq').on(t.documentId)],
+);
+
 export const materialKind = pgEnum('material_kind', ['pdf', 'audio', 'video']);
 export const materialStatus = pgEnum('material_status', ['processing', 'transcribing', 'analyzing', 'ready', 'failed']);
 

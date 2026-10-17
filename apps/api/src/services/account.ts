@@ -2,7 +2,7 @@
  * Account deletion (App Store guideline 5.1.1(v)): removes the account and everything it owns.
  *
  * - users row → cascades to documents, document_chunks, exams, questions, answers,
- *   topic_mastery, subscriptions and usage_ledger (all `on delete cascade`).
+ *   topic_mastery, subscriptions, usage_ledger and course_creations (all `on delete cascade`).
  * - analytics_events keep their anonymous counts but lose the link to the person
  *   (user_id set to null; the random per-install id is also cleared for their events).
  * - uploaded PDFs and lecture recordings: running processing jobs are stopped first, then the user's

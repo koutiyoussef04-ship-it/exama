@@ -138,7 +138,10 @@ export type PublicAccessPlan = Exclude<AccessPlan, 'owner'> | 'complimentary';
  * For the `trial` tier the "per month" counters cover the WHOLE trial instead (they never reset).
  */
 export type Limits = {
-  /** Courses (uploaded PDFs) a user can have at the same time. */
+  /**
+   * Courses (uploaded PDFs) a user can have at the same time. On the Free plan: courses the account can
+   * ever create — deleting one doesn't give it back (`usage.courses` then counts every course created).
+   */
   courses: number | null;
   /** PDFs processed per month (each upload costs an AI analysis, so deleting and re-uploading counts). */
   courseUploadsPerMonth: number | null;
@@ -162,6 +165,7 @@ export type Limits = {
 };
 
 export type Usage = {
+  /** Courses that exist now; on the Free plan, every course the account has ever created. */
   courses: number;
   courseUploadsThisMonth: number;
   examGenerationsThisMonth: number;

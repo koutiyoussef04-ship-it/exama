@@ -11,7 +11,7 @@ import type { AccessPlan, Entitlement, Features, LectureAllowance, Limits, Tier,
 import { normalizePlanId, planById } from '@study/shared';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
-import { documents, usageLedger, users } from '../db/schema.js';
+import { courseCreations, documents, usageLedger, users } from '../db/schema.js';
 import { LimitError } from './errors.js';
 import { OWNER_FEATURES, TIER_FEATURES } from './features.js';
 import { LIMITS, UNLIMITED } from './limits.js';
@@ -35,10 +35,13 @@ const nextMonthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYea
  * Current courses + ledger totals since `since` (month start, or trial start). Lecture usage can
  * cover a different window (`mediaSince`): the Free plan's single lecture counts the account's whole
  * history, so it never comes back — not next month, not after deleting the course or re-uploading.
+ * `coursesEver` (the Free plan): courses counts every course the account has ever created
+ * (`course_creations`), not just the ones that still exist, so deleting a course doesn't give it back.
  */
-async function getUsage(userId: string, since: Date, exec: Exec, mediaSince: Date = since): Promise<Usage> {
-  const [[courses], ledger, media] = await Promise.all([
+async function getUsage(userId: string, since: Date, exec: Exec, mediaSince: Date = since, coursesEver = false): Promise<Usage> {
+  const [[courses], [created], ledger, media] = await Promise.all([
     exec.select({ n: count() }).from(documents).where(eq(documents.userId, userId)),
+    coursesEver ? exec.select({ n: count() }).from(courseCreations).where(eq(courseCreations.userId, userId)) : [{ n: 0 }],
     exec
       .select({ kind: usageLedger.kind, total: sum(usageLedger.amount) })
       .from(usageLedger)
@@ -54,7 +57,8 @@ async function getUsage(userId: string, since: Date, exec: Exec, mediaSince: Dat
   ]);
   const used = (k: UsageKind, rows = ledger) => Number(rows.find((r) => r.kind === k)?.total ?? 0);
   return {
-    courses: Number(courses?.n ?? 0),
+    // Never below the courses that exist now (e.g. ones kept from a trial or a past subscription).
+    courses: Math.max(Number(courses?.n ?? 0), Number(created?.n ?? 0)),
     courseUploadsThisMonth: used('course_upload'),
     examGenerationsThisMonth: used('exam_generation'),
     practiceQuestionsThisMonth: used('practice_questions'),
@@ -78,8 +82,8 @@ export function lectureAllowanceFor(tier: Tier, features: Features, limits: Limi
 
 export async function getEntitlement(userId: string, exec: Exec = db): Promise<Entitlement> {
   const [owner, rawSub] = await Promise.all([isOwner(userId, exec), getSubscription(userId, exec)]);
-  const monthly = async (mediaSince?: Date) => ({
-    usage: await getUsage(userId, monthStart(), exec, mediaSince),
+  const monthly = async (mediaSince?: Date, coursesEver = false) => ({
+    usage: await getUsage(userId, monthStart(), exec, mediaSince, coursesEver),
     usagePeriod: 'month' as const,
     usageResetsAt: nextMonthStart().toISOString(),
     trialEnded: false,
@@ -111,9 +115,10 @@ export async function getEntitlement(userId: string, exec: Exec = db): Promise<E
     // A row with no dates is a reset account that has used its trial (see the mock state tool).
     const status = sub && (sub.currentPeriodEndsAt || sub.trialEndsAt) ? 'expired' : 'free';
     // Free lecture: one per account, so lecture usage counts the whole account history (a lecture
-    // used during a trial or a past subscription has already used it up).
+    // used during a trial or a past subscription has already used it up). The same goes for the Free
+    // course allowance: every course the account ever created counts, deleted or not.
     return {
-      ...(await monthly(ACCOUNT_LIFETIME)),
+      ...(await monthly(ACCOUNT_LIFETIME, true)),
       accessPlan: status,
       tier: 'free',
       features: TIER_FEATURES.free,
@@ -209,8 +214,10 @@ async function lockUsage(tx: Tx, userId: string) {
 }
 
 /**
- * Authoritative upload check. Runs inside the transaction that inserts the document, so the
- * course count, the upload reservation and the new course commit (or roll back) together.
+ * Authoritative upload check. Runs inside the transaction that inserts the document (and its
+ * `course_creations` row), so the course count, the upload reservation and the new course commit (or
+ * roll back) together. The per-user lock makes concurrent uploads wait for each other, so two
+ * simultaneous requests can't both pass the check.
  */
 export async function reserveCourseUpload(tx: Tx, userId: string): Promise<void> {
   await lockUsage(tx, userId);

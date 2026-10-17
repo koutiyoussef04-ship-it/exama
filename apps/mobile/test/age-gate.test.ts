@@ -37,7 +37,8 @@ test('sign-up: neutral question, nothing pre-selected, and "Under 13" never reac
   const src = readFileSync(new URL('../src/app/sign-up.tsx', import.meta.url), 'utf8');
   assert.ok(src.includes('SIGNUP_AGE_ANSWERS.map'), 'every answer, including Under 13, is offered (FTC: neutral age screen)');
   assert.ok(src.includes('useState<SignupAgeAnswer | null>(null)'), 'no default answer');
-  assert.ok(src.includes('!!ageRange'), 'an answer is required');
+  const rules = readFileSync(new URL('../src/lib/signup-form.ts', import.meta.url), 'utf8');
+  assert.ok(src.includes('canSubmitSignup(form)') && rules.includes('!!f.ageRange'), 'an answer is required');
   const submit = src.slice(src.indexOf('const submit = async'), src.indexOf('if (blocked === null)'));
   assert.ok(submit.indexOf('isBelowMinimumAge(ageRange)) return decline()') < submit.indexOf('await signUp('), 'declined before any request');
   const decline = src.slice(src.indexOf('const decline = () =>'), src.indexOf('const submit = async'));

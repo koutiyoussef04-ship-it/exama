@@ -7,6 +7,7 @@ import { Chips } from '@/components/planner';
 import { Body, Button, Card, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
 import { AGE_BLOCK_KEY, ageBlockActive, ageBlockValue, isBelowMinimumAge, MINIMUM_SIGNUP_AGE } from '@/lib/age-gate';
 import { ApiError } from '@/lib/api';
+import { canSubmitSignup, MIN_PASSWORD_LENGTH, passwordsMatch, showPasswordMismatch, signupRequest } from '@/lib/signup-form';
 import { kv } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { usePreferences } from '@/lib/preferences';
@@ -20,6 +21,9 @@ export default function SignUp() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Only compared with the password on the device: never sent or stored.
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [mismatch, setMismatch] = useState(false);
   const [ageRange, setAgeRange] = useState<SignupAgeAnswer | null>(null);
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.
   const [blocked, setBlocked] = useState<boolean | null>(null);
@@ -30,26 +34,32 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const canSubmit = !!name.trim() && !!email.trim() && password.length >= 8 && !!ageRange && !loading;
+  const confirmRef = useRef<TextInput>(null);
+  const form = { name, email, password, confirmPassword, ageRange };
+  const canSubmit = canSubmitSignup(form) && !loading;
+  const showMismatch = mismatch || showPasswordMismatch(form);
 
   /** Under the minimum age: nothing is sent or kept — the typed details are cleared too. */
   const decline = () => {
     setName('');
     setEmail('');
     setPassword('');
+    setConfirmPassword('');
     setAgeRange(null);
     setBlocked(true);
     void kv.set(AGE_BLOCK_KEY, ageBlockValue());
   };
 
   const submit = async () => {
+    // The two passwords must match before anything is sent.
+    if (!passwordsMatch(form)) return setMismatch(true);
     if (!canSubmit || !ageRange) return;
     if (isBelowMinimumAge(ageRange)) return decline();
     setLoading(true);
     setError(null);
     try {
       // The app language is used for the verification email.
-      await signUp({ name: name.trim(), email: email.trim(), password, language: appLanguage, ageRange });
+      await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage }));
     } catch (e) {
       if (e instanceof ApiError && e.code === 'age_requirement_not_met') decline();
       else setError(e);
@@ -109,17 +119,40 @@ export default function SignUp() {
           label={t('auth.password')}
           placeholder={t('auth.passwordPlaceholder')}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v);
+            setMismatch(false);
+          }}
+          secureTextEntry
+          autoComplete="new-password"
+          textContentType="newPassword"
+          returnKeyType="next"
+          onSubmitEditing={() => confirmRef.current?.focus()}
+          submitBehavior="submit"
+        />
+        {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
+          <Body muted style={{ fontSize: 14 }}>
+            {t('auth.moreChars', { count: MIN_PASSWORD_LENGTH - password.length })}
+          </Body>
+        )}
+        <Field
+          ref={confirmRef}
+          label={t('auth.confirmPassword')}
+          value={confirmPassword}
+          onChangeText={(v) => {
+            setConfirmPassword(v);
+            setMismatch(false);
+          }}
           secureTextEntry
           autoComplete="new-password"
           textContentType="newPassword"
           returnKeyType="go"
           onSubmitEditing={submit}
         />
-        {password.length > 0 && password.length < 8 && (
-          <Body muted style={{ fontSize: 14 }}>
-            {t('auth.moreChars', { count: 8 - password.length })}
-          </Body>
+        {showMismatch && (
+          <Text style={{ color: colors.danger, fontSize: 14 }} accessibilityRole="alert">
+            {t('auth.passwordsDontMatch')}
+          </Text>
         )}
         <View style={{ gap: space(2) }}>
           <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">

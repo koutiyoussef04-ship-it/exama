@@ -3,7 +3,7 @@ import type { AiLanguage, DocumentDetail, DocumentSummary } from '@study/shared'
 import { AIError, studyAI } from '../ai/index.js';
 import { track } from '../analytics/index.js';
 import { db } from '../db/client.js';
-import { documentChunks, documents } from '../db/schema.js';
+import { courseCreations, documentChunks, documents } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { detectDocumentFormat, extractDocumentPages, formatForMime, MIME_BY_FORMAT, noTextError } from '../lib/document-text.js';
 import { chunkPages } from '../lib/pdf.js';
@@ -49,7 +49,8 @@ type Tx = Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
 
 /**
  * Stores the PDF / PowerPoint and creates the course. `reserve` runs in the same transaction as the insert
- * (plan check + usage reservation), so a refused or failed upload leaves no course and no usage.
+ * (plan check + usage reservation), so a refused or failed upload leaves no course and no usage. The
+ * course is also recorded in `course_creations` (the Free plan's lifetime course count) in that transaction.
  */
 export async function createDocument(
   userId: string,
@@ -77,6 +78,7 @@ export async function createDocument(
           aiLanguage: opts.aiLanguage ?? 'en',
         })
         .returning();
+      await tx.insert(courseCreations).values({ userId, documentId: id });
       return row;
     });
   } catch (err) {
@@ -180,11 +182,19 @@ export async function resumePendingDocuments() {
   for (const { id } of pending) void processDocument(id);
 }
 
-/** Deletes the course and everything in it: materials (jobs stopped first), chunks, exams, plan, files. */
+/**
+ * Deletes the course and everything in it: materials (jobs stopped first), chunks, exams, plan, files.
+ * The course stays counted in `course_creations` (deleting doesn't give back the Free plan's course),
+ * unless its processing failed: a course that never became usable isn't counted.
+ */
 export async function deleteDocument(userId: string, id: string) {
   const doc = await getOwnedDocument(userId, id);
   const materialFiles = await beforeCourseDeletion(doc.id);
-  await db.delete(documents).where(eq(documents.id, doc.id)); // cascades to materials, chunks, exams, plan
+  await db.transaction(async (tx) => {
+    // Re-read the status in the transaction: only a course that is still failed gives its count back.
+    const [gone] = await tx.delete(documents).where(eq(documents.id, doc.id)).returning({ status: documents.status }); // cascades to materials, chunks, exams, plan
+    if (gone?.status === 'failed') await tx.delete(courseCreations).where(and(eq(courseCreations.documentId, doc.id), eq(courseCreations.userId, userId)));
+  });
   await Promise.all([doc.fileKey, ...materialFiles].map((k) => storage.delete(k).catch((err) => console.error(`[documents] could not delete ${k}:`, err))));
   void track('course_deleted', userId, { document_id: doc.id });
 }

@@ -12,13 +12,16 @@ const t = i18n.t.bind(i18n);
 
 export function limitMessage(body: LimitErrorBody): string {
   const plan = t(`plan.${body.tier}`);
-  // The trial and Free's one lecture per account have their own wording (they never renew monthly).
+  // The trial, Free's one lecture per account and Free's course allowance (one per account: deleting a
+  // course doesn't give it back) have their own wording (they never renew monthly).
   const key =
     body.tier === 'trial'
       ? (`limits.trial_${body.feature}` as const)
       : isFreeLectureLimit(body)
         ? (`limits.free_${body.feature as 'media_uploads' | 'media_minutes' | 'media_length'}` as const)
-        : (`limits.${body.feature}` as const);
+        : body.tier === 'free' && body.feature === 'courses'
+          ? ('limits.free_courses' as const)
+          : (`limits.${body.feature}` as const);
   return t(key, { count: body.limit, plan, requested: body.requested ?? 0, left: Math.max(0, body.limit - body.used) });
 }
 

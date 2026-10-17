@@ -427,8 +427,10 @@ test('free lecture cannot be bypassed: same file again, deleting the course, nex
 
   // Same lecture again.
   assert.equal((await upload(token, doc.id, lecture)).body.feature, 'media_uploads');
-  // Delete the whole course (and its lecture), start a new one: still used.
+  // Delete the whole course (and its lecture), start a new one: still used. (Free's one course per
+  // account would refuse the new course; the test lifts that here to check the lecture allowance alone.)
   assert.equal((await call(`/documents/${doc.id}`, { method: 'DELETE', token })).status, 204);
+  await sql`delete from course_creations where user_id = ${userId}`;
   const doc2 = await readyCourse(token);
   assert.equal((await upload(token, doc2.id, lecture)).body.feature, 'media_uploads');
   // A month later: not a monthly allowance, still used.

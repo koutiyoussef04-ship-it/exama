@@ -132,7 +132,8 @@ export default function Account() {
 
       <Card style={{ gap: space(3) }}>
         <SectionLabel>{e.usagePeriod === 'trial' ? t('account.usageTrial') : t('account.usageMonth')}</SectionLabel>
-        <UsageRow label={t('account.usageCourses')} used={u.courses} limit={l.courses} />
+        {/* Free: courses created over the account's whole history (deleting one doesn't give it back). */}
+        <UsageRow label={e.tier === 'free' ? t('account.usageFreeCourses') : t('account.usageCourses')} used={u.courses} limit={l.courses} />
         <UsageRow label={t('account.usageExams')} used={u.examGenerationsThisMonth} limit={l.examGenerationsPerMonth} />
         {e.usagePeriod === 'trial' && <Body muted style={{ fontSize: 13, marginTop: -space(1.5) }}>{t('account.usagePerExam', { count: l.maxQuestionsPerExam })}</Body>}
         <UsageRow label={t('account.usagePractice')} used={u.practiceQuestionsThisMonth} limit={l.practiceQuestionsPerMonth} />

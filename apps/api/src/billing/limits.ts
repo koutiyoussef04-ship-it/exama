@@ -32,7 +32,8 @@ import { config } from '../config.js';
 //   Student 300 min ≈ €1.3–1.5/month (of ≈ €7.1 net) · Pro 720 min ≈ €3.2–3.6/month (of ≈ €11.8 net).
 // See docs/materials/cost-model.md.
 export const DEFAULT_LIMITS: Record<Tier, Limits> = {
-  // Enough to experience the loop once or twice: one course, a few exams, a couple of practice sets,
+  // Enough to experience the loop once or twice: one course (per account, for good: deleting it doesn't
+  // give it back — every course the account ever created counts, see getUsage), a few exams, a couple of practice sets,
   // and ONE lecture of up to 45 minutes per account (the media limits below are per account for Free).
   free: {
     courses: 1,
