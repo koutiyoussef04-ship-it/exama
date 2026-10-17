@@ -185,7 +185,11 @@ export async function confirmPasswordReset(email: string, code: string, password
       .returning({ id: passwordResetCodes.id });
     if (!used.length) return false; // used by a parallel request
     await tx.update(passwordResetCodes).set({ usedAt: now }).where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt)));
-    await tx.update(users).set({ passwordHash, passwordChangedAt: changedAt }).where(eq(users.id, user.id));
+    // The code arrived at this address, so the email is confirmed too.
+    await tx
+      .update(users)
+      .set({ passwordHash, passwordChangedAt: changedAt, emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${changedAt.toISOString()}::timestamptz)` })
+      .where(eq(users.id, user.id));
     return true;
   });
   if (!claimed) throw invalidCode();

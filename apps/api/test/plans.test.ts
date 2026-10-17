@@ -43,7 +43,7 @@ async function call<T>(path: string, init: RequestInit & { token?: string; json?
   return { status: res.status, body: (text ? JSON.parse(text) : null) as T & { code?: string; feature?: string } };
 }
 async function newUser(email = `plans-${RUN}-${crypto.randomUUID()}@example.com`) {
-  const r = await call<AuthResponse>('/auth/register', { json: { email, password: 'password123', name: 'Plans' } });
+  const r = await call<AuthResponse>('/auth/register', { json: { email, password: 'password123', name: 'Plans', ageRange: '18_24' } });
   assert.equal(r.status, 201);
   return { token: r.body.token, id: r.body.user.id };
 }

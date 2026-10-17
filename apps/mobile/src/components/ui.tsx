@@ -258,17 +258,19 @@ export function ListRow({ label, value, onPress, tone = 'default', last, accessi
   );
 }
 
-/** Accessible checkbox row. */
-export function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+/** Accessible checkbox row. `tone`: danger (confirming something destructive) or primary (agreeing to terms). */
+export function CheckRow({ label, checked, onChange, tone = 'danger' }: { label: string; checked: boolean; onChange: (v: boolean) => void; tone?: 'danger' | 'primary' }) {
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
+      // react-native-web does not turn accessibilityState into ARIA attributes; screen readers on the web need this.
+      aria-checked={checked}
       accessibilityLabel={label}
       onPress={() => onChange(!checked)}
       style={{ flexDirection: 'row', alignItems: 'center', gap: space(3), minHeight: 44 }}
     >
-      <View style={[styles.checkbox, checked && { backgroundColor: colors.danger, borderColor: colors.danger }]}>
+      <View style={[styles.checkbox, checked && { backgroundColor: colors[tone], borderColor: colors[tone] }]}>
         {checked && <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>✓</Text>}
       </View>
       <Text style={[styles.body, { flex: 1 }]}>{label}</Text>

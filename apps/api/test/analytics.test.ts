@@ -52,7 +52,7 @@ let userId = '';
 
 test('server records the core funnel events with minimal properties', async () => {
   email = `analytics-${Date.now()}@example.com`;
-  const reg = await call<AuthResponse>('/auth/register', json({ email, password: PASSWORD, name: 'Private Name' }));
+  const reg = await call<AuthResponse>('/auth/register', json({ email, password: PASSWORD, name: 'Private Name', ageRange: '18_24' }));
   token = reg.body.token;
   userId = reg.body.user.id;
   assert.equal((await call('/auth/login', json({ email, password: PASSWORD }))).status, 200);
@@ -185,7 +185,7 @@ test('an analytics outage never breaks the product flow', async () => {
   const original = [...analytics.sinks];
   analytics.sinks.splice(0, analytics.sinks.length, failing);
   try {
-    const res = await call<AuthResponse>('/auth/register', json({ email: `outage-${Date.now()}@example.com`, password: PASSWORD, name: 'X' }));
+    const res = await call<AuthResponse>('/auth/register', json({ email: `outage-${Date.now()}@example.com`, password: PASSWORD, name: 'X', ageRange: '18_24' }));
     assert.equal(res.status, 201);
     const ev = await call('/events', json({ anonymousId: ANON, events: [{ name: 'app_opened', properties: { platform: 'ios', authenticated: false } }] }));
     assert.equal(ev.status, 202);

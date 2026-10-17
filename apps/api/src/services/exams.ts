@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { CreateExamInput, Exam, ExamSummary, GradedQuestion, Question, SubmitExamInput } from '@study/shared';
-import { AIError, studyAI } from '../ai/index.js';
+import { AIError, studyAI, type GeneratedQuestion } from '../ai/index.js';
 import { resolveOutputLanguage } from '../ai/language.js';
 import { track } from '../analytics/index.js';
 import { getEntitlement, releaseReservation, reserveExamGeneration, settleReservation } from '../billing/entitlements.js';
@@ -153,26 +153,32 @@ async function generateExam(
 ): Promise<Exam> {
   const documentId = doc.id;
   const excerpts = await selectExcerpts(documentId, focusTopics);
-  const raw = await studyAI.generateQuestions({
+  const request = {
     excerpts,
     topics: doc.topics,
-    // Ask for a couple extra: some may be discarded by the grounding check below.
-    count: input.questionCount + 2,
     focusTopics,
     // Revisiting the student's own mistakes is part of adaptive practice.
     missed: adaptive ? await getRecentMisses(userId, documentId, focusTopics) : [],
     language: input.language,
-  });
+  };
+  const material = new MaterialIndex(excerpts);
+  const allowedTopics = focusTopics.length ? focusTopics : doc.topics;
 
-  // Keep only questions whose supporting quote really comes from the uploaded material.
-  const { kept, rejected } = validateQuestions(raw, {
-    material: new MaterialIndex(excerpts),
-    allowedTopics: focusTopics.length ? focusTopics : doc.topics,
-  });
-  const dropped = raw.length - kept.length;
-  if (dropped > 0) console.warn(`[exam] dropped ${dropped}/${raw.length} generated questions`, rejected);
-  if (kept.length === 0) {
-    throw new AIError('bad_output', `No valid grounded questions (rejected: ${JSON.stringify(rejected)})`);
+  // Keep only well-formed, non-repeated questions whose supporting quote really comes from the material.
+  const kept: GeneratedQuestion[] = [];
+  const generate = async (count: number) => {
+    const raw = await studyAI.generateQuestions({ ...request, count, avoid: kept.map((q) => q.prompt) });
+    const checked = validateQuestions(raw, { material, allowedTopics, alreadyKept: kept });
+    if (checked.kept.length < raw.length) console.warn(`[exam] dropped ${raw.length - checked.kept.length}/${raw.length} generated questions`, checked.rejected);
+    kept.push(...checked.kept);
+  };
+  // Ask for a couple extra: some may be discarded by the checks above.
+  await generate(input.questionCount + 2);
+  // Still short (questions discarded)? One top-up request for the missing ones, never more.
+  if (kept.length < input.questionCount) await generate(input.questionCount - kept.length + 2);
+  // Never deliver a shorter exam than requested as if it were complete: fail (nothing is charged) instead.
+  if (kept.length < input.questionCount) {
+    throw new AIError('bad_output', `Only ${kept.length} of ${input.questionCount} questions passed the checks`);
   }
   const generated = kept.slice(0, input.questionCount);
 

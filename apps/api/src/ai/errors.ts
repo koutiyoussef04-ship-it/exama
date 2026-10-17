@@ -20,13 +20,18 @@ const USER_MESSAGES: Record<AIErrorCode, string> = {
 };
 
 export class AIError extends Error {
+  /** The reply was cut off by the response-length limit (max_tokens): asking for less output can succeed. */
+  readonly truncated: boolean;
+
   constructor(
     public code: AIErrorCode,
     /** Internal detail for server logs. Never returned to clients. */
     public detail?: string,
+    options: { truncated?: boolean } = {},
   ) {
     super(USER_MESSAGES[code]);
     this.name = 'AIError';
+    this.truncated = options.truncated ?? false;
   }
 
   /** HTTP status to use when this error reaches the API boundary. */

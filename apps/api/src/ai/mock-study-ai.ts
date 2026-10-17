@@ -5,7 +5,9 @@
 import type {
   AnalyzeOptions,
   DocumentAnalysis,
+  GeneratedFlashcard,
   GeneratedQuestion,
+  GenerateFlashcardsInput,
   GenerateQuestionsInput,
   KnowledgeExtraction,
   KnowledgeExtractionInput,
@@ -47,8 +49,9 @@ export function detectLanguage(text: string): string | null {
 }
 
 /** Tiny phrasebook so mock output visibly follows the requested language. */
-const PHRASES: Record<string, { mcq: (t: string) => string; short: (t: string) => string; states: string; key: string; good: string; partial: string; focus: string }> = {
+const PHRASES: Record<string, { card: (t: string, n: number) => string; mcq: (t: string) => string; short: (t: string) => string; states: string; key: string; good: string; partial: string; focus: string }> = {
   en: {
+    card: (t, n) => `What is key point ${n} about "${t}"?`,
     mcq: (t) => `Which statement about "${t}" is taken from the material?`,
     short: (t) => `In your own words, explain what the material says about "${t}".`,
     states: 'The material states',
@@ -58,6 +61,7 @@ const PHRASES: Record<string, { mcq: (t: string) => string; short: (t: string) =
     focus: 'Focus on:',
   },
   es: {
+    card: (t, n) => `¿Cuál es la idea clave ${n} sobre «${t}»?`,
     mcq: (t) => `¿Qué afirmación sobre «${t}» procede del material?`,
     short: (t) => `Explica con tus palabras lo que dice el material sobre «${t}».`,
     states: 'El material dice',
@@ -67,6 +71,7 @@ const PHRASES: Record<string, { mcq: (t: string) => string; short: (t: string) =
     focus: 'Céntrate en:',
   },
   fr: {
+    card: (t, n) => `Quel est le point clé ${n} sur « ${t} » ?`,
     mcq: (t) => `Quelle affirmation sur « ${t} » provient du support ?`,
     short: (t) => `Expliquez avec vos mots ce que dit le support sur « ${t} ».`,
     states: 'Le support indique',
@@ -76,6 +81,7 @@ const PHRASES: Record<string, { mcq: (t: string) => string; short: (t: string) =
     focus: 'Concentrez-vous sur :',
   },
   ar: {
+    card: (t, n) => `ما الفكرة الأساسية ${n} عن «${t}»؟`,
     mcq: (t) => `أي عبارة عن «${t}» مأخوذة من المادة؟`,
     short: (t) => `اشرح بكلماتك ما تقوله المادة عن «${t}».`,
     states: 'تقول المادة',
@@ -108,6 +114,15 @@ export class MockStudyAI implements StudyAI {
     const topics = input.focusTopics?.length ? input.focusTopics : input.topics;
     const out: GeneratedQuestion[] = [];
     const p = phrases(input.language);
+    // Small material repeats facts: number repeated wordings so no two questions (or a top-up and the
+    // questions already in the exam, `avoid`) are identical, like the real model is asked to do.
+    const used = new Set(input.avoid ?? []);
+    const unique = (prompt: string) => {
+      let candidate = prompt;
+      for (let n = 2; used.has(candidate); n++) candidate = `${prompt} (${n})`;
+      used.add(candidate);
+      return candidate;
+    };
     for (let i = 0; i < input.count; i++) {
       const topic = topics[i % topics.length] ?? 'General';
       const related = pool.filter((s) => s.toLowerCase().includes(topic.toLowerCase()));
@@ -121,7 +136,7 @@ export class MockStudyAI implements StudyAI {
         out.push({
           type: 'mcq',
           topic,
-          prompt: `${tag(input.language)} ${p.mcq(topic)}`,
+          prompt: unique(`${tag(input.language)} ${p.mcq(topic)}`),
           options: [...options.slice(rot), ...options.slice(0, rot)],
           correctAnswer: correct,
           explanation: `${p.states}: "${clip(fact, 200)}"`,
@@ -131,7 +146,7 @@ export class MockStudyAI implements StudyAI {
         out.push({
           type: 'short_answer',
           topic,
-          prompt: `${tag(input.language)} ${p.short(topic)}`,
+          prompt: unique(`${tag(input.language)} ${p.short(topic)}`),
           options: null,
           correctAnswer: fact,
           explanation: `${p.key}: "${clip(fact, 200)}"`,
@@ -140,6 +155,16 @@ export class MockStudyAI implements StudyAI {
       }
     }
     return out;
+  }
+
+  async generateFlashcards(input: GenerateFlashcardsInput): Promise<GeneratedFlashcard[]> {
+    // One card per distinct sentence of the material (never more than it has): front asks about a topic, back is the sentence.
+    const pool = [...new Set(sentences(input.excerpts.join(' ')))];
+    const p = phrases(input.language);
+    return pool.slice(0, input.count).map((fact, i) => {
+      const topic = input.topics.find((t) => fact.toLowerCase().includes(t.toLowerCase())) ?? input.topics[i % Math.max(input.topics.length, 1)] ?? 'General';
+      return { topic, front: `${tag(input.language)} ${p.card(topic, i + 1)}`, back: clip(fact, 300), sourceQuote: fact };
+    });
   }
 
   async gradeShortAnswers(items: ShortAnswerToGrade[], options: { language: string }): Promise<ShortAnswerGrade[]> {

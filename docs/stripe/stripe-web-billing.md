@@ -10,7 +10,7 @@ It is **off by default** (`STRIPE_ENABLED=false`). Nothing changes until you con
 ## How it works
 
 ```
-web app  ──POST /billing/stripe/checkout {plan, interval}──▶  API  ──Checkout Session──▶  Stripe
+web app  ──POST /billing/stripe/checkout {plan, interval, consent, language}──▶  API  ──Checkout Session──▶  Stripe
    ▲                                                            │  (server picks the Price, the trial, the Customer)
    │ redirect to the Checkout URL                               ▼
    └────────────────────────── Stripe Checkout ◀───────────────┘
@@ -21,7 +21,8 @@ Stripe ──signed webhook──▶ POST /billing/stripe/webhook ──▶ re-f
 web app (/checkout?status=success) ◀── polls GET /billing/status (the server's answer) ◀──────┘
 ```
 
-* The browser sends **a plan and an interval only**. The server maps them to a Stripe Price id from its own
+* The browser sends **a plan, an interval, the two checkout consents and the app language** — nothing about
+  prices. The server maps them to a Stripe Price id from its own
   configuration, decides whether the account still gets the free trial, and creates/reuses the Customer.
 * **The webhook is the only thing that grants access.** The success page shows "Activating your plan…" and
   polls `GET /billing/status` until the server reports the subscription.
@@ -35,6 +36,31 @@ web app (/checkout?status=success) ◀── polls GET /billing/status (the serv
   cancelled automatically — refund any charge manually in the Dashboard (the server log names it).
 * **Deleting an Exama account deletes its Stripe Customer first** (which cancels the subscription). If Stripe
   cannot be reached the deletion is refused and nothing is deleted.
+
+## Consumer law at checkout (refunds and withdrawal)
+
+Policy: no voluntary refunds; the statutory EU/EEA/UK withdrawal right and mandatory remedies only (Terms →
+*Right of withdrawal*, *Refunds*, *If something doesn't work*; review pack: `docs/legal/open-items.md` §5).
+
+* **Two unticked boxes** on the web paywall, both required: automatic renewal at the shown price until
+  cancelled, and the express request to start now (so a withdrawal within 14 days costs a proportionate
+  amount). The renewal box is reset when the plan or interval changes. The server checks again:
+  missing or false → `400 checkout_consent_required`, nothing is created at Stripe.
+* **Record**: Checkout Session and Subscription metadata `exama_consent=auto_renewal,immediate_start`,
+  `exama_consent_at` (UTC, minute), `exama_terms_version` (`LEGAL_VERSION` in `packages/shared`) and
+  `exama_language`. Visible in the Dashboard on the subscription; no database column.
+* **Notice** next to Stripe's Subscribe button (`custom_text.submit`, the customer's language; Checkout
+  `locale` follows the app language, Arabic falls back to `auto`).
+* **Confirmation email** (Resend), once per new web subscription, when the first webhook shows it
+  `trialing`/`active`: plan, price as charged by Stripe, trial end, the consents, withdrawal deadline, the
+  model withdrawal form, the no-refund rule, Terms/Privacy links (`WEB_APP_URL`). Not sent again on trial
+  conversion or plan changes. A failure is logged without the address and never fails the webhook; it is
+  not retried.
+* **Not built** (owner decisions, see the review pack): the EU online withdrawal function (Art. 11a,
+  from 19 June 2026), automatic processing of statutory refunds (today: manual refund in the Dashboard
+  within 14 days of a withdrawal, proportionate amount), and the German §312k cancellation button.
+* When `LEGAL_VERSION` changes (new Terms), bump it in `packages/shared/src/billing.ts`; the Terms' "Last
+  updated" date follows it.
 
 ## Access rules (Stripe status → Exama)
 
@@ -75,12 +101,16 @@ Test mode and live mode are separate worlds in Stripe: repeat every step in live
    `invoice.paid`, `invoice.payment_failed`. Copy the **signing secret** (`whsec_…`).
 3. **Customer Portal** (Settings → Billing → Customer portal) — this is the "Manage billing" screen:
    enable *update payment method*, *invoice history*, *cancel subscriptions* (choose **cancel at the end of the
-   billing period** — an immediate cancellation removes access immediately) and, if you want plan changes there,
+   billing period** — an immediate cancellation removes access immediately, and the Terms promise access until
+   the end of the paid period) and, if you want plan changes there,
    *switch plans* with the six Prices. Fill in the business information and the public Terms/Privacy links.
 4. **Failed payments** (Settings → Billing → Subscriptions and emails): turn on Smart Retries and choose what
    happens when retries are exhausted (*cancel* or *mark as unpaid* — both end access in Exama).
-5. **Customer emails** (same page): turn on the trial-ending and payment-failed emails. Recommended (and in
-   some EU countries expected) so a customer is reminded before a trial turns into a paid subscription.
+5. **Customer emails** (same page): turn on the trial-ending, upcoming-renewal and payment-failed emails.
+   Recommended (and required by some US automatic-renewal laws) so a customer is reminded before a trial
+   turns into a paid subscription and before an annual renewal.
+   Optional: Settings → Public details → Terms of service URL, then `consent_collection.terms_of_service`
+   in `stripe-api.ts` for Stripe's own Terms checkbox (not needed: the app already records consent).
 6. **Tax / VAT**: Checkout is created **without automatic tax** — the amount charged is the list price above.
    Decide with your accountant whether the prices are tax-inclusive, or enable Stripe Tax and add it to the
    Checkout Session in `stripe-api.ts` (`automatic_tax`). This is a business decision, not a code one.
@@ -118,7 +148,8 @@ checked by prefix, the six Price ids must differ, URLs must be https in producti
 
 ## Automated tests
 
-`apps/api/test/stripe-billing.test.ts` (checkout, customer mapping, duplicates, portal, webhook signatures and
+`apps/api/test/stripe-billing.test.ts` (checkout, consents and their record, the Checkout notice, the
+confirmation email, customer mapping, duplicates, portal, webhook signatures and
 idempotency, every Stripe status → entitlement, account deletion, config) and
 `apps/api/test/stripe-disabled.test.ts` (Stripe off = behaviour unchanged). Stripe's network is faked; webhook
 signatures are verified by the real SDK. Run with `npm test -w @study/api` (needs Postgres).

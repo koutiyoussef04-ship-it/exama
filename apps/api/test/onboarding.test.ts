@@ -29,7 +29,7 @@ const email = () => `onb-${RUN}-${++n}@example.com`;
 
 async function signUp() {
   const e = email();
-  const r = await call<AuthResponse>('/auth/register', json('POST', { email: e, password: PASSWORD, name: 'Sam' }));
+  const r = await call<AuthResponse>('/auth/register', json('POST', { email: e, password: PASSWORD, name: 'Sam', ageRange: '18_24' }));
   assert.equal(r.status, 201);
   return { token: r.body.token, id: r.body.user.id, email: e };
 }

@@ -1,14 +1,20 @@
 import type { DocumentSummary } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Redirect, router, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, Chevron, colors, EmptyState, ErrorState, Loading, Screen, space, Title } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { openPaywall, planSummary, remaining, useEntitlement } from '@/lib/billing';
+import { VerifyEmailBanner } from '@/components/verify-email-banner';
+import { mustVerifyNow } from '@/lib/email-verification';
 import { onboardingGate } from '@/lib/onboarding';
+import { useEmailVerification } from '@/lib/use-email-verification';
 import { useOnboarding } from '@/lib/use-onboarding';
+import { startDestination } from '@/lib/start-intent';
+import { usePendingStart } from '@/lib/use-pending-start';
 
 const STATUS_TONE: Record<DocumentSummary['status'], 'primary' | 'success' | 'danger'> = {
   processing: 'primary',
@@ -21,6 +27,8 @@ export default function Courses() {
   const { user } = useAuth();
   const entitlement = useEntitlement();
   const onboarding = useOnboarding();
+  const verification = useEmailVerification();
+  const pending = usePendingStart();
   const docs = useQuery({
     queryKey: ['documents'],
     queryFn: api.listDocuments,
@@ -48,8 +56,19 @@ export default function Courses() {
   // New accounts answer the five onboarding questions first. A failed lookup never blocks the app:
   // the server keeps the state, so the questions simply come back next time.
   const gate = onboardingGate(onboarding);
+  const mustVerify = mustVerifyNow(verification.data);
+  // Arrived from a plan button on the website (/start): after sign-up/sign-in and onboarding, continue
+  // to the plans screen once, on top of the course list.
+  useEffect(() => {
+    if (gate !== 'proceed' || mustVerify || !pending.intent) return;
+    const to = startDestination(pending.intent);
+    pending.consume();
+    router.push(to);
+  }, [gate, mustVerify, pending]);
   if (gate === 'loading') return <Loading />;
   if (gate === 'ask') return <Redirect href="/onboarding" />;
+  // Onboarding first; then, only if the server has paused courses for an unconfirmed email, the verification page.
+  if (mustVerify) return <Redirect href="/verify-email" />;
 
   return (
     <Screen onRefresh={() => docs.refetch()} refreshing={docs.isRefetching}>
@@ -67,6 +86,8 @@ export default function Courses() {
         <Title>{user?.name ? t('home.greeting', { name: user.name.split(' ')[0] }) : t('home.greetingNoName')}</Title>
         <Body muted>{hasDocs ? t('home.subtitleReturning') : t('home.subtitleNew')}</Body>
       </View>
+
+      <VerifyEmailBanner />
 
       {/* One entry for everything a course learns from — PDF, PowerPoint, audio, video — on web, iOS and
           Android alike (the same selector as the course screen). */}

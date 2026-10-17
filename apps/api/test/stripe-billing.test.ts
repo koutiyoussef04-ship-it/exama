@@ -53,7 +53,11 @@ const { HttpError } = await import('../src/lib/errors.js');
 const { applySubscriptionUpdate, getSubscription } = await import('../src/billing/subscriptions.js');
 const { assertNotSubscribedElsewhere } = await import('../src/billing/purchases.js');
 const { mapStripeSubscription, PAST_DUE_GRACE_DAYS } = await import('../src/billing/providers/stripe.js');
+const { emailHoldHash } = await import('../src/services/email-hold.js');
 const service = await import('../src/billing/stripe-service.js');
+const { CHECKOUT_NOTICE } = await import('../src/billing/checkout-terms.js');
+const { outbox } = await import('../src/lib/mailer.js');
+const { LEGAL_VERSION } = await import('@study/shared');
 type Sub = import('../src/billing/providers/stripe-api.js').StripeSubscriptionLike;
 after(async () => {
   await flushAnalytics();
@@ -167,14 +171,18 @@ async function deliver(
 }
 
 async function newUser(email = `stripe-${crypto.randomUUID()}@example.com`) {
-  const r = await app.request('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'password123', name: 'Stripe Tester' }) });
+  const r = await app.request('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'password123', name: 'Stripe Tester', ageRange: '18_24' }) });
   const j = (await r.json()) as AuthResponse;
   return { id: j.user.id, token: j.token, email };
 }
 type U = Awaited<ReturnType<typeof newUser>>;
 const auth = (u: U) => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${u.token}` });
 const post = (path: string, u: U | null, body: unknown = {}) => app.request(path, { method: 'POST', headers: u ? auth(u) : { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const checkout = (u: U | null, body: unknown) => post('/billing/stripe/checkout', u, body);
+/** Both checkout consents, as the app sends them once the two boxes are ticked. */
+const CONSENT = { autoRenewal: true, immediateStart: true };
+/** Checkout as the app calls it (with the consents) unless the test passes its own `consent`. */
+const checkout = (u: U | null, body: unknown) =>
+  post('/billing/stripe/checkout', u, body && typeof body === 'object' && !Array.isArray(body) && !('consent' in body) ? { ...body, consent: CONSENT } : body);
 const customerOf = (u: U) => world.customers.find((c) => c.userId === u.id)!.id;
 const code = async (r: Response) => ((await r.json()) as { code?: string }).code;
 const fakeCall = async (p: Promise<unknown>) => {
@@ -902,11 +910,13 @@ test('deleting an account cancels its web subscription FIRST; if Stripe fails, n
   assert.ok(!world.deleted.includes(customerId));
   assert.equal((await app.request('/auth/me', { headers: auth(u) })).status, 200, 'the account still exists');
   assert.equal((await getEntitlement(u.id)).tier, 'student');
+  assert.equal((await sql`select 1 from deleted_email_holds where email_hash = ${emailHoldHash(u.email)}`).length, 0, 'no re-registration hold for a deletion that did not happen');
 
   const ok = await app.request('/auth/me', { method: 'DELETE', headers: auth(u), body: JSON.stringify({ password: 'password123' }) });
   assert.equal(ok.status, 200, await ok.clone().text());
   assert.ok(world.deleted.includes(customerId), 'the Stripe Customer (and so its subscription) was removed');
   assert.equal((await sql`select 1 from stripe_customers where user_id = ${u.id}`).length, 0);
+  assert.equal((await sql`select 1 from deleted_email_holds where email_hash = ${emailHoldHash(u.email)}`).length, 1, 'the email is held once the deletion succeeded');
 
   // Stripe's "subscription deleted" event for the removed customer arrives afterwards: acknowledged, harmless.
   const late = await deliver({ type: 'customer.subscription.deleted', object: { id: 'sub_gone', customer: customerId } });
@@ -993,4 +1003,99 @@ test('the code never contains a Stripe secret, and errors never echo request dat
   const bad = await deliver({ type: 'customer.subscription.created', object: { id: 'sub_1' } }, { header: 't=1,v1=00' });
   assert.doesNotMatch(await bad.text(), /whsec_|sk_test|WEBHOOK_SECRET/);
   assert.equal(await fakeCall(service.createStripePortal(stripeBilling, u.id)), 'no_billing_account');
+});
+
+// ================================================================ Consumer law: consent, notice, confirmation
+
+test('checkout requires BOTH consents (automatic renewal + immediate start), ticked as true — nothing is created otherwise', async () => {
+  const u = await newUser();
+  const before = { checkouts: world.checkouts.length, customers: world.customers.length };
+  for (const consent of [undefined, {}, { autoRenewal: true }, { immediateStart: true }, { autoRenewal: true, immediateStart: false }, { autoRenewal: 'true', immediateStart: 'true' }, { autoRenewal: 1, immediateStart: 1 }, 'yes']) {
+    const r = await post('/billing/stripe/checkout', u, { plan: 'student', interval: 'monthly', ...(consent === undefined ? {} : { consent }) });
+    assert.equal(r.status, 400, JSON.stringify(consent));
+    assert.equal(await code(r), 'checkout_consent_required', JSON.stringify(consent));
+  }
+  assert.deepEqual({ checkouts: world.checkouts.length, customers: world.customers.length }, before, 'no Stripe customer or Checkout Session was created');
+  assert.equal((await checkout(u, { plan: 'student', interval: 'monthly' })).status, 200, 'with both consents it works');
+});
+
+test('checkout records what the customer confirmed (Stripe metadata) and shows the withdrawal notice in their language', async () => {
+  for (const [language, locale] of [['en', 'en'], ['es', 'es'], ['fr', 'fr'], ['ar', 'auto'], ['de', 'en'], [undefined, 'en']] as const) {
+    const u = await newUser();
+    const t0 = Date.now();
+    const r = await checkout(u, { plan: 'basic', interval: 'yearly', ...(language ? { language } : {}) });
+    assert.equal(r.status, 200);
+    const { input } = world.checkouts.at(-1)!;
+    const lang = language === 'es' || language === 'fr' || language === 'ar' ? language : 'en';
+    assert.equal(input.locale, locale, `${language} → Stripe locale ${locale}`);
+    assert.equal(input.submitMessage, CHECKOUT_NOTICE[lang]);
+    assert.ok(input.submitMessage!.length <= 1200);
+    assert.equal(input.metadata?.exama_consent, 'auto_renewal,immediate_start');
+    assert.equal(input.metadata?.exama_terms_version, LEGAL_VERSION);
+    assert.equal(input.metadata?.exama_language, lang);
+    const at = Date.parse(input.metadata!.exama_consent_at);
+    assert.ok(at <= Date.now() && at > t0 - 61_000, 'consent time (minute precision)');
+  }
+  // The notice states the essentials in every language: automatic renewal, 14 days, pay only for what was provided.
+  for (const text of Object.values(CHECKOUT_NOTICE)) assert.match(text, /14/);
+  assert.match(CHECKOUT_NOTICE.en, /renews automatically/);
+  assert.match(CHECKOUT_NOTICE.en, /pay only for the service provided/);
+});
+
+test('a new web subscription gets ONE confirmation email: plan, price, trial end, consents, withdrawal deadline and model form', async () => {
+  const u = await newUser();
+  const sub = trialingSub({ plan: 'student_monthly' });
+  const mails = () => outbox.filter((m) => m.to === u.email && /Exama subscription/.test(m.subject));
+  await subscribe(u, sub, ['checkout.session.completed', 'customer.subscription.created']);
+  assert.equal(mails().length, 1, 'one email, although two events arrived');
+  const m = mails()[0];
+  assert.equal(m.subject, 'Your Exama subscription: confirmation');
+  assert.match(m.text, /Exama Student subscription \(monthly\)/);
+  assert.match(m.text, /€14\.99 per month/, 'price per period');
+  assert.match(m.text, /Your free trial ends on/);
+  assert.match(m.text, /agreed to the automatic renewal and asked us to start your subscription immediately/);
+  const deadline = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.now() + 14 * DAY));
+  assert.ok(m.text.includes(`within 14 days, until ${deadline}`), 'withdrawal deadline: 14 days from today');
+  assert.match(m.text, /Model withdrawal form/);
+  assert.match(m.text, /I hereby give notice that I withdraw from my contract/);
+  assert.match(m.text, /payments are not refundable/);
+  assert.match(m.text, new RegExp(LEGAL_VERSION));
+  assert.match(m.html, /<li>I hereby give notice/);
+  // Renewals, trial conversion and plan changes are not new contracts: no further confirmation.
+  Object.assign(sub, { status: 'active', trialEnd: sec(NOW - DAY) });
+  await change(sub);
+  sub.items = [{ priceId: PRICES.pro_monthly, currentPeriodStart: sec(NOW), currentPeriodEnd: sec(NOW + 30 * DAY) }];
+  await change(sub);
+  assert.equal(mails().length, 1);
+});
+
+test('the confirmation follows the checkout language and Stripe’s actual price; paid starts have no trial line', async () => {
+  const u = await newUser();
+  const sub = makeSub({ plan: 'pro_yearly' });
+  sub.items[0] = { ...sub.items[0], unitAmount: 21999, currency: 'eur' };
+  if (!world.customers.some((c) => c.userId === u.id)) assert.equal((await checkout(u, { plan: 'pro', interval: 'yearly', language: 'fr' })).status, 200);
+  sub.customerId = customerOf(u);
+  sub.metadata = { exama_user_id: u.id, exama_language: 'fr' };
+  world.subs.set(sub.id, sub);
+  const r = await deliver({ type: 'customer.subscription.created', object: { id: sub.id, customer: sub.customerId } });
+  assert.equal(r.status, 200);
+  const m = outbox.filter((x) => x.to === u.email).at(-1)!;
+  assert.equal(m.subject, 'Votre abonnement Exama : confirmation');
+  assert.match(m.text, /Exama Pro \(annuel\)/);
+  assert.match(m.text, /219,99\s€ par an/, 'the price Stripe bills, formatted for French');
+  assert.doesNotMatch(m.text, /essai gratuit se termine/);
+  assert.match(m.text, /Modèle de formulaire de rétractation/);
+});
+
+test('a failing email never fails the webhook (Stripe would retry) — it is logged without the address', async () => {
+  const { mailTestHooks } = await import('../src/lib/mailer.js');
+  const u = await newUser();
+  mailTestHooks.fail = (mail) => mail.to === u.email;
+  try {
+    const sub = makeSub({ plan: 'basic_monthly' });
+    await subscribe(u, sub); // asserts 200 inside
+    assert.equal((await getEntitlement(u.id)).tier, 'basic', 'access granted anyway');
+  } finally {
+    mailTestHooks.fail = undefined;
+  }
 });

@@ -1,12 +1,21 @@
 ---
+import { TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
+import { copy, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang);
+const trial = site.webCheckoutAvailable;
 ---
 
 <section class="final-cta" aria-labelledby="final-title">
   <div class="container final-inner">
-    <h2 id="final-title">Put your course material to work.</h2>
-    <p>Upload it once. Get exams, grading, weak-topic practice and a study plan built from it.</p>
-    <a class="btn btn-light btn-lg" href={site.cta.href}>{site.cta.label}</a>
-    <p class="final-note">7 days free · Card required, no payment today · Cancel anytime before it ends</p>
+    <h2 id="final-title">{c.final.title}</h2>
+    <p>{c.final.text}</p>
+    <a class="btn btn-light btn-lg" href={site.links.primary(lang)}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
+    <p class="final-note">{trial ? c.final.noteTrial(TRIAL_DAYS) : c.final.noteFree}</p>
   </div>
 </section>

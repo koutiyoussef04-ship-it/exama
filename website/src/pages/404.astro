@@ -1,6 +1,11 @@
 ---
 import Base from '../layouts/Base.astro';
 import { site } from '../config/site';
+import { copy, LANGS, LANG_NAMES, pathFor } from '../i18n';
+import { TRIAL_DAYS } from '../data/content';
+
+const c = copy('en');
+const trial = site.webCheckoutAvailable;
 ---
 
 <Base title="Page not found — Exama" description="This page could not be found." path="/404" noindex>
@@ -12,7 +17,10 @@ import { site } from '../config/site';
       </div>
       <p class="cta-row">
         <a class="btn btn-secondary" href="/">Go to the homepage</a>
-        <a class="btn btn-primary" href={site.cta.href}>{site.cta.label}</a>
+        <a class="btn btn-primary" href={site.links.primary('en')}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
+      </p>
+      <p class="lang-home-links">
+        {LANGS.filter((l) => l !== 'en').map((l) => <a href={pathFor(l)} lang={l} hreflang={l}>{LANG_NAMES[l]}</a>)}
       </p>
     </div>
   </section>

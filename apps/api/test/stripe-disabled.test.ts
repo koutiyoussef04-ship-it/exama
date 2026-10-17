@@ -25,7 +25,7 @@ after(async () => {
 });
 
 const user = async () => {
-  const r = await app.request('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `nostripe-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'N' }) });
+  const r = await app.request('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `nostripe-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'N', ageRange: '18_24' }) });
   const j = (await r.json()) as AuthResponse;
   return { id: j.user.id, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${j.token}` } };
 };

@@ -8,6 +8,8 @@
  * - uploaded PDFs and lecture recordings: running processing jobs are stopped first, then the user's
  *   whole storage folder is removed after the database commit.
  * - sessions: requireAuth rejects tokens of accounts that no longer exist.
+ * - the email address can't sign up again for exactly 30 days: only a keyed hash of it is kept, until
+ *   then (services/email-hold.ts), written as the last step of the deletion transaction.
  *
  * Store subscriptions (Apple, Google Play) are NOT cancelled by deleting the account — the store bills the
  * user's store account. The app tells the user to cancel there first; the response says whether one was active.
@@ -20,12 +22,14 @@ import { getEntitlement } from '../billing/entitlements.js';
 import { stripeBilling } from '../billing/index.js';
 import { cancelStripeBillingForAccountDeletion } from '../billing/stripe-service.js';
 import { db } from '../db/client.js';
+import type { DeleteAccountResult } from '@study/shared';
 import { analyticsEvents, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { storage } from '../storage/index.js';
+import { holdDeletedEmail } from './email-hold.js';
 import { cancelUserMaterialJobs } from './materials/index.js';
 
-export async function deleteAccount(userId: string, password: string): Promise<{ hadActiveSubscription: boolean }> {
+export async function deleteAccount(userId: string, password: string): Promise<DeleteAccountResult> {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (!user) throw new HttpError(401, 'Account no longer exists', 'account_deleted');
   if (!(await verifyPassword(password, user.passwordHash))) {
@@ -39,7 +43,7 @@ export async function deleteAccount(userId: string, password: string): Promise<{
   await cancelStripeBillingForAccountDeletion(stripeBilling, userId);
 
   await cancelUserMaterialJobs(userId);
-  await db.transaction(async (tx) => {
+  const holdEnds = await db.transaction(async (tx) => {
     // Anonymize analytics: drop the user link and the install id that could re-link it.
     const anonIds = await tx
       .selectDistinct({ id: analyticsEvents.anonymousId })
@@ -55,6 +59,7 @@ export async function deleteAccount(userId: string, password: string): Promise<{
         .where(and(inArray(analyticsEvents.anonymousId, ids), isNull(analyticsEvents.userId)));
     }
     await tx.delete(users).where(eq(users.id, userId)); // cascades to all user-owned rows
+    return holdDeletedEmail(tx, user.email);
   });
 
   // Files last: if this fails the account is already gone; log loudly so ops can clean up.
@@ -65,5 +70,5 @@ export async function deleteAccount(userId: string, password: string): Promise<{
   }
 
   void track('account_deleted', null, { had_active_subscription: hadActiveSubscription });
-  return { hadActiveSubscription };
+  return { hadActiveSubscription, emailReusableAt: holdEnds.toISOString() };
 }

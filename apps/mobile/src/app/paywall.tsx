@@ -5,12 +5,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, space, TextButton, Title } from '@/components/ui';
+import { Badge, Body, Button, Card, CheckRow, colors, ErrorState, ErrorText, Loading, Screen, space, TextButton, Title } from '@/components/ui';
 import { ManageBillingButton, useResetOnPageShow } from '@/components/web-billing';
 import { isReleaseBuild } from '@/config/app-config';
 import { platform, track } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatPrice, monthlyEquivalent, openManageSubscriptions, tierName, trialAllowance, trialLecture, useCatalog, useEntitlement, useStorePrices } from '@/lib/billing';
+import { usePreferences } from '@/lib/preferences';
 import { getStoreClient, hasWebSubscription, isStoreProvider, purchaseGap, storeName } from '@/lib/store';
 
 const LECTURE_TRIGGERS: PaywallTrigger[] = ['free_lecture_used', 'locked_lectures'];
@@ -27,7 +28,7 @@ function upgradeContext(trigger: PaywallTrigger, tier: Entitlement['tier'], t: T
 export default function Paywall() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ trigger?: PaywallTrigger; message?: string }>();
+  const params = useLocalSearchParams<{ trigger?: PaywallTrigger; message?: string; tier?: string; period?: string }>();
   const trigger: PaywallTrigger = params.trigger ?? 'account';
   const qc = useQueryClient();
   const catalog = useCatalog();
@@ -35,14 +36,26 @@ export default function Paywall() {
   // Pre-selected: the recommended plan (Student monthly), unless the user already has a paid plan.
   const current = planById(entitlement.data?.isPremium && entitlement.data.planId ? entitlement.data.planId : (catalog.data?.recommendedPlanId ?? RECOMMENDED_PLAN_ID));
   // Asked for lectures (free lecture used, or audio/video on Basic): Student, the first plan with them.
-  const initial =
+  // A plan chosen on the website (/start → plan=…, period=…), unless the student already has a paid plan.
+  const fromLink =
+    !entitlement.data?.isPremium && (PAID_TIERS as readonly string[]).includes(params.tier ?? '')
+      ? planById(`${params.tier as PaidTier}_${params.period === 'yearly' || params.period === 'monthly' ? params.period : current.period}`)
+      : null;
+  const initial = fromLink ?? (
     current.tier === 'basic' && (LECTURE_TRIGGERS.includes(trigger) || trigger === 'locked_weak_topics' || trigger.startsWith('limit_'))
       ? planById(`student_${current.period}`) // Basic asking for more: Student is the next step
       : entitlement.data?.tier === 'student' && trigger.startsWith('limit_')
         ? planById(`pro_${current.period}`) // a Student at a limit: Pro is what gives more
-        : current;
+        : current);
   const [period, setPeriod] = useState<BillingPeriod>(initial.period);
   const [tier, setTier] = useState<PaidTier>(initial.tier);
+  const { appLanguage } = usePreferences();
+  // Web checkout (Stripe): two separate, unticked boxes — automatic renewal, and start now with the withdrawal
+  // acknowledgement (docs/stripe/stripe-web-billing.md → Consumer law). The renewal consent names the price, so
+  // choosing another plan clears it.
+  const [renewalConsent, setRenewalConsent] = useState(false);
+  const [startNowConsent, setStartNowConsent] = useState(false);
+  useEffect(() => setRenewalConsent(false), [tier, period]);
 
   useEffect(() => {
     track('paywall_viewed', { platform, trigger });
@@ -64,7 +77,8 @@ export default function Paywall() {
   const buy = useMutation({
     mutationFn: async () => {
       track('upgrade_started', { platform, plan_id: plan!.id, tier: plan!.tier, period: plan!.period, with_trial: withTrial, trigger });
-      return store!.purchase(plan!, { withTrial, userId: user!.id });
+      const consent = renewalConsent && startNowConsent ? ({ autoRenewal: true, immediateStart: true } as const) : undefined;
+      return store!.purchase(plan!, { withTrial, userId: user!.id, consent, language: appLanguage });
     },
     onSuccess: (next) => {
       qc.setQueryData(['entitlement'], next);
@@ -290,7 +304,13 @@ export default function Paywall() {
         </Card>
       ) : purchasesAvailable ? (
         <>
-          <Button title={cta} onPress={() => buy.mutate()} loading={buy.isPending} disabled={!plan || isCurrent} />
+          {webCheckout && plan && (
+            <View style={{ gap: space(1) }}>
+              <CheckRow tone="primary" checked={renewalConsent} onChange={setRenewalConsent} label={t('paywall.consentRenewal', { price: price(plan), per: per(plan) })} />
+              <CheckRow tone="primary" checked={startNowConsent} onChange={setStartNowConsent} label={t(withTrial ? 'paywall.consentStartNowTrial' : 'paywall.consentStartNow')} />
+            </View>
+          )}
+          <Button title={cta} onPress={() => buy.mutate()} loading={buy.isPending} disabled={!plan || isCurrent || (webCheckout && !(renewalConsent && startNowConsent))} />
           {webCheckout && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('paywall.webCheckoutCard')}</Body>}
           {plan && withTrial && (
             <Body muted style={{ fontSize: 13, textAlign: 'center' }}>

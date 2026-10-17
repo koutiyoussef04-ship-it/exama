@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "age_range" text;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_age_range_check" CHECK ("users"."age_range" is null or "users"."age_range" in ('13_17', '18_24', '25_34', '35_plus'));

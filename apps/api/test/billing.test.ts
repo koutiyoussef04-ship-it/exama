@@ -38,7 +38,7 @@ const post = (body: unknown, token?: string) => ({ method: 'POST', body: JSON.st
 
 let n = 0;
 async function newUser(email = `billing-${RUN}-${n++}@example.com`) {
-  const r = await call<AuthResponse>('/auth/register', post({ email, password: 'password123', name: 'Tester' }));
+  const r = await call<AuthResponse>('/auth/register', post({ email, password: 'password123', name: 'Tester', ageRange: '18_24' }));
   assert.equal(r.status, 201);
   return { token: r.body.token, id: r.body.user.id, email };
 }

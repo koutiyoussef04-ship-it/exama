@@ -1,24 +1,29 @@
 ---
 import Base from './Base.astro';
+import { alternatesFor, pathFor, type Lang } from '../i18n';
 
 interface Props {
   title: string;
   path: string;
   description: string;
+  lang?: Lang;
+  /** Which page this is in every language (for the language selector and hreflang). */
+  page?: 'support';
+  back?: string;
   /** Interim pages stay out of search results until their final content is published. */
   noindex?: boolean;
 }
-const { title, path, description, noindex = true } = Astro.props;
+const { title, path, description, lang = 'en', page, back = '← Back to exama.app', noindex = true } = Astro.props;
 ---
 
-<Base title={`${title} — Exama`} description={description} path={path} noindex={noindex}>
+<Base title={`${title} — Exama`} description={description} path={path} noindex={noindex} lang={lang} alternates={page ? alternatesFor(page) : undefined}>
   <section class="section info-page">
     <div class="container narrow">
       <h1>{title}</h1>
       <div class="prose">
         <slot />
       </div>
-      <p class="back"><a href="/">← Back to exama.app</a></p>
+      <p class="back"><a href={pathFor(lang)}>{back}</a></p>
     </div>
   </section>
 </Base>

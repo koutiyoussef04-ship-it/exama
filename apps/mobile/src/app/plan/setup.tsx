@@ -8,7 +8,6 @@ import { Calendar, Chips, examDateText, useDateLocale, WeekdayPicker } from '@/c
 import { Body, Button, Card, colors, ErrorText, Loading, Screen, SectionLabel, space, TextButton, Title, WorkingCard } from '@/components/ui';
 import { platform, track } from '@/lib/analytics';
 import { api } from '@/lib/api';
-import { syncReminders } from '@/lib/reminders';
 import { handleLimitError } from '@/lib/billing';
 import { addDaysIso, deviceTimeZone, formatTime, stepTime, todayIso } from '@/lib/plan-dates';
 import { preparedLevelDefault } from '@/lib/onboarding';
@@ -72,7 +71,6 @@ function SetupForm({ documentId, plan, fromResults = false, defaultPrepared }: {
     onSuccess: (saved) => {
       qc.setQueryData(['study-plan', documentId], saved);
       qc.invalidateQueries({ queryKey: ['entitlement'] });
-      void syncReminders();
       if (plan) router.back();
       else router.replace({ pathname: '/plan/[id]', params: { id: documentId } });
     },

@@ -1,0 +1,12 @@
+---
+/** /es/support, /fr/support and /ar/support. English is /support (../support.astro). */
+import SupportPage from '../../components/SupportPage.astro';
+import { LANGS, type Lang } from '../../i18n';
+
+export function getStaticPaths() {
+  return LANGS.filter((lang) => lang !== 'en').map((lang) => ({ params: { lang } }));
+}
+const { lang } = Astro.params as { lang: Lang };
+---
+
+<SupportPage lang={lang} />

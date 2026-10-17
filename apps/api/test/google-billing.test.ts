@@ -86,7 +86,7 @@ async function newUser(email = `google-${crypto.randomUUID()}@example.com`) {
   const r = await app.request('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'password123', name: 'G' }),
+    body: JSON.stringify({ email, password: 'password123', name: 'G', ageRange: '18_24' }),
   });
   return ((await r.json()) as AuthResponse).user.id;
 }
@@ -436,7 +436,7 @@ test('routes: platform-aware catalog; Play endpoints refuse until configured; st
   const reg = await app.request('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `google-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'G' }),
+    body: JSON.stringify({ email: `google-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'G', ageRange: '18_24' }),
   });
   const { token: jwt } = (await reg.json()) as AuthResponse;
   for (const [path, body] of [

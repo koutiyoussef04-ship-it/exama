@@ -3,50 +3,88 @@ import { Image } from 'astro:assets';
 import logoMark from '../assets/brand/logo-mark.png';
 import Icon from './Icon.astro';
 import Wordmark from './Wordmark.astro';
-import { navLinks } from '../data/content';
+import { SECTIONS, TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
+import { copy, homeAnchor, LANG_NAMES, pathFor, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+  /** The same page in every language (language selector). */
+  alternates: { lang: Lang; path: string }[];
+}
+const { lang, alternates } = Astro.props;
+const c = copy(lang);
+const navLinks = [
+  { label: c.nav.how, href: homeAnchor(lang, SECTIONS.how) },
+  { label: c.nav.materials, href: homeAnchor(lang, SECTIONS.materials) },
+  { label: c.nav.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
+  { label: c.nav.faq, href: homeAnchor(lang, SECTIONS.faq) },
+];
+const ctaLabel = site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
+const ctaHref = site.links.primary(lang);
 ---
 
 <header class="site-header">
   <div class="container header-bar">
-    <a class="brand" href="/" aria-label="Exama — home">
+    <a class="brand" href={pathFor(lang)} aria-label={c.ui.homeAria}>
       <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" loading="eager" />
       <Wordmark />
     </a>
 
-    <nav class="nav-desktop" aria-label="Primary">
+    <nav class="nav-desktop" aria-label={c.ui.primaryNav}>
       <ul>
         {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
       </ul>
     </nav>
 
-    <a class="btn btn-primary btn-sm header-cta" href={site.cta.href}>{site.cta.label}</a>
+    <details class="lang-menu">
+      <summary aria-label={c.ui.language}><Icon name="globe" size={18} /><span>{LANG_NAMES[lang]}</span></summary>
+      <ul class="lang-panel" aria-label={c.ui.language}>
+        {
+          alternates.map((a) =>
+            a.lang === lang ? (
+              <li><span aria-current="page" lang={a.lang}>{LANG_NAMES[a.lang]}</span></li>
+            ) : (
+              <li><a href={a.path} hreflang={a.lang} lang={a.lang}>{LANG_NAMES[a.lang]}</a></li>
+            ),
+          )
+        }
+      </ul>
+    </details>
+
+    <a class="header-login" href={site.links.signIn(lang)}>{c.nav.login}</a>
+    <a class="btn btn-primary btn-sm header-cta" href={ctaHref}>{ctaLabel}</a>
 
     <details class="menu">
-      <summary aria-label="Menu">
+      <summary aria-label={c.ui.menu}>
         <Icon name="menu" class="menu-open" />
         <Icon name="close" class="menu-close" />
       </summary>
-      <nav class="menu-panel" aria-label="Mobile">
+      <nav class="menu-panel" aria-label={c.ui.mobileNav}>
         <ul>
           {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+          <li><a href={site.links.signIn(lang)}>{c.nav.login}</a></li>
         </ul>
-        <a class="btn btn-primary btn-block" href={site.cta.href}>{site.cta.label}</a>
+        <a class="btn btn-primary btn-block" href={ctaHref}>{ctaLabel}</a>
       </nav>
     </details>
   </div>
 </header>
 
-<!-- Progressive enhancement: the menu opens without JS; this only closes it after a link is used. -->
+<!-- Progressive enhancement: the menus open without JS; this only closes them after a link is used, on a click elsewhere or on Escape. -->
 <script is:inline data-purpose="close-menu">
   (function () {
-    var menu = document.querySelector('.menu');
-    if (!menu) return;
-    menu.addEventListener('click', function (e) {
-      if (e.target.closest('a')) menu.removeAttribute('open');
+    var menus = document.querySelectorAll('.menu, .lang-menu');
+    menus.forEach(function (menu) {
+      menu.addEventListener('click', function (e) {
+        if (e.target.closest('a')) menu.removeAttribute('open');
+      });
+    });
+    document.addEventListener('click', function (e) {
+      menus.forEach(function (m) { if (!m.contains(e.target)) m.removeAttribute('open'); });
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') menu.removeAttribute('open');
+      if (e.key === 'Escape') menus.forEach(function (m) { m.removeAttribute('open'); });
     });
   })();
 </script>

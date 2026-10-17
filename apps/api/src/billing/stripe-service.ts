@@ -12,12 +12,15 @@
  *    all converge on Stripe's current state.
  */
 import { and, eq, isNull, lt, sql } from 'drizzle-orm';
-import { BILLING_PERIODS, PAID_TIERS, TRIAL_DAYS, type BillingPeriod, type BillingRedirect, type PaidTier, type PlanId } from '@study/shared';
+import { BILLING_PERIODS, PAID_TIERS, TRIAL_DAYS, type BillingPeriod, type BillingRedirect, type CheckoutConsent, type Language, type PaidTier, type PlanId } from '@study/shared';
 import { track } from '../analytics/index.js';
+import { config } from '../config.js';
 import { db } from '../db/client.js';
 import { stripeCustomers, stripeEvents, subscriptions, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
+import { sendMail } from '../lib/mailer.js';
 import { RateLimiter } from '../lib/rate-limit.js';
+import { CHECKOUT_NOTICE, checkoutLanguage, consentMetadata, parseCheckoutConsent, stripeLocale, subscriptionConfirmationEmail } from './checkout-terms.js';
 import { isOwner } from './entitlements.js';
 import { CHECKOUT_TTL_SECONDS, mapStripeSubscription, SUBSCRIPTION_BLOCKS_CHECKOUT, SUBSCRIPTION_IS_RUNNING, type StripeBilling } from './providers/stripe.js';
 import type { StripeSubscriptionLike } from './providers/stripe-api.js';
@@ -67,14 +70,18 @@ export async function getOrCreateStripeCustomer(ctx: StripeBilling, userId: stri
 
 // ---------------------------------------------------------------- checkout
 
-/** Validates the request against the plan/interval allowlist. Anything else in the body is ignored. */
-export function parseCheckoutInput(body: unknown): { plan: PaidTier; interval: BillingPeriod; planId: PlanId } {
+/**
+ * Validates the request against the plan/interval allowlist and requires both checkout consents
+ * (checkout-terms.ts). Anything else in the body is ignored.
+ */
+export function parseCheckoutInput(body: unknown): { plan: PaidTier; interval: BillingPeriod; planId: PlanId; consent: CheckoutConsent; language: Language } {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (typeof b.plan !== 'string' || !(PAID_TIERS as readonly string[]).includes(b.plan)) throw new HttpError(400, 'Unknown plan.', 'invalid_plan');
   if (typeof b.interval !== 'string' || !(BILLING_PERIODS as readonly string[]).includes(b.interval)) throw new HttpError(400, 'Unknown billing interval.', 'invalid_interval');
+  const consent = parseCheckoutConsent(b);
   const plan = b.plan as PaidTier;
   const interval = b.interval as BillingPeriod;
-  return { plan, interval, planId: `${plan}_${interval}` as PlanId };
+  return { plan, interval, planId: `${plan}_${interval}` as PlanId, consent, language: checkoutLanguage(b.language) };
 }
 
 const alreadySubscribed = () => new HttpError(409, 'You already have an Exama subscription. Manage it from your account.', 'already_subscribed', { provider: 'stripe' });
@@ -84,7 +91,7 @@ const alreadySubscribed = () => new HttpError(409, 'You already have an Exama su
  * The price comes from server configuration; the trial is granted only to an account that never had one.
  */
 export async function createStripeCheckout(ctx: StripeBilling, userId: string, body: unknown): Promise<BillingRedirect> {
-  const { planId } = parseCheckoutInput(body);
+  const { planId, language } = parseCheckoutInput(body);
   if (await isOwner(userId)) throw new HttpError(409, 'This account already has full access.', 'full_access');
   checkoutLimiter.take(userId);
 
@@ -110,9 +117,13 @@ export async function createStripeCheckout(ctx: StripeBilling, userId: string, b
       successUrl: ctx.successUrl,
       cancelUrl: ctx.cancelUrl,
       expiresAt: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_SECONDS,
+      // What the customer confirmed (both consents, terms version, language): kept by Stripe on the session and the subscription.
+      metadata: consentMetadata(language),
+      submitMessage: CHECKOUT_NOTICE[language],
+      locale: stripeLocale(language),
     },
     // Repeated clicks within a minute get the same Checkout Session instead of a new one.
-    `checkout-${userId}-${planId}-${trialEligible ? 't' : 'p'}-${Math.floor(Date.now() / 60_000)}`,
+    `checkout-${userId}-${planId}-${trialEligible ? 't' : 'p'}-${language}-${Math.floor(Date.now() / 60_000)}`,
   );
   return { url: session.url };
 }
@@ -266,7 +277,7 @@ export function reasonFor(previous: SubscriptionRow | null, update: Subscription
  * on one transaction, so concurrent deliveries cannot apply an older state over a newer one.
  */
 async function syncSubscription(ctx: StripeBilling, subscriptionId: string, opts: { customerId?: string | null; userHint?: string | null }): Promise<{ handled: boolean; note?: string }> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<{ handled: boolean; note?: string; started?: { userId: string; sub: StripeSubscriptionLike; update: SubscriptionUpdate } }> => {
     await tx.execute(lock(`stripe-sync:${opts.customerId ?? subscriptionId}`));
     const sub = await ctx.api.retrieveSubscription(subscriptionId);
     if (!sub) return { handled: false, note: 'subscription_not_found' };
@@ -287,8 +298,39 @@ async function syncSubscription(ctx: StripeBilling, subscriptionId: string, opts
     if (update.status === 'expired' && previous && previous.status !== 'expired' && previous.provider === 'stripe' && previous.providerRef === sub.id) {
       void track('subscription_expired', userId, { ...subscriptionEventProps(update.planId, 'stripe', update.environment), was_trial: previous.status === 'trialing' });
     }
-    return { handled: true };
+    // A subscription this account did not have before (not a renewal, a plan change or a repeated event).
+    const isNew = !(previous?.provider === 'stripe' && previous.providerRef === sub.id) && (update.status === 'trialing' || update.status === 'active');
+    return { handled: true, ...(isNew ? { started: { userId, sub, update } } : {}) };
   });
+  // After the commit, so a rolled-back sync never sends it; at most once, because later events see the stored subscription.
+  if (result.started) await sendSubscriptionConfirmation(result.started.userId, result.started.sub, result.started.update);
+  return { handled: result.handled, ...(result.note ? { note: result.note } : {}) };
+}
+
+/**
+ * Contract confirmation on a durable medium (email) when a web subscription starts. Never blocks or
+ * fails the webhook: a failure is logged (without the address) so it can be re-sent by hand.
+ */
+async function sendSubscriptionConfirmation(userId: string, sub: StripeSubscriptionLike, update: SubscriptionUpdate): Promise<void> {
+  try {
+    const [user] = await db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, userId));
+    if (!user) return;
+    const item = sub.items[0];
+    const mail = subscriptionConfirmationEmail({
+      to: user.email,
+      name: user.name,
+      language: checkoutLanguage(sub.metadata.exama_language),
+      planId: update.planId as PlanId,
+      startedAt: new Date(),
+      trialEndsAt: update.status === 'trialing' ? (update.trialEndsAt ?? null) : null,
+      unitAmount: item?.unitAmount ?? null,
+      currency: item?.currency ?? null,
+      webAppUrl: config.WEB_APP_URL ?? null,
+    });
+    await sendMail(mail);
+  } catch (err) {
+    console.error(`[stripe] subscription ${sub.id}: the confirmation email could not be sent:`, err instanceof Error ? err.message : 'unknown error');
+  }
 }
 
 // ---------------------------------------------------------------- account deletion

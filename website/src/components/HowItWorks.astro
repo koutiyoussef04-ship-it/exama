@@ -1,17 +1,23 @@
 ---
 import Icon from './Icon.astro';
-import { steps } from '../data/content';
+import { SECTIONS } from '../data/content';
+import { copy, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const c = copy(Astro.props.lang).how;
 ---
 
-<section id="how-it-works" class="section" aria-labelledby="how-title">
+<section id={SECTIONS.how} class="section" aria-labelledby="how-title">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">How it works</p>
-      <h2 id="how-title">From course material to exam-ready, in six steps</h2>
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="how-title">{c.title}</h2>
     </div>
 
     <ol class="steps">
-      {steps.map((s, i) => (
+      {c.steps.map((s, i) => (
         <li class="step">
           <span class="step-num" aria-hidden="true">{i + 1}</span>
           <span class="step-icon"><Icon name={s.icon} size={22} /></span>

@@ -27,7 +27,7 @@ const json = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body), h
 
 test('core study loop', async () => {
   const email = `student-${Date.now()}@example.com`;
-  const reg = await call<AuthResponse>('/auth/register', json({ email, password: 'password123', name: 'Test Student' }));
+  const reg = await call<AuthResponse>('/auth/register', json({ email, password: 'password123', name: 'Test Student', ageRange: '18_24' }));
   assert.equal(reg.status, 201);
   token = reg.body.token;
 
@@ -94,7 +94,7 @@ test('core study loop', async () => {
   assert.deepEqual(history.map((e) => [e.kind, e.questionCount]), [['follow_up', follow.body.questions.length], ['standard', 5]], 'history: newest first, each with its own count');
 
   // Ownership: another user cannot see this document
-  const other = await call<AuthResponse>('/auth/register', json({ email: `other-${Date.now()}@example.com`, password: 'password123', name: 'Other' }));
+  const other = await call<AuthResponse>('/auth/register', json({ email: `other-${Date.now()}@example.com`, password: 'password123', name: 'Other', ageRange: '18_24' }));
   token = other.body.token;
   assert.equal((await call(`/documents/${doc.id}`)).status, 404);
   assert.equal((await call(`/exams/${exam.body.id}`)).status, 404);

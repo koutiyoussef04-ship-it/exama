@@ -1,0 +1,31 @@
+---
+/**
+ * INTERIM PAGE (every language). Set `site.legal.supportEmail` in src/config/site.ts once the support
+ * address is confirmed; it then appears here automatically. The App Store needs a public Support URL.
+ */
+import InfoPage from '../layouts/InfoPage.astro';
+import { SECTIONS } from '../data/content';
+import { site } from '../config/site';
+import { copy, homeAnchor, pathFor, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang).support;
+const email = site.legal.supportEmail;
+---
+
+<InfoPage title={c.title} path={pathFor(lang, 'support')} description={c.description} lang={lang} page="support" back={c.back}>
+  <p>{c.intro} <a href={site.appUrl}>{c.openApp}</a>.</p>
+  {
+    email ? (
+      <p>
+        {c.emailLead} <a href={`mailto:${email}`}>{email}</a>.
+      </p>
+    ) : (
+      <p>{c.noEmail}</p>
+    )
+  }
+  <p>{c.faqLead} <a href={homeAnchor(lang, SECTIONS.faq)}>{c.faqLink}</a>.</p>
+</InfoPage>

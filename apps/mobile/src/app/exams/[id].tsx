@@ -1,10 +1,10 @@
 import type { Exam, GradedQuestion, Question } from '@study/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Badge,
   Body,
@@ -25,15 +25,15 @@ import {
   Title,
   WorkingCard,
 } from '@/components/ui';
+import { ExamHero, OptionCard, QuestionCard, QuestionEnter, QuestionMap, WrittenAnswer } from '@/components/exam-question';
 import { ExamDatePrompt } from '@/components/planner';
 import { api } from '@/lib/api';
 import { trackOnce } from '@/lib/analytics';
 import { handleLimitError, openPaywall, useEntitlement } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { examDrafts } from '@/lib/exam-drafts';
+import { isAnswered, optionLetter, questionStates } from '@/lib/exam-ui';
 import { usePreferences } from '@/lib/preferences';
-
-const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function ExamScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,7 +50,12 @@ export default function ExamScreen() {
   return exam.data.status === 'graded' ? <Results exam={exam.data} /> : <TakeExam exam={exam.data} />;
 }
 
-/** One question per screen — easier to focus on a phone. Answers survive leaving and coming back. */
+/**
+ * One question per screen — easier to focus on a phone. Answers survive leaving and coming back.
+ * Layout: a progress header (segments + question map), the question card, the answers, and a footer
+ * with Back / Next that stays above the keyboard. Behaviour (drafts, skip, submit, confirmation for
+ * unanswered questions, grading) is unchanged.
+ */
 function TakeExam({ exam }: { exam: Exam }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -60,10 +65,14 @@ function TakeExam({ exam }: { exam: Exam }) {
   const headerOffset = Platform.OS === 'ios' ? 100 : insets.top + 64;
   const questions = exam.questions as Question[];
   const [index, setIndex] = useState(0);
+  const [mapOpen, setMapOpen] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>(() => examDrafts.get(exam.id));
   const q = questions[index];
   const isLast = index === questions.length - 1;
-  const unanswered = questions.filter((x) => !answers[x.id]?.trim()).length;
+  const ids = questions.map((x) => x.id);
+  const unanswered = questions.filter((x) => !isAnswered(answers[x.id])).length;
+  const states = questionStates(ids, answers, index);
+  const firstUnanswered = unanswered > 0 ? ids.findIndex((id) => !isAnswered(answers[id])) : null;
   const label = exam.kind === 'follow_up' ? t('exam.practiceSet') : t('exam.exam');
 
   useEffect(() => {
@@ -78,6 +87,16 @@ function TakeExam({ exam }: { exam: Exam }) {
       question_count: questions.length,
     });
   }, [exam.id, exam.kind, exam.documentId, questions.length]);
+
+  // Screen readers: say where we are after moving to another question.
+  const moved = useRef(false);
+  useEffect(() => {
+    if (!moved.current) {
+      moved.current = true;
+      return;
+    }
+    AccessibilityInfo.announceForAccessibility?.(t('exam.questionOf', { current: index + 1, total: questions.length }));
+  }, [index, questions.length, t]);
 
   const submit = useMutation({
     mutationFn: () =>
@@ -104,6 +123,10 @@ function TakeExam({ exam }: { exam: Exam }) {
   };
 
   const setAnswer = (v: string) => setAnswers((a) => ({ ...a, [q.id]: v }));
+  const goTo = (i: number) => {
+    setMapOpen(false);
+    setIndex(Math.max(0, Math.min(questions.length - 1, i)));
+  };
 
   if (submit.isPending) {
     return (
@@ -114,112 +137,81 @@ function TakeExam({ exam }: { exam: Exam }) {
     );
   }
 
+  const isMcq = q.type === 'mcq' && !!q.options;
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerOffset}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior="padding" keyboardVerticalOffset={headerOffset}>
       <Stack.Screen options={{ title: label }} />
-      {/* key: start each question scrolled to the top */}
-      <Screen key={q.id}>
-        <View style={{ gap: space(2) }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
-            <Text style={{ color: colors.muted, fontSize: 14, fontWeight: '600' }}>
-              {t('exam.questionOf', { current: index + 1, total: questions.length })}
-            </Text>
-            <ContentDirection language={exam.language}>
-              <Badge label={q.topic} tone="primary" />
-            </ContentDirection>
-          </View>
-          <ProgressBar value={(index + 1) / questions.length} color={colors.primary} />
-        </View>
+      <SafeAreaView style={{ flex: 1 }} edges={['left', 'right']}>
+        {/* key: start each question scrolled to the top */}
+        <ScrollView
+          key={q.id}
+          contentContainerStyle={{ padding: space(4), paddingBottom: space(6), gap: space(4), maxWidth: 680, width: '100%', alignSelf: 'center' }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
+          <ExamHero
+            label={label}
+            index={index}
+            states={states}
+            answered={questions.length - unanswered}
+            onOpenMap={() => setMapOpen(true)}
+            onGoTo={goTo}
+            firstUnanswered={firstUnanswered}
+            isLast={isLast}
+          />
 
-        <ContentDirection language={exam.language}>
-          <Title>{q.prompt}</Title>
-        </ContentDirection>
+          <QuestionEnter>
+            <QuestionCard n={index + 1} typeLabel={isMcq ? t('exam.typeMcq') : t('exam.typeWritten')} topic={q.topic} language={exam.language}>
+              <ContentDirection language={exam.language}>
+                <Title style={{ fontSize: 21, lineHeight: 30 }}>{q.prompt}</Title>
+              </ContentDirection>
+              <Body muted style={{ fontSize: 14 }}>{isMcq ? t('exam.chooseOne') : t('exam.answerHint')}</Body>
+            </QuestionCard>
 
-        {q.type === 'mcq' && q.options ? (
-          <View style={{ gap: space(2.5) }} accessibilityRole="radiogroup">
-            <Body muted style={{ fontSize: 14 }}>{t('exam.chooseOne')}</Body>
-            {q.options.map((opt, i) => {
-              const selected = answers[q.id] === opt;
-              return (
-                <Pressable
-                  key={opt}
-                  onPress={() => setAnswer(opt)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    gap: space(3),
-                    alignItems: 'flex-start',
-                    padding: space(4),
-                    borderRadius: 12,
-                    borderWidth: 2,
-                    borderColor: selected ? colors.primary : colors.border,
-                    backgroundColor: selected ? colors.primarySoft : colors.card,
-                    opacity: pressed ? 0.8 : 1,
-                  })}
-                >
-                  <View
-                    style={{
-                      width: 26,
-                      height: 26,
-                      borderRadius: 13,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: selected ? colors.primary : colors.bg,
-                    }}
-                  >
-                    <Text style={{ color: selected ? colors.primaryText : colors.muted, fontWeight: '700', fontSize: 13 }}>{LETTERS[i]}</Text>
-                  </View>
-                  <ContentDirection language={exam.language} style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, lineHeight: 22, color: colors.text }}>{opt}</Text>
-                  </ContentDirection>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={{ gap: space(2) }}>
-            <Body muted style={{ fontSize: 14 }}>{t('exam.answerHint')}</Body>
-            <TextInput
-              multiline
-              value={answers[q.id] ?? ''}
-              onChangeText={setAnswer}
-              placeholder={t('exam.placeholder')}
-              placeholderTextColor={colors.muted}
-              accessibilityLabel={t('exam.answerA11y')}
-              style={{
-                minHeight: 140,
-                textAlignVertical: 'top',
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 12,
-                padding: space(3.5),
-                fontSize: 16,
-                lineHeight: 22,
-                backgroundColor: colors.card,
-                color: colors.text,
-              }}
-            />
-          </View>
-        )}
-
-        <ErrorText error={submit.error} />
-        <View style={{ flexDirection: 'row', gap: space(3) }}>
-          <View style={{ flex: 1 }}>
-            <Button variant="secondary" title={t('common.back')} onPress={() => setIndex((i) => i - 1)} disabled={index === 0} />
-          </View>
-          <View style={{ flex: 1 }}>
-            {isLast ? (
-              <Button title={t('exam.submit')} onPress={askSubmit} />
+            {isMcq ? (
+              <View style={{ gap: space(2.5) }} accessibilityRole="radiogroup" accessibilityLabel={t('exam.chooseOne')}>
+                {q.options!.map((opt, i) => (
+                  <OptionCard
+                    key={opt}
+                    letter={optionLetter(i, exam.language)}
+                    text={opt}
+                    selected={answers[q.id] === opt}
+                    onPress={() => setAnswer(opt)}
+                    language={exam.language}
+                  />
+                ))}
+              </View>
             ) : (
-              <Button title={answers[q.id]?.trim() ? t('exam.next') : t('exam.skip')} onPress={() => setIndex((i) => i + 1)} />
+              <WrittenAnswer value={answers[q.id] ?? ''} onChange={setAnswer} language={exam.language} placeholder={t('exam.placeholder')} label={t('exam.answerA11y')} />
             )}
+
+            <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
+              {t('exam.progress', { answered: questions.length - unanswered, total: questions.length })}
+            </Body>
+          </QuestionEnter>
+        </ScrollView>
+
+        {/* Footer: always reachable, above the keyboard and the home indicator. */}
+        <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <View style={{ padding: space(3), gap: space(2), maxWidth: 680, width: '100%', alignSelf: 'center' }}>
+            <ErrorText error={submit.error} />
+            <View style={{ flexDirection: 'row', gap: space(3) }}>
+              <View style={{ flex: 1 }}>
+                <Button variant="secondary" title={t('common.back')} onPress={() => setIndex((i) => i - 1)} disabled={index === 0} />
+              </View>
+              <View style={{ flex: 1.4 }}>
+                {isLast ? (
+                  <Button title={t('exam.submit')} onPress={askSubmit} />
+                ) : (
+                  <Button title={isAnswered(answers[q.id]) ? t('exam.next') : t('exam.skip')} onPress={() => setIndex((i) => i + 1)} />
+                )}
+              </View>
+            </View>
           </View>
-        </View>
-        <Body muted style={{ fontSize: 13, textAlign: 'center' }}>
-          {t('exam.progress', { answered: questions.length - unanswered, total: questions.length })}
-        </Body>
-      </Screen>
+        </SafeAreaView>
+      </SafeAreaView>
+
+      <QuestionMap visible={mapOpen} states={states} answered={questions.length - unanswered} currentAnswered={isAnswered(answers[q.id])} onPick={goTo} onClose={() => setMapOpen(false)} />
     </KeyboardAvoidingView>
   );
 }

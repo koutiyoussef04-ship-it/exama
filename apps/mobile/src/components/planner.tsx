@@ -38,7 +38,10 @@ export function Chips<T extends string | number>({ options, value, onChange }: {
             key={String(o.value)}
             onPress={() => onChange(o.value)}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected, checked: selected }}
+            // react-native-web only maps these ARIA props (not accessibilityState) and only presses role="button" with Space.
+            aria-checked={selected}
+            {...({ onKeyDown: (e: { key?: string; preventDefault?: () => void }) => (e.key === ' ' ? (e.preventDefault?.(), onChange(o.value)) : undefined) } as object)}
             style={({ pressed }) => ({
               paddingHorizontal: space(3.5),
               paddingVertical: space(2.5),

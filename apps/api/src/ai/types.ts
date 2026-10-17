@@ -48,6 +48,8 @@ export type GenerateQuestionsInput = {
   missed?: MissedQuestion[];
   /** ISO 639-1 language to write questions, options, answers and explanations in. */
   language: string;
+  /** Questions already in this exam (top-up request): the model must not repeat them. */
+  avoid?: string[];
 };
 
 export type ShortAnswerToGrade = {
@@ -105,6 +107,22 @@ export type KnowledgeExtraction = {
   topics: ExtractedTopic[];
 };
 
+/** Flashcards: concise question → answer pairs grounded in the material. */
+export type GenerateFlashcardsInput = {
+  excerpts: string[];
+  topics: string[];
+  count: number;
+  /** ISO 639-1 language for "front" and "back". */
+  language: string;
+};
+export type GeneratedFlashcard = {
+  topic: string;
+  front: string;
+  back: string;
+  /** Verbatim excerpt from the material supporting the answer (checked by the flashcards service). */
+  sourceQuote: string;
+};
+
 export interface StudyAI {
   analyzeDocument(text: string, options: AnalyzeOptions): Promise<DocumentAnalysis>;
   generateQuestions(input: GenerateQuestionsInput): Promise<GeneratedQuestion[]>;
@@ -114,4 +132,6 @@ export interface StudyAI {
   planTopics(input: TopicPlanInput): Promise<TopicPlanItem[]>;
   /** Topics, concepts, definitions, examples and likely exam concepts from one added material. */
   extractKnowledge(input: KnowledgeExtractionInput): Promise<KnowledgeExtraction>;
+  /** Question → answer flashcards from the material (validated and grounded by the caller). */
+  generateFlashcards(input: GenerateFlashcardsInput): Promise<GeneratedFlashcard[]>;
 }

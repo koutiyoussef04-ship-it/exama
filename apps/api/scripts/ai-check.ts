@@ -5,6 +5,8 @@
  *
  *   npm run ai:check                       # uses the bundled sample PDF
  *   npm run ai:check -- "C:\path\to\notes.pdf"
+ *   npm run ai:check -- --long             # also a 22-question Arabic exam and a 22-card Arabic deck
+ *                                          # (response-length limits; costs a little more)
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -36,7 +38,10 @@ if (!config.ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 
-const pdfPath = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL('../test/fixtures/biology-notes.pdf', import.meta.url));
+const args = process.argv.slice(2);
+const LONG = args.includes('--long');
+const pdfArg = args.find((a) => a !== '--long');
+const pdfPath = pdfArg ? resolve(pdfArg) : fileURLToPath(new URL('../test/fixtures/biology-notes.pdf', import.meta.url));
 // This script always calls Anthropic directly; the API server only does so when AI_PROVIDER=anthropic.
 console.log(`Server AI: AI_PROVIDER=${config.AI_PROVIDER}${config.AI_PROVIDER === 'mock' ? '  ⚠ the API server (npm run dev:api) will use the FAKE AI until you set AI_PROVIDER=anthropic' : ''}`);
 console.log(`Model:     ${config.AI_MODEL}`);
@@ -161,6 +166,20 @@ try {
   check('New lecture topics added (e.g. fermentation / enzymes)', clean.topics.some((t) => t.isNew));
   check('Logistics ("homework", "slides") not turned into topics', !clean.topics.some((t) => /homework|slide|website/i.test(t.name)));
   check('Notes written in French as requested', /[éèàçù]|\b(les|des|est|une)\b/i.test(clean.topics.flatMap((t) => t.keyPoints).join(' ')));
+
+  if (LONG) {
+    // The largest requests the app makes (20 questions or cards + 2 spare), in the most token-hungry
+    // language. Before batching, a reply this size could hit max_tokens and fail the whole exam.
+    section('7. Response limits: 22-question Arabic exam and 22-card Arabic deck');
+    const longQs = await time('generate-22-ar', () => ai.generateQuestions({ excerpts, topics: analysis.topics, count: 22, language: 'ar' }));
+    const longCheck = validateQuestions(longQs, { material, allowedTopics: analysis.topics });
+    check('22-question Arabic exam generated without hitting the response limit', longQs.length >= 20, `${longQs.length} returned, ${longCheck.kept.length} passed the checks`);
+    check('Arabic questions still quote the material verbatim', longCheck.rejected.ungrounded <= 2, JSON.stringify(longCheck.rejected));
+    check('Questions written in Arabic', /[\u0600-\u06FF]/.test(longQs.map((q) => q.prompt).join(' ')));
+    const cards = await time('flashcards-22-ar', () => ai.generateFlashcards({ excerpts, topics: analysis.topics, count: 22, language: 'ar' }));
+    const grounded = cards.filter((c) => material.contains(c.sourceQuote)).length;
+    check('22-card Arabic deck generated without hitting the response limit', cards.length >= 18, `${cards.length} cards, ${grounded} quote the material`);
+  }
 } catch (err) {
   if (err instanceof AIError) {
     console.error(`\n✖ AI error (${err.code}): ${err.message}\n  Detail: ${err.detail}`);

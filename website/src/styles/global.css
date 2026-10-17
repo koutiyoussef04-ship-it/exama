@@ -108,7 +108,7 @@ a {
 
 .skip-link {
   position: absolute;
-  left: -9999px;
+  inset-inline-start: -9999px;
   top: 8px;
   z-index: 100;
   padding: 10px 14px;
@@ -117,7 +117,7 @@ a {
   color: #fff;
 }
 .skip-link:focus {
-  left: 8px;
+  inset-inline-start: 8px;
 }
 
 .container {
@@ -225,7 +225,7 @@ a {
 .header-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-height: 64px;
 }
 
@@ -248,11 +248,89 @@ a {
 
 .header-cta {
   display: none;
+  white-space: nowrap;
+}
+.lang-menu,
+.header-login,
+.header-cta,
+.nav-desktop a,
+.header-bar .brand {
+  flex: none;
+  white-space: nowrap;
 }
 
-.menu {
-  margin-left: auto;
+/* Language selector: a <details> dropdown (works without JS). */
+.lang-menu {
+  position: relative;
+  margin-inline-start: auto;
 }
+.lang-menu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  list-style: none;
+}
+.lang-menu summary::-webkit-details-marker {
+  display: none;
+}
+.lang-menu summary:hover {
+  background: var(--primary-soft);
+}
+.lang-panel {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 11rem;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 40px -24px rgba(21, 23, 63, 0.35);
+}
+.lang-panel a,
+.lang-panel span {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+.lang-panel a:hover {
+  background: var(--primary-soft);
+}
+.lang-panel [aria-current='page'] {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+/* The language name next to the globe only where there is room; the globe keeps its label for screen readers. */
+@media (max-width: 399px), (min-width: 640px) and (max-width: 1199px) {
+  .lang-menu summary span {
+    display: none;
+  }
+}
+
+/* "Log in" for existing accounts: in the mobile menu below 640px, in the header bar above. */
+.header-login {
+  display: none;
+  white-space: nowrap;
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+.header-login:hover {
+  color: var(--primary);
+}
+
 .menu summary {
   display: grid;
   place-items: center;
@@ -280,8 +358,7 @@ a {
 }
 .menu-panel {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   top: 100%;
   display: grid;
   gap: 8px;
@@ -301,19 +378,22 @@ a {
 @media (min-width: 640px) {
   .header-cta {
     display: inline-flex;
-    margin-left: auto;
   }
-  .menu {
-    margin-left: 0;
+  .header-login {
+    display: inline-block;
   }
 }
-@media (min-width: 900px) {
+/* Desktop navigation from 1024px: French and Spanish labels need the room. */
+@media (min-width: 1024px) {
+  .header-bar {
+    gap: 16px;
+  }
   .nav-desktop {
     display: block;
-    margin-left: auto;
+    margin-inline-start: auto;
   }
-  .header-cta {
-    margin-left: 0;
+  .lang-menu {
+    margin-inline-start: 0;
   }
   .menu {
     display: none;
@@ -432,7 +512,15 @@ a {
 }
 .hero-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 40px;
+}
+/* Longer words in French/Spanish must not push the hero wider than a small phone. */
+.hero-grid > * {
+  min-width: 0;
+}
+.hero h1 {
+  overflow-wrap: break-word;
 }
 .hero h1 {
   font-size: clamp(2.15rem, 7vw, 3.6rem);
@@ -515,8 +603,20 @@ a {
 }
 .flow-group ul {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+.flow-group li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 379px) {
+  .flow {
+    padding: 14px;
+  }
+  .flow-group li {
+    padding: 10px 8px;
+  }
 }
 .flow-group li {
   display: flex;
@@ -581,7 +681,7 @@ a {
 .step-num {
   position: absolute;
   top: 18px;
-  right: 22px;
+  inset-inline-end: 22px;
   font-size: 2.25rem;
   font-weight: 800;
   line-height: 1;
@@ -933,7 +1033,7 @@ a {
 .badge {
   position: absolute;
   top: -13px;
-  right: 20px;
+  inset-inline-end: 20px;
   padding: 4px 12px;
   border: 1px solid #d9d6ff;
   border-radius: 999px;
@@ -959,7 +1059,7 @@ a {
   color: var(--navy);
 }
 .price-per {
-  margin-left: 2px;
+  margin-inline-start: 2px;
   color: var(--muted);
 }
 .price-alt {
@@ -1023,7 +1123,8 @@ a {
 .faq summary {
   position: relative;
   min-height: 56px;
-  padding: 18px 56px 18px 20px;
+  padding-block: 18px;
+  padding-inline: 20px 56px;
   font-weight: 650;
   color: var(--navy);
   cursor: pointer;
@@ -1035,7 +1136,7 @@ a {
 .faq summary::after {
   content: '';
   position: absolute;
-  right: 22px;
+  inset-inline-end: 22px;
   top: 50%;
   width: 9px;
   height: 9px;
@@ -1135,7 +1236,7 @@ a {
 }
 @media (min-width: 760px) {
   .footer-grid {
-    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
   }
 }
 
@@ -1156,6 +1257,92 @@ a {
 .back {
   margin-top: 40px;
 }
+
+/* Legal documents (/privacy, /terms and their /es, /fr, /ar versions) */
+.legal-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+}
+.legal-langs [aria-current='page'] {
+  font-weight: 700;
+  color: var(--text);
+}
+.legal-updated {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.legal-draft {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid #f0c36d;
+  border-radius: 12px;
+  background: #fff8e6;
+  color: #6b4a00;
+  font-size: 0.95rem;
+}
+.legal-body {
+  gap: 28px;
+}
+.legal-body h2 {
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  color: var(--text);
+}
+.legal-body p + p,
+.legal-body p + ul,
+.legal-body ul + p {
+  margin-top: 10px;
+}
+.legal-body ul {
+  display: grid;
+  gap: 8px;
+  padding-inline-start: 1.25rem;
+  list-style: disc;
+}
 .info-page .cta-row {
   margin-top: 28px;
+}
+
+/* ---------- Right-to-left (Arabic: /ar/) ---------- */
+
+/* Arrows that point "forward" (→) point the other way in right-to-left text. */
+html[dir='rtl'] .flip-rtl {
+  transform: scaleX(-1);
+}
+/* …except the weak-topics loop on small screens, where its arrows point down (see .loop-arrow). */
+html[dir='rtl'] .loop-arrow.flip-rtl {
+  transform: rotate(90deg);
+}
+@media (min-width: 900px) {
+  html[dir='rtl'] .loop-arrow.flip-rtl {
+    transform: scaleX(-1);
+  }
+}
+/* Arabic script is joined: no tracking, and fonts that ship Arabic glyphs first. */
+html[lang='ar'] body {
+  font-family: 'Segoe UI', Tahoma, 'Noto Sans Arabic', 'Geeza Pro', 'Arabic UI Text', system-ui, sans-serif;
+}
+html[lang='ar'] * {
+  letter-spacing: 0 !important;
+}
+/* Arabic letters reach higher and lower than Latin ones: give headings room so lines never overlap. */
+html[lang='ar'] h1,
+html[lang='ar'] h2,
+html[lang='ar'] h3 {
+  line-height: 1.35;
+}
+html[lang='ar'] .footer-heading,
+html[lang='ar'] .eyebrow {
+  text-transform: none;
+}
+
+/* 404: the home page in the other languages. */
+.lang-home-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
 }

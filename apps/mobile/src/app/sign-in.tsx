@@ -8,6 +8,7 @@ import { NATIVE_NAMES } from '@/i18n/languages';
 import { API_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { usePreferences } from '@/lib/preferences';
+import { usePendingStart } from '@/lib/use-pending-start';
 
 const logo = require('../../assets/images/logo-mark.png');
 
@@ -15,6 +16,7 @@ export default function SignIn() {
   const { t } = useTranslation();
   const { signIn, sessionExpired } = useAuth();
   const { appLanguage } = usePreferences();
+  const pending = usePendingStart();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -59,6 +61,7 @@ export default function SignIn() {
           </View>
           <Title style={{ fontSize: 26, lineHeight: 33 }}>{t('app.tagline')}</Title>
           <Body muted>{t('auth.subtitle')}</Body>
+          {pending.intent && <Body style={{ fontWeight: '600' }}>{t('auth.continueToPlans')}</Body>}
         </View>
         {sessionExpired && !error && (
           <Body style={{ color: colors.warning, fontWeight: '600' }}>

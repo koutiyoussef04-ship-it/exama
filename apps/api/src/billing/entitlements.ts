@@ -247,6 +247,27 @@ export async function reserveExamGeneration(userId: string, kind: 'standard' | '
   });
 }
 
+/**
+ * Flashcards share the practice-question allowance: one card = one practice question. Checked and
+ * reserved before the AI call; the deck is trimmed to what is left (402 when nothing is left).
+ * Settle with the number of cards actually delivered (releaseReservation if none).
+ */
+export async function reserveFlashcards(userId: string, requested: number): Promise<Reservation> {
+  return db.transaction(async (tx) => {
+    await lockUsage(tx, userId);
+    const e = await getEntitlement(userId, tx);
+    const { limits: l, usage: u } = e;
+    let count = requested;
+    if (l.practiceQuestionsPerMonth !== null) {
+      const remaining = l.practiceQuestionsPerMonth - u.practiceQuestionsThisMonth;
+      if (remaining <= 0) throw new LimitError('limit_reached', 'practice_questions', l.practiceQuestionsPerMonth, u.practiceQuestionsThisMonth, e.tier);
+      count = Math.min(requested, remaining);
+    }
+    const [row] = await tx.insert(usageLedger).values({ userId, kind: 'practice_questions', amount: count }).returning({ id: usageLedger.id });
+    return { id: row.id, kind: 'practice_questions' as const, amount: count, questionCount: count };
+  });
+}
+
 /** Checks the study-plan allowance and reserves one generation before the AI call. */
 export async function reserveStudyPlanGeneration(userId: string): Promise<Reservation> {
   return db.transaction(async (tx) => {

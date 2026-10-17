@@ -41,7 +41,7 @@ async function settle(id: string) {
 }
 
 before(async () => {
-  const r = await app.request('/auth/register', post({ email: `i18n-${Date.now()}@example.com`, password: 'password123', name: 'Polyglot' }));
+  const r = await app.request('/auth/register', post({ email: `i18n-${Date.now()}@example.com`, password: 'password123', name: 'Polyglot', ageRange: '18_24' }));
   token = ((await r.json()) as AuthResponse).token;
 });
 

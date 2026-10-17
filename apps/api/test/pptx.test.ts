@@ -38,7 +38,7 @@ async function newUser(plan: string | null = null) {
   const r = await call<AuthResponse>('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `pptx-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'Slides' }),
+    body: JSON.stringify({ email: `pptx-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'Slides', ageRange: '18_24' }),
   });
   if (plan) {
     const p = await call('/billing/purchase', { method: 'POST', token: r.body.token, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan }) });

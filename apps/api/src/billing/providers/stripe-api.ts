@@ -12,8 +12,15 @@
 import Stripe from 'stripe';
 import { HttpError } from '../../lib/errors.js';
 
-/** One subscription item (we sell exactly one Price per subscription). Dates are Unix seconds. */
-export type StripeItemLike = { priceId: string; currentPeriodStart: number | null; currentPeriodEnd: number | null };
+/** One subscription item (we sell exactly one Price per subscription). Dates are Unix seconds; amount in minor units. */
+export type StripeItemLike = {
+  priceId: string;
+  currentPeriodStart: number | null;
+  currentPeriodEnd: number | null;
+  /** The Price's amount per period and currency (for the order confirmation email), when Stripe returns them. */
+  unitAmount?: number | null;
+  currency?: string | null;
+};
 
 /** The subscription fields Exama uses, version-independent. Dates are Unix seconds. */
 export type StripeSubscriptionLike = {
@@ -45,6 +52,12 @@ export type CheckoutSessionInput = {
   cancelUrl: string;
   /** Unix seconds; the session stops being payable after this. */
   expiresAt: number;
+  /** Extra metadata on the session AND the subscription (e.g. the consent record). */
+  metadata?: Record<string, string>;
+  /** Text shown next to Checkout's subscribe button (Stripe allows up to 1,200 characters). */
+  submitMessage?: string;
+  /** Checkout's language (a Stripe locale), or 'auto' for the browser's. */
+  locale?: string;
 };
 
 export interface StripeApi {
@@ -85,6 +98,8 @@ export function toSubscriptionLike(s: Stripe.Subscription): StripeSubscriptionLi
       priceId: i.price?.id ?? '',
       currentPeriodStart: i.current_period_start ?? legacy.current_period_start ?? null,
       currentPeriodEnd: i.current_period_end ?? legacy.current_period_end ?? null,
+      unitAmount: i.price?.unit_amount ?? null,
+      currency: i.price?.currency ?? null,
     })),
     metadata: { ...(s.metadata ?? {}) },
   };
@@ -152,7 +167,7 @@ export function createStripeApi(opts: { secretKey: string; webhookSecret: string
 
     async createCheckoutSession(input, idempotencyKey) {
       try {
-        const metadata = { exama_user_id: input.userId, exama_plan_id: input.planId };
+        const metadata = { ...input.metadata, exama_user_id: input.userId, exama_plan_id: input.planId };
         const session = await stripe.checkout.sessions.create(
           {
             mode: 'subscription',
@@ -176,6 +191,8 @@ export function createStripeApi(opts: { secretKey: string; webhookSecret: string
             success_url: input.successUrl,
             cancel_url: input.cancelUrl,
             expires_at: input.expiresAt,
+            ...(input.submitMessage ? { custom_text: { submit: { message: input.submitMessage.slice(0, 1200) } } } : {}),
+            ...(input.locale ? { locale: input.locale as Stripe.Checkout.SessionCreateParams.Locale } : {}),
           },
           { idempotencyKey },
         );

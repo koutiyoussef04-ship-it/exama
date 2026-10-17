@@ -85,6 +85,41 @@
       "when": 1792048247271,
       "tag": "0011_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792092262930,
+      "tag": "0012_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792094066132,
+      "tag": "0013_age_range",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792094110142,
+      "tag": "0014_flashcards",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792122125945,
+      "tag": "0015_deleted_email_holds",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792138504220,
+      "tag": "0016_study_reminder_emails",
+      "breakpoints": true
     }
   ]
 }

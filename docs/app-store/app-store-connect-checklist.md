@@ -14,7 +14,7 @@ Android: see `docs/google-play/play-console-checklist.md`.
 - Subtitle (≤ 30 chars), e.g. "Your course, your AI tutor" — localized for es/fr/ar.
 - Category: **Education** (secondary: Productivity).
 - Content rights: you don't show third-party content (users upload their own).
-- Age rating questionnaire: no objectionable content; **User-generated content: users upload their own documents (not shared with others)**; unrestricted web access: No. Expect 4+ or 9+; decide your minimum age for the Privacy Policy (13/16).
+- Age rating questionnaire: no objectionable content; **User-generated content: users upload their own documents (not shared with others)**; unrestricted web access: No. Expect 4+ or 9+; minimum age is 13 (enforced at sign-up; see docs/signup-age.md).
 - **Localizations:** English (primary), Spanish, French, Arabic — name, subtitle, description, keywords, "What's New", screenshots.
 
 ## Pricing, availability, subscriptions

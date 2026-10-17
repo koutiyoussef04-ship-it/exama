@@ -7,6 +7,7 @@ import { test } from 'node:test';
 const script = fileURLToPath(new URL('./helpers/print-config.ts', import.meta.url));
 const billingScript = fileURLToPath(new URL('./helpers/print-billing.ts', import.meta.url));
 const transcriptionScript = fileURLToPath(new URL('./helpers/print-transcription.ts', import.meta.url));
+const emailScript = fileURLToPath(new URL('./helpers/print-email.ts', import.meta.url));
 
 function loadConfigWith(overrides: Record<string, string | undefined>, file = script) {
   const env: Record<string, string | undefined> = {
@@ -36,6 +37,10 @@ function loadConfigWith(overrides: Record<string, string | undefined>, file = sc
     EMAIL_PROVIDER: undefined,
     RESEND_API_KEY: undefined,
     EMAIL_FROM: undefined,
+    WEB_APP_URL: undefined,
+    EMAIL_VERIFICATION_REQUIRED: undefined,
+    EMAIL_VERIFICATION_GRACE_HOURS: undefined,
+    CORS_ORIGINS: undefined,
     DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
     JWT_SECRET: 'x'.repeat(40),
     ...overrides,
@@ -241,4 +246,32 @@ test('email: log provider refused in production; resend needs a key and a sender
   const unset = loadConfigWith(prod);
   assert.equal(unset.code, 0, unset.err);
   assert.match(unset.err, /EMAIL_PROVIDER is disabled/, 'production without email warns loudly');
+});
+
+test('email verification: off by default; turning it on needs working email and a link origin (never locks students out)', () => {
+  const dev = loadConfigWith({}, emailScript);
+  assert.equal(dev.code, 0, dev.err);
+  assert.deepEqual(JSON.parse(dev.out), { provider: 'log', webAppUrl: 'http://localhost:8081', required: false, graceHours: 72 });
+
+  const prod = { NODE_ENV: 'production', AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test', JWT_SECRET: 'p'.repeat(48) };
+  const resend = { EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 're_SECRET_test', EMAIL_FROM: 'Exama <no-reply@exama.app>' };
+  // Today's production shape (no new variables): nothing changes, nothing is enforced.
+  const today = loadConfigWith({ ...prod, ...resend, CORS_ORIGINS: 'https://app.exama.app' }, emailScript);
+  assert.equal(today.code, 0, today.err);
+  assert.deepEqual(JSON.parse(today.out), { provider: 'resend', webAppUrl: 'https://app.exama.app', required: false, graceHours: 72 });
+
+  const noEmail = loadConfigWith({ ...prod, EMAIL_VERIFICATION_REQUIRED: 'true', CORS_ORIGINS: 'https://app.exama.app' }, emailScript);
+  assert.equal(noEmail.code, 1);
+  assert.match(noEmail.err, /EMAIL_VERIFICATION_REQUIRED=true needs a working email provider/);
+  const noOrigin = loadConfigWith({ ...prod, ...resend, EMAIL_VERIFICATION_REQUIRED: 'true' }, emailScript);
+  assert.equal(noOrigin.code, 1);
+  assert.match(noOrigin.err, /needs WEB_APP_URL/);
+  const http = loadConfigWith({ ...prod, ...resend, WEB_APP_URL: 'http://app.exama.app' }, emailScript);
+  assert.equal(http.code, 1);
+  assert.match(http.err, /WEB_APP_URL must be the web app origin/);
+
+  const on = loadConfigWith({ ...prod, ...resend, EMAIL_VERIFICATION_REQUIRED: 'true', WEB_APP_URL: 'https://app.exama.app/', EMAIL_VERIFICATION_GRACE_HOURS: '48' }, emailScript);
+  assert.equal(on.code, 0, on.err);
+  assert.deepEqual(JSON.parse(on.out), { provider: 'resend', webAppUrl: 'https://app.exama.app', required: true, graceHours: 48 });
+  for (const r of [today, noEmail, noOrigin, http, on]) assert.ok(!r.out.includes('SECRET') && !r.err.includes('SECRET'), 'the Resend key is never printed');
 });

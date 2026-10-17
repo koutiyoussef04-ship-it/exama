@@ -2,57 +2,54 @@
 import { Image } from 'astro:assets';
 import logoMark from '../assets/brand/logo-mark.png';
 import Icon from './Icon.astro';
+import { SECTIONS, TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
+import { copy, type Lang } from '../i18n';
 
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang);
+const h = c.hero;
 const formats = [
-  { label: 'PDF', icon: 'pdf' },
-  { label: 'PowerPoint', icon: 'slides' },
-  { label: 'Audio', icon: 'audio' },
-  { label: 'Video', icon: 'video' },
+  { label: h.formats.pdf, icon: 'pdf' },
+  { label: h.formats.slides, icon: 'slides' },
+  { label: h.formats.audio, icon: 'audio' },
+  { label: h.formats.video, icon: 'video' },
 ];
-const outputs = [
-  { label: 'Personalized exams', icon: 'exam' },
-  { label: 'Grading & feedback', icon: 'graded' },
-  { label: 'Weak-topic practice', icon: 'target' },
-  { label: 'Study plan', icon: 'calendar' },
-];
+const outputs = h.outputs.map((label, i) => ({ label, icon: ['exam', 'graded', 'target', 'calendar'][i]! }));
+const trial = site.webCheckoutAvailable;
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="container hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">AI exam preparation for students</p>
+      <p class="eyebrow">{h.eyebrow}</p>
       <h1 id="hero-title">
-        Turn your course material into your <span class="grad-text">personal AI exam coach.</span>
+        {h.titleStart}<span class="grad-text">{h.titleHighlight}</span>
       </h1>
-      <p class="lead">
-        Upload your PDF, PowerPoint, audio or video. Exama turns your course material into personalized exams,
-        grading, weak-topic practice and a study plan.
-      </p>
+      <p class="lead">{h.lead}</p>
 
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href={site.cta.href}>{site.cta.label}</a>
-        <a class="btn btn-secondary btn-lg" href="#how-it-works">{site.cta.secondaryLabel}</a>
+        <a class="btn btn-primary btn-lg" href={site.links.primary(lang)}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
+        <a class="btn btn-secondary btn-lg" href={`#${SECTIONS.how}`}>{c.cta.secondary}</a>
       </div>
-      <p class="cta-note">7 days free · Card required, no payment today · Cancel anytime before it ends</p>
+      <p class="cta-note">{trial ? h.noteTrial(TRIAL_DAYS) : h.noteFree}</p>
 
-      <ul class="chips" aria-label="Supported material">
+      <ul class="chips" aria-label={h.formatsAria}>
         {formats.map((f) => (
           <li class="chip"><Icon name={f.icon} size={18} />{f.label}</li>
         ))}
       </ul>
     </div>
 
-    <div
-      class="flow"
-      role="img"
-      aria-label="Diagram: your PDF, PowerPoint, audio and video go into Exama, which turns them into personalized exams, grading, weak-topic practice and a study plan."
-    >
+    <div class="flow" role="img" aria-label={h.flowAria}>
       <div class="flow-group flow-in">
-        <p class="flow-label">Your course material</p>
+        <p class="flow-label">{h.flowIn}</p>
         <ul>
           {formats.map((f) => (
-            <li><Icon name={f.icon} size={18} />{f.label}</li>
+            <li><Icon name={f.icon} size={18} /><span>{f.label}</span></li>
           ))}
         </ul>
       </div>
@@ -62,18 +59,18 @@ const outputs = [
       <div class="flow-core">
         <Image src={logoMark} alt="" width={44} height={44} class="flow-mark" />
         <div>
-          <strong>Exama understands it</strong>
-          <span>Topics, key points and definitions from your own material</span>
+          <strong>{h.flowCore}</strong>
+          <span>{h.flowCoreSub}</span>
         </div>
       </div>
 
       <div class="flow-link" aria-hidden="true"><Icon name="arrowDown" size={20} /></div>
 
       <div class="flow-group flow-out">
-        <p class="flow-label">What you get</p>
+        <p class="flow-label">{h.flowOut}</p>
         <ul>
           {outputs.map((o) => (
-            <li><Icon name={o.icon} size={18} />{o.label}</li>
+            <li><Icon name={o.icon} size={18} /><span>{o.label}</span></li>
           ))}
         </ul>
       </div>

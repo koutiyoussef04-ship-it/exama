@@ -4,7 +4,9 @@ import { languageName, normalizeLanguageCode } from './language.js';
 import type {
   AnalyzeOptions,
   DocumentAnalysis,
+  GeneratedFlashcard,
   GeneratedQuestion,
+  GenerateFlashcardsInput,
   GenerateQuestionsInput,
   KnowledgeExtraction,
   KnowledgeExtractionInput,
@@ -69,6 +71,12 @@ const questionSchema = z.object({
 });
 const questionsSchema = z.object({ questions: z.array(questionSchema).min(1) });
 
+const flashcardsSchema = z.object({
+  cards: z
+    .array(z.object({ topic: z.string().min(1), front: z.string().min(1), back: z.string().min(1), sourceQuote: z.string().min(1) }))
+    .min(1),
+});
+
 const gradesSchema = z.object({
   grades: z.array(z.object({ id: z.string(), score: z.number().min(0).max(1), feedback: z.string().min(1) })),
 });
@@ -90,6 +98,77 @@ Rules you must always follow:
 /** Instruction block that fixes the output language of a task. */
 function languageRule(language: string, what: string): string {
   return `Output language: write ${what} in ${languageName(language)}.`;
+}
+
+/*
+ * Response-length limits. One reply must stay well under its max_tokens AND finish well within the
+ * provider's request timeout, so long exams and flashcard decks are generated in parallel batches
+ * instead of one very long reply. Per-item budgets are deliberately generous: Arabic (and other
+ * non-Latin scripts) and verbatim quotes in a second language cost several times more tokens than
+ * English. Worst case per call: 600 + 6 × 900 = 6,000 tokens (questions), 600 + 11 × 450 = 5,550 (cards).
+ */
+export const QUESTIONS_PER_CALL = 6;
+export const QUESTION_REPLY_TOKENS = 900;
+export const FLASHCARDS_PER_CALL = 11;
+export const FLASHCARD_REPLY_TOKENS = 450;
+const REPLY_OVERHEAD_TOKENS = 600;
+export const replyBudget = (items: number, perItem: number) => REPLY_OVERHEAD_TOKENS + items * perItem;
+
+/** Splits `total` into the fewest batches of at most `max`, sized as evenly as possible (22, 6 → 6, 6, 5, 5). */
+export function batchSizes(total: number, max: number): number[] {
+  if (total <= 0) return [];
+  const n = Math.ceil(total / max);
+  return Array.from({ length: n }, (_, i) => Math.floor(total / n) + (i < total % n ? 1 : 0));
+}
+
+/** The topics batch `part` (0-based) of `parts` covers: an even share when there are enough topics, else all of them. */
+export function topicsForPart(topics: string[], part: number, parts: number): string[] {
+  if (parts <= 1 || topics.length < parts) return topics;
+  return topics.filter((_, i) => i % parts === part);
+}
+
+/** Same passages, starting at a different one for each batch (variety when batches share their topics). */
+const rotate = <T>(items: T[], part: number, parts: number): T[] => {
+  if (parts <= 1 || items.length < 2) return items;
+  const k = Math.floor((part * items.length) / parts);
+  return [...items.slice(k), ...items.slice(0, k)];
+};
+
+/**
+ * Generates `count` items as parallel batches of at most `perCall`. A batch cut off by the response
+ * limit is split in two halves, each requested once (the same oversized request is never repeated).
+ * If any batch still fails, the whole call fails: callers never get a silently partial result.
+ * Malformed replies are retried once per batch (in `json`), so one bad batch never re-runs the others.
+ */
+async function inBatches<T>(count: number, perCall: number, run: (count: number, part: number, parts: number) => Promise<T[]>): Promise<T[]> {
+  const sizes = batchSizes(count, perCall);
+  const batch = async (n: number, part: number): Promise<T[]> => {
+    try {
+      return await run(n, part, sizes.length);
+    } catch (err) {
+      if (!(err instanceof AIError && err.truncated) || n < 2) throw err;
+      console.warn(`[ai] a reply for ${n} items hit the response limit: retrying as two smaller requests`);
+      const half = Math.ceil(n / 2);
+      return settleAll([run(half, part, sizes.length), run(n - half, part, sizes.length)]);
+    }
+  };
+  return settleAll(sizes.map((n, part) => batch(n, part)));
+}
+
+/** Waits for every batch (no request is left running), then returns all items or throws the first failure. */
+async function settleAll<T>(batches: Promise<T[]>[]): Promise<T[]> {
+  const results = await Promise.allSettled(batches);
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
+  return results.flatMap((r) => (r as PromiseFulfilledResult<T[]>).value);
+}
+
+/** Tells one batch which part of a longer exam or deck it writes, so batches don't repeat each other. */
+function partNote(what: string, part: number, parts: number, ownTopics: boolean): string {
+  if (parts <= 1) return '';
+  return ownTopics
+    ? `\nThis is part ${part + 1} of ${parts} of the ${what}; the other parts are written separately and cover the other topics.\n`
+    : `\nThis is part ${part + 1} of ${parts} of the ${what}; the other parts are written separately from the same material, so prefer concepts from the first passages below and vary what you ask about.\n`;
 }
 
 export class LLMStudyAI implements StudyAI {
@@ -115,8 +194,9 @@ ${text.slice(0, MAX_ANALYSIS_CHARS)}
     return { summary: r.summary, topics: r.topics, sourceLanguage: normalizeLanguageCode(r.sourceLanguage) };
   }
 
+  /** Long exams are written in batches (see `inBatches`); all batches succeed or the call fails. */
   async generateQuestions(input: GenerateQuestionsInput): Promise<GeneratedQuestion[]> {
-    const topics = input.focusTopics?.length ? input.focusTopics : input.topics;
+    const allTopics = input.focusTopics?.length ? input.focusTopics : input.topics;
     const followUp = input.focusTopics?.length
       ? `
 This is a PERSONALISED FOLLOW-UP exam. The student is weak on: ${input.focusTopics.join(', ')}.
@@ -127,11 +207,21 @@ ${(input.missed ?? [])
 `
       : '';
 
-    const prompt = `Write exactly ${input.count} exam questions that test understanding of the course material below.
-${followUp}
+    const avoid = input.avoid?.length
+      ? `
+These questions are already in the exam. Do not repeat or rephrase them:
+${input.avoid.map((p) => `- ${p}`).join('\n')}
+`
+      : '';
+
+    const questions = await inBatches(input.count, QUESTIONS_PER_CALL, async (count, part, parts) => {
+      const own = topicsForPart(allTopics, part, parts);
+      const excerpts = own.length < allTopics.length ? input.excerpts : rotate(input.excerpts, part, parts);
+      const prompt = `Write exactly ${count} exam questions that test understanding of the course material below.
+${followUp}${avoid}${partNote('exam', part, parts, own.length < allTopics.length)}
 Requirements:
 - Every question must be answerable from the material alone. Do not ask about anything the material does not state.
-- "topic": one of exactly these names, copied exactly (never translated): ${topics.map((t) => JSON.stringify(t)).join(', ')}.
+- "topic": one of exactly these names, copied exactly (never translated): ${own.map((t) => JSON.stringify(t)).join(', ')}.
 - About 60% "mcq": exactly 4 distinct options, exactly one correct; "correctAnswer" must be copied character-for-character from "options". Wrong options must be plausible but clearly wrong according to the material.
 - About 40% "short_answer": answerable in 1-3 sentences; "correctAnswer" is a model answer based only on the material; "options" is null.
 - "explanation": 1-2 sentences explaining the answer using the material.
@@ -141,10 +231,10 @@ Requirements:
 Return JSON: {"questions": [{"type","topic","prompt","options","correctAnswer","explanation","sourceQuote"}]}
 
 <material>
-${input.excerpts.join('\n\n---\n\n')}
+${excerpts.join('\n\n---\n\n')}
 </material>`;
-
-    const { questions } = await this.json(prompt, questionsSchema, 12_000);
+      return (await this.json(prompt, questionsSchema, replyBudget(count, QUESTION_REPLY_TOKENS))).questions;
+    });
     return questions.map((q) => ({ ...q, options: q.type === 'mcq' ? (q.options ?? null) : null }));
   }
 
@@ -248,6 +338,30 @@ ${fitText(input.text)}
       summary: r.summary.trim(),
       topics: r.topics.map((t) => ({ ...t, name: t.name.trim(), sourceQuote: t.sourceQuote.trim() })),
     };
+  }
+
+  /** Large decks are written in batches (see `inBatches`); all batches succeed or the call fails. */
+  async generateFlashcards(input: GenerateFlashcardsInput): Promise<GeneratedFlashcard[]> {
+    return inBatches(input.count, FLASHCARDS_PER_CALL, async (count, part, parts) => {
+      const own = topicsForPart(input.topics, part, parts);
+      const excerpts = own.length < input.topics.length ? input.excerpts : rotate(input.excerpts, part, parts);
+      const prompt = `Write exactly ${count} revision flashcards from the course material below.
+${partNote('deck', part, parts, own.length < input.topics.length)}
+Return JSON: {"cards": [{"topic": string, "front": string, "back": string, "sourceQuote": string}]}
+Requirements:
+- Each card tests ONE key concept, definition, fact, step or relationship that the material states. Prefer the ideas a student must remember for an exam. Cover different topics; never repeat a concept.
+- "front": a short, specific question (at most 20 words). No yes/no questions, no "according to the text".
+- "back": the answer in 1-2 short sentences (at most 40 words), based only on the material.
+- "topic": one of exactly these names, copied exactly (never translated): ${own.map((t) => JSON.stringify(t)).join(', ')}.
+- "sourceQuote": a VERBATIM excerpt (10-40 words) copied exactly from the material that supports the answer, in the material's original language. Never translate it — it will be checked against the material.
+- If the material does not contain enough distinct content, return fewer cards rather than inventing any.
+- ${languageRule(input.language, '"front" and "back"')} Only "topic" and "sourceQuote" stay exactly as specified above.
+
+<material>
+${excerpts.join('\n\n---\n\n')}
+</material>`;
+      return (await this.json(prompt, flashcardsSchema, replyBudget(count, FLASHCARD_REPLY_TOKENS))).cards;
+    });
   }
 
   /** Calls the model, extracts JSON, validates it; retries once on unusable output. */

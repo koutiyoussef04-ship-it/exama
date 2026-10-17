@@ -2,34 +2,62 @@
 import { Image } from 'astro:assets';
 import logoMark from '../assets/brand/logo-mark.png';
 import Wordmark from './Wordmark.astro';
-import { footerLinks } from '../data/content';
+import { SECTIONS } from '../data/content';
 import { site } from '../config/site';
+import { copy, homeAnchor, pathFor, type Lang } from '../i18n';
 
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang);
 const year = new Date().getFullYear();
+const product = [
+  { label: c.footer.links.how, href: homeAnchor(lang, SECTIONS.how) },
+  { label: c.footer.links.materials, href: homeAnchor(lang, SECTIONS.materials) },
+  { label: c.footer.links.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
+  { label: c.footer.links.faq, href: homeAnchor(lang, SECTIONS.faq) },
+];
+const legal = [
+  { label: c.footer.links.privacy, href: pathFor(lang, 'privacy') },
+  { label: c.footer.links.terms, href: pathFor(lang, 'terms') },
+  { label: c.footer.links.support, href: pathFor(lang, 'support') },
+];
+const account = [
+  { label: c.footer.links.signup, href: site.links.signUp(lang) },
+  { label: c.footer.links.login, href: site.links.signIn(lang) },
+];
 ---
 
 <footer class="site-footer">
   <div class="container footer-grid">
     <div class="footer-brand">
-      <a class="brand" href="/" aria-label="Exama — home">
+      <a class="brand" href={pathFor(lang)} aria-label={c.ui.homeAria}>
         <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" />
         <Wordmark />
       </a>
-      <p>Your AI exam coach, built from your own course material.</p>
-      <a class="footer-app" href={site.appUrl}>Open the Exama app</a>
+      <p>{c.footer.tagline}</p>
+      <a class="footer-app" href={site.appUrl}>{c.footer.openApp}</a>
     </div>
 
-    <nav aria-label="Product">
-      <h2 class="footer-heading">Product</h2>
+    <nav aria-label={c.footer.product}>
+      <h2 class="footer-heading">{c.footer.product}</h2>
       <ul>
-        {footerLinks.product.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {product.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
       </ul>
     </nav>
 
-    <nav aria-label="Legal and help">
-      <h2 class="footer-heading">Legal &amp; help</h2>
+    <nav aria-label={c.footer.account}>
+      <h2 class="footer-heading">{c.footer.account}</h2>
       <ul>
-        {footerLinks.legal.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {account.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+      </ul>
+    </nav>
+
+    <nav aria-label={c.footer.legalHelp}>
+      <h2 class="footer-heading">{c.footer.legalHelp}</h2>
+      <ul>
+        {legal.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
       </ul>
     </nav>
   </div>

@@ -9,7 +9,6 @@ import { Body, Button, Card, colors, ErrorState, ErrorText, Loading, Screen, Sec
 import { platform, track } from '@/lib/analytics';
 import { ReminderOffer } from '@/components/reminders';
 import { api } from '@/lib/api';
-import { syncReminders } from '@/lib/reminders';
 import { handleLimitError } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { addDaysIso, formatIso } from '@/lib/plan-dates';
@@ -36,7 +35,6 @@ export default function PlanScreen() {
 
   const setPlan = (p: StudyPlan) => {
     qc.setQueryData(['study-plan', id], p);
-    void syncReminders(); // tomorrow's reminder follows the updated plan
   };
   const complete = useMutation({ mutationFn: (taskId: string) => api.completeStudyTask(id, taskId), onSuccess: setPlan });
   const skip = useMutation({ mutationFn: (taskId: string) => api.skipStudyTask(id, taskId), onSuccess: setPlan });
@@ -52,7 +50,6 @@ export default function PlanScreen() {
     mutationFn: () => api.deleteStudyPlan(id),
     onSuccess: () => {
       qc.setQueryData(['study-plan', id], null);
-      void syncReminders();
       router.back();
     },
   });

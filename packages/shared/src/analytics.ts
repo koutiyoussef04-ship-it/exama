@@ -30,6 +30,7 @@ export const paywallTriggerSchema = z.enum([
   'locked_lectures', // tapped audio/video on a plan without lectures (Basic)
   'locked_weak_topics', // tapped the locked weak-topic analysis (Free, Basic)
   'free_lecture_used', // a Free user's one lecture is used up (or too long for it)
+  'website_cta', // arrived from a plan/trial button on the marketing website (app /start link)
 ]);
 const paywallTrigger = paywallTriggerSchema;
 const billingPeriod = z.enum(['monthly', 'yearly']);
@@ -144,6 +145,11 @@ export type ServerEvents = {
   /** Onboarding questions answered (fixed categories only) or dismissed. */
   onboarding_completed: OnboardingAnswers;
   onboarding_skipped: Record<string, never>;
+  // Flashcards — ids, counts, durations and categories only (never card text).
+  flashcards_generated: { document_id: string; success: boolean; duration_ms: number; requested_count: number; card_count?: number; language: string; failure_reason?: string };
+  flashcards_round_completed: { document_id: string; deck_id: string; round: number; card_count: number; known_count: number; practice_count: number };
+  /** The student confirmed their email address with the emailed link. */
+  email_verified: Record<string, never>;
   upload_succeeded: { document_id: string; file_size_kb: number; ai_language: AiLanguage };
   document_processing_completed: {
     document_id: string;

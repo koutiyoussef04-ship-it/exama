@@ -1,0 +1,13 @@
+---
+/** /es/terms, /fr/terms and /ar/terms. English is /terms (../terms.astro). */
+import LegalDocument from '../../components/LegalDocument.astro';
+import { LEGAL_LANGS, type LegalLang } from '../../data/legal';
+
+export function getStaticPaths() {
+  return LEGAL_LANGS.filter((lang) => lang !== 'en').map((lang) => ({ params: { lang } }));
+}
+
+const { lang } = Astro.params as { lang: LegalLang };
+---
+
+<LegalDocument doc="terms" lang={lang} />

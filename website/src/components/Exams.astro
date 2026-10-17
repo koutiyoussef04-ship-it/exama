@@ -1,20 +1,23 @@
 ---
 import Icon from './Icon.astro';
-import { examDetails, examSteps } from '../data/content';
+import { copy, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const c = copy(Astro.props.lang).exams;
 ---
 
 <section id="exams" class="section section-alt" aria-labelledby="exams-title">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Personalized exams</p>
-      <h2 id="exams-title">An exam built from your course</h2>
-      <p class="section-lead">
-        Pick a course and Exama writes the exam from your material. Answer the questions, submit, and get graded.
-      </p>
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="exams-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
     </div>
 
-    <ol class="pipeline" aria-label="How an exam works">
-      {examSteps.map((s, i) => (
+    <ol class="pipeline" aria-label={c.pipelineAria}>
+      {c.steps.map((s, i) => (
         <li>
           <span class="pipeline-num" aria-hidden="true">{i + 1}</span>
           <span>{s}</span>
@@ -23,7 +26,7 @@ import { examDetails, examSteps } from '../data/content';
     </ol>
 
     <ul class="cards cards-4">
-      {examDetails.map((d) => (
+      {c.details.map((d) => (
         <li class="card">
           <span class="card-icon"><Icon name={d.icon} size={24} /></span>
           <h3>{d.title}</h3>

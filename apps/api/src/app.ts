@@ -9,10 +9,13 @@ import { LimitError } from './billing/errors.js';
 import { authRoutes } from './routes/auth.js';
 import { billingRoutes } from './routes/billing.js';
 import { documentRoutes } from './routes/documents.js';
+import { emailRoutes } from './routes/email.js';
 import { eventRoutes } from './routes/events.js';
 import { examRoutes } from './routes/exams.js';
 import { materialRoutes } from './routes/materials.js';
+import { flashcardDocumentRoutes, flashcardRoutes } from './routes/flashcards.js';
 import { onboardingRoutes } from './routes/onboarding.js';
+import { requireVerifiedEmail } from './services/email-verification.js';
 import { studyPlanRoutes } from './routes/study-plans.js';
 
 export const app = new Hono()
@@ -21,10 +24,19 @@ export const app = new Hono()
   .use(cors({ origin: config.CORS_ORIGINS.length ? config.CORS_ORIGINS : config.NODE_ENV === 'production' ? [] : '*' }))
   .get('/health', (c) => c.json({ ok: true, ai: aiInfo }))
   .route('/auth', authRoutes)
+  // Courses (with their study plans and materials) and exams: confirmed email required once the
+  // grace period is over — only when EMAIL_VERIFICATION_REQUIRED=true (services/email-verification.ts).
+  .use('/documents', requireVerifiedEmail)
+  .use('/documents/*', requireVerifiedEmail)
+  .use('/exams/*', requireVerifiedEmail)
+  .use('/flashcards/*', requireVerifiedEmail)
   .route('/documents', documentRoutes)
   .route('/documents', studyPlanRoutes)
   .route('/documents', materialRoutes)
+  .route('/documents', flashcardDocumentRoutes)
+  .route('/flashcards', flashcardRoutes)
   .route('/exams', examRoutes)
+  .route('/email', emailRoutes)
   .route('/events', eventRoutes)
   .route('/onboarding', onboardingRoutes)
   .route('/billing', billingRoutes);

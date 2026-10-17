@@ -10,7 +10,10 @@ Object.assign(process.env, { AI_PROVIDER: 'mock', EMAIL_PROVIDER: 'log', NODE_EN
 const { app } = await import('../src/app.js');
 const { sql, db } = await import('../src/db/client.js');
 const { passwordResetCodes } = await import('../src/db/schema.js');
-const { outbox } = await import('../src/lib/mailer.js');
+const { outbox: allMail } = await import('../src/lib/mailer.js');
+// Sign-up also emails a verification link; these tests only look at password-reset emails.
+const resetMail = (m: { text: string }) => !m.text.includes('/verify-email#token=');
+const outbox = { get length() { return allMail.filter(resetMail).length; }, filter: (f: (m: (typeof allMail)[number]) => boolean) => allMail.filter(resetMail).filter(f), [Symbol.iterator]: () => allMail.filter(resetMail)[Symbol.iterator]() };
 const { resetRateLimits, requestPasswordReset, confirmPasswordReset, RESET_MAX_ATTEMPTS, RESET_COOLDOWN_MINUTES, RESET_CODE_TTL_MINUTES } = await import('../src/services/password-reset.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');
 const { eq } = await import('drizzle-orm');
@@ -34,7 +37,7 @@ const call = (path: string, body?: unknown, opts: { token?: string; ip?: string 
 
 async function newUser() {
   const email = `reset-${crypto.randomUUID()}@example.com`;
-  const r = await call('/auth/register', { email, password: 'old-password-1', name: 'Rita' });
+  const r = await call('/auth/register', { email, password: 'old-password-1', name: 'Rita', ageRange: '18_24' });
   return { email, ...((await r.json()) as AuthResponse) };
 }
 const codeFor = (email: string) => {

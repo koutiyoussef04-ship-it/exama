@@ -283,8 +283,31 @@ export const appleRestoreSchema = z.object({ signedTransactions: z.array(z.strin
 
 export const BILLING_PERIODS = ['monthly', 'yearly'] as const satisfies readonly BillingPeriod[];
 
+/**
+ * Version (date) of the Terms of Use and Privacy Policy in force. Recorded with every web checkout so it
+ * is clear which terms the customer accepted. The app's legal texts use the same value (LEGAL_UPDATED).
+ */
+export const LEGAL_VERSION = '2026-10-16';
+
+/**
+ * What the customer must expressly confirm before web checkout (two separate, unticked checkboxes):
+ *  - autoRenewal: the subscription renews automatically at the price shown until cancelled
+ *    (automatic-renewal consent, e.g. California's Automatic Renewal Law);
+ *  - immediateStart: they ask for the service to start straight away and acknowledge that, if they
+ *    withdraw within the 14-day withdrawal period (EU/EEA/UK consumers), they pay for the service
+ *    provided until then (Consumer Rights Directive art. 8(8) and 14(3)).
+ * The server refuses checkout without both (400 `checkout_consent_required`).
+ */
+export type CheckoutConsent = { autoRenewal: true; immediateStart: true };
+
 /** POST /billing/stripe/checkout body. No prices, no price ids, no entitlements: those are server-side. */
-export type StripeCheckoutInput = { plan: PaidTier; interval: BillingPeriod };
+export type StripeCheckoutInput = {
+  plan: PaidTier;
+  interval: BillingPeriod;
+  consent: CheckoutConsent;
+  /** App language: Stripe Checkout's language and the confirmation email's. */
+  language?: string;
+};
 
 /** A Stripe-hosted page to send the browser to (Checkout or the Customer Portal). */
 export type BillingRedirect = { url: string };

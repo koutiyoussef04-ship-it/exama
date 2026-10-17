@@ -49,7 +49,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
     if (res.stop_reason === 'max_tokens') {
-      throw new AIError('bad_output', `Response truncated at max_tokens=${maxTokens}`);
+      throw new AIError('bad_output', `Response truncated at max_tokens=${maxTokens}`, { truncated: true });
     }
     if (res.stop_reason === 'refusal') {
       throw new AIError('bad_output', 'Model refused the request');

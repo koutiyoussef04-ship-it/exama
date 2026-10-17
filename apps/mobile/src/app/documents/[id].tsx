@@ -26,6 +26,8 @@ import {
 } from '@/components/ui';
 import i18n from '@/i18n';
 import { MaterialsCard } from '@/components/materials';
+import { ExamArt, StudyTile, StudyTiles } from '@/components/flashcards';
+import { FlashcardsTile } from '@/components/flashcards-tile';
 import { StudyPlanCard } from '@/components/planner';
 import { api } from '@/lib/api';
 import { trackOnce } from '@/lib/analytics';
@@ -54,6 +56,7 @@ export default function CourseScreen() {
   // Onboarding: a student who asked for a study plan (and has an exam coming) sees it before the first exam.
   const planOnTop = planFirst(useOnboarding().data?.answers);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [flashcardError, setFlashcardError] = useState<unknown>(null);
   const entitlement = useEntitlement();
   const { aiLanguage } = usePreferences();
 
@@ -204,10 +207,21 @@ export default function CourseScreen() {
           {generating ? (
             <WorkingCard title={t('course.writingExam')} detail={t('course.generatingDetail')} />
           ) : (
-            <Button title={t('course.startFirstExam', { count: EXAM_LENGTH })} onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })} />
+            // Two equal study choices: test yourself, or review with flashcards.
+            <StudyTiles>
+              <StudyTile
+                art={<ExamArt />}
+                title={t('study.startExam')}
+                subtitle={t('study.examSubtitle', { questions: EXAM_LENGTH })}
+                accent={colors.primary}
+                accentSoft={colors.primarySoft}
+                onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })}
+              />
+              <FlashcardsTile documentId={d.id} onError={setFlashcardError} />
+            </StudyTiles>
           )}
           <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('course.firstExamHint')}</Body>
-          <ErrorText error={createExam.error} />
+          <ErrorText error={createExam.error ?? flashcardError} />
           {examsLeft}
 
           {!planOnTop && <StudyPlanCard documentId={d.id} />}
@@ -231,14 +245,20 @@ export default function CourseScreen() {
                   onPress={() => router.push({ pathname: '/exams/[id]', params: { id: inProgress.id } })}
                 />
               )}
-              <Button
-                variant={inProgress ? 'secondary' : 'primary'}
-                title={hasTakenExam ? t('course.newExam', { count: EXAM_LENGTH }) : t('course.startFirstExam', { count: EXAM_LENGTH })}
-                onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })}
-              />
+              <StudyTiles>
+                <StudyTile
+                  art={<ExamArt />}
+                  title={hasTakenExam ? t('study.newExam') : t('study.startExam')}
+                  subtitle={t('study.examSubtitle', { questions: EXAM_LENGTH })}
+                  accent={colors.primary}
+                  accentSoft={colors.primarySoft}
+                  onPress={() => createExam.mutate({ kind: 'standard', questionCount: EXAM_LENGTH })}
+                />
+                <FlashcardsTile documentId={d.id} onError={setFlashcardError} />
+              </StudyTiles>
             </View>
           )}
-          <ErrorText error={createExam.error} />
+          <ErrorText error={createExam.error ?? flashcardError} />
           {examsLeft}
 
           {/* Free/Basic: practice across the course; targeting weak topics is what Student adds. */}

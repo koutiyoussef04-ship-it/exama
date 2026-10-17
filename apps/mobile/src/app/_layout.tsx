@@ -11,7 +11,7 @@ import { API_CONFIG_ERROR } from '@/lib/api';
 import { platform, track } from '@/lib/analytics';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PreferencesProvider, usePreferences } from '@/lib/preferences';
-import { clearReminders, syncReminders, useReminderTaps } from '@/lib/reminders';
+import { clearLegacyReminders } from '@/lib/reminders';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -19,7 +19,7 @@ function RootNavigator() {
   const { t } = useTranslation();
   const { user, isLoading } = useAuth();
   useAppOpenedTracking(isLoading ? null : !!user);
-  useStudyReminders(isLoading ? null : !!user);
+  useLegacyReminderCleanup();
 
   useEffect(() => {
     if (!isLoading) void SplashScreen.hideAsync().catch(() => {});
@@ -55,12 +55,18 @@ function RootNavigator() {
         <Stack.Screen name="plan/[id]" options={{ title: t('nav.studyPlan') }} />
         <Stack.Screen name="plan/setup" options={{ title: t('nav.planSetup') }} />
         <Stack.Screen name="materials/[id]" options={{ title: t('nav.material') }} />
+        <Stack.Screen name="flashcards/[id]" options={{ title: t('nav.flashcards') }} />
         <Stack.Screen name="add-material" options={{ title: t('nav.addMaterial'), presentation: 'modal' }} />
       </Stack.Protected>
       {/* Available signed in or out (linked from sign-up and the paywall). */}
       <Stack.Screen name="language" options={{ title: t('nav.language') }} />
       <Stack.Screen name="legal/[doc]" options={{ title: '' }} />
       <Stack.Screen name="support" options={{ title: t('nav.support') }} />
+      {/* Verification links open here, signed in or out (often on another device). */}
+      <Stack.Screen name="verify-email" options={{ title: t('nav.verifyEmail') }} />
+      {/* The unsubscribe link of the daily study-plan email, and the website's "start" link (signed in or out). */}
+      <Stack.Screen name="unsubscribe" options={{ title: t('nav.unsubscribe') }} />
+      <Stack.Screen name="start" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -78,21 +84,13 @@ if (Platform.OS !== 'web') {
 }
 
 /**
- * Daily study reminders (iOS/Android): rebuilt from the student's plans on launch and whenever the
- * app comes back to the foreground; removed on sign-out. Taps open the plan or course.
+ * Study reminders are daily emails now (sent by the server). Cancels the on-device notifications an
+ * older app version may still have scheduled, once per launch.
  */
-function useStudyReminders(signedIn: boolean | null) {
-  useReminderTaps(signedIn === true);
+function useLegacyReminderCleanup() {
   useEffect(() => {
-    if (signedIn === null) return;
-    if (!signedIn) {
-      void clearReminders();
-      return;
-    }
-    void syncReminders();
-    const sub = AppState.addEventListener('change', (state) => state === 'active' && void syncReminders());
-    return () => sub.remove();
-  }, [signedIn]);
+    void clearLegacyReminders();
+  }, []);
 }
 
 /** app_opened on launch (once the session is restored) and whenever the app returns from the background. */

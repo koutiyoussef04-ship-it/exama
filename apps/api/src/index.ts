@@ -4,6 +4,8 @@ import { aiInfo, config, transcriptionInfo } from './config.js';
 import { sql } from './db/client.js';
 import { explainDbError } from './db/errors.js';
 import { resumePendingDocuments } from './services/documents.js';
+import { startEmailHoldMaintenance } from './services/email-hold.js';
+import { startStudyReminders } from './services/study-reminders.js';
 import { resumeMaterialJobs, startMaterialMaintenance } from './services/materials/index.js';
 
 // Fail fast with a clear message if Postgres isn't reachable.
@@ -23,3 +25,5 @@ serve({ fetch: app.fetch, port: config.PORT, hostname: '0.0.0.0' }, (info) => {
 resumePendingDocuments().catch((err) => console.error('Failed to resume pending documents', err));
 resumeMaterialJobs().catch((err) => console.error('Failed to resume material processing', err));
 startMaterialMaintenance();
+startEmailHoldMaintenance();
+startStudyReminders();

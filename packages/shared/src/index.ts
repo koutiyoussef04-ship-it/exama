@@ -4,19 +4,45 @@
  * responses are plain TypeScript types.
  */
 import { z } from 'zod';
+import { normalizeEmail } from './email';
 import { aiLanguageSchema, languageSchema } from './languages';
 
 // ---------- Auth ----------
 
+/** Minimum age to create an Exama account. */
+export const MINIMUM_SIGNUP_AGE = 13;
+/**
+ * Age group stored on an account (a range, never a date of birth) — every group is 13 or over.
+ * Stored on the account only: never sent to analytics, never returned in `User`, and never used for
+ * prices or usage allowances.
+ */
+export const AGE_RANGES = ['13_17', '18_24', '25_34', '35_plus'] as const;
+export type AgeRange = (typeof AGE_RANGES)[number];
+/**
+ * Answers to the sign-up age question. It is asked neutrally (every age can be chosen, see FTC COPPA
+ * FAQ H.3): "under_13" ends sign-up — the app stops without contacting the server, and the API refuses
+ * it (403 age_requirement_not_met) without creating or storing anything.
+ */
+export const SIGNUP_AGE_ANSWERS = ['under_13', ...AGE_RANGES] as const;
+export type SignupAgeAnswer = (typeof SIGNUP_AGE_ANSWERS)[number];
+
 export const registerSchema = z.object({
-  email: z.email().transform((e) => e.toLowerCase()),
+  email: z.email().transform(normalizeEmail),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().trim().min(1).max(100),
+  /** App language, for the verification email (optional: older apps don't send it). */
+  language: languageSchema.optional(),
+  /**
+   * Required: proves nothing on its own, but every account must state an age group of 13 or over.
+   * (The API answers a missing value with 400 age_range_required — older app versions must update —
+   * and "under_13" with 403 age_requirement_not_met, before anything is created.)
+   */
+  ageRange: z.enum(AGE_RANGES),
 });
 export type RegisterInput = z.input<typeof registerSchema>;
 
 export const loginSchema = z.object({
-  email: z.email().transform((e) => e.toLowerCase()),
+  email: z.email().transform(normalizeEmail),
   password: z.string().min(1),
 });
 export type LoginInput = z.input<typeof loginSchema>;
@@ -25,18 +51,28 @@ export type User = { id: string; email: string; name: string };
 export type AuthResponse = { token: string; user: User };
 
 /**
+ * After an account is deleted, its email address (normalized with `normalizeEmail`, the sign-in rule)
+ * can't be used to sign up again for exactly this many days from the deletion. Register then answers
+ * 409 `signup_email_unavailable` with a generic message that doesn't say why. The API keeps only a keyed hash
+ * of the address, and only for this period (apps/api/src/services/email-hold.ts).
+ */
+export const DELETED_EMAIL_HOLD_DAYS = 30;
+/** DELETE /auth/me. `emailReusableAt`: when (ISO 8601, UTC) this email can be used to sign up again. */
+export type DeleteAccountResult = { hadActiveSubscription: boolean; emailReusableAt: string };
+
+/**
  * Password reset: the API emails a short one-time code (valid 30 min, 5 attempts, single use).
  * `request` always answers 202 — whether the email has an account is never revealed.
  */
 export const PASSWORD_RESET_CODE_LENGTH = 6;
 export const passwordResetRequestSchema = z.object({
-  email: z.email().transform((e) => e.toLowerCase()),
+  email: z.email().transform(normalizeEmail),
   /** App language, for the email. */
   language: languageSchema.optional(),
 });
 export type PasswordResetRequestInput = z.input<typeof passwordResetRequestSchema>;
 export const passwordResetConfirmSchema = z.object({
-  email: z.email().transform((e) => e.toLowerCase()),
+  email: z.email().transform(normalizeEmail),
   code: z
     .string()
     .trim()
@@ -166,3 +202,6 @@ export * from './billing';
 export * from './study-plan';
 export * from './materials';
 export * from './onboarding';
+export * from './email';
+export * from './email-verification';
+export * from './flashcards';

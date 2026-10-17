@@ -43,7 +43,7 @@ async function newUser() {
   const r = await app.request('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `apple-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'A' }),
+    body: JSON.stringify({ email: `apple-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'A', ageRange: '18_24' }),
   });
   return ((await r.json()) as AuthResponse).user.id;
 }

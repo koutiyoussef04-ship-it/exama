@@ -1,12 +1,14 @@
-import type { BillingEnvironment, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
+import type { AgeRange, BillingEnvironment, FlashcardResult, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -30,7 +32,68 @@ export const users = pgTable('users', {
   createdAt: createdAt(),
   /** Set when the password changes (reset): sessions issued before it stop working. */
   passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
-});
+  /** When the student confirmed their email address (link in the verification email). */
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  /** New accounts are asked to confirm their email; accounts created before verification existed are not (false). */
+  emailVerificationRequired: boolean('email_verification_required').notNull().default(false),
+  /** Age group chosen at sign-up (see AGE_RANGES, all 13+); null for accounts created before it was asked. */
+  ageRange: text('age_range').$type<AgeRange>(),
+  /** Daily study-plan reminder emails (services/study-reminders.ts). On by default; off via Account or the unsubscribe link. */
+  studyReminderEmails: boolean('study_reminder_emails').notNull().default(true),
+}, (t) => [
+  check('users_age_range_check', sql`${t.ageRange} is null or ${t.ageRange} in ('13_17', '18_24', '25_34', '35_plus')`),
+]);
+
+/**
+ * Daily study-plan reminder emails: one row per user and local day, claimed BEFORE sending, so retries and
+ * overlapping scheduler runs (two API instances, a restart mid-run) can never send the same day twice.
+ * Rows older than 14 days are purged.
+ */
+export const studyReminderEmails = pgTable(
+  'study_reminder_emails',
+  {
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    /** The student's local date (YYYY-MM-DD) the reminder is for. */
+    localDate: text('local_date').notNull(),
+    /** claimed → sent | failed | skipped (nothing to send after all). */
+    status: text('status').$type<'claimed' | 'sent' | 'failed' | 'skipped'>().notNull().default('claimed'),
+    attempts: integer('attempts').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.localDate] }), index('study_reminder_emails_updated_idx').on(t.updatedAt)],
+);
+
+/**
+ * Re-registration hold after account deletion (services/email-hold.ts). One row per recently deleted
+ * address, holding only an HMAC (keyed with JWT_SECRET) of the NORMALIZED email — never the address, a
+ * name or a user id — and when the hold ends (deletion + DELETED_EMAIL_HOLD_DAYS). Expired rows are
+ * ignored at once and purged within hours.
+ */
+export const deletedEmailHolds = pgTable(
+  'deleted_email_holds',
+  {
+    emailHash: text('email_hash').primaryKey(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('deleted_email_holds_expires_idx').on(t.expiresAt)],
+);
+
+/**
+ * Email-verification links. Only a keyed hash of the random token is stored. A token works once and
+ * for 24 hours; sending a new link expires the older ones.
+ */
+export const emailVerificationTokens = pgTable(
+  'email_verification_tokens',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('email_verification_tokens_user_idx').on(t.userId)],
+);
 
 /**
  * Student onboarding (five questions). A row is created with the account, so accounts that predate
@@ -417,4 +480,50 @@ export const studyTasks = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('study_tasks_plan_date_idx').on(t.planId, t.date, t.position), index('study_tasks_exam_idx').on(t.examId)],
+);
+
+/**
+ * Flashcard decks generated from a course (one row per generation). Reviewed in rounds; the state of
+ * the current round lives on each card. Deleted with the course or the account.
+ */
+export const flashcardDecks = pgTable(
+  'flashcard_decks',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+    language: text('language').notNull(),
+    /** Current review round (starts at 1). */
+    round: integer('round').notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flashcard_decks_user_document_idx').on(t.userId, t.documentId)],
+);
+
+export const flashcards = pgTable(
+  'flashcards',
+  {
+    id: id(),
+    deckId: uuid('deck_id').notNull().references(() => flashcardDecks.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    topic: text('topic').notNull(),
+    front: text('front').notNull(),
+    back: text('back').notNull(),
+    sourceQuote: text('source_quote').notNull(),
+    /** Part of the current round. */
+    inRound: boolean('in_round').notNull().default(true),
+    /** Answer in the current round (null = not reviewed yet). */
+    roundResult: text('round_result').$type<FlashcardResult>(),
+    /** Most recent answer in any round. */
+    lastResult: text('last_result').$type<FlashcardResult>(),
+    knownCount: integer('known_count').notNull().default(0),
+    practiceCount: integer('practice_count').notNull().default(0),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('flashcards_deck_idx').on(t.deckId),
+    check('flashcards_round_result_check', sql`${t.roundResult} is null or ${t.roundResult} in ('known', 'practice')`),
+    check('flashcards_last_result_check', sql`${t.lastResult} is null or ${t.lastResult} in ('known', 'practice')`),
+  ],
 );

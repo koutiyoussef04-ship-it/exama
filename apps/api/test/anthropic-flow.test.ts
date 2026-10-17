@@ -93,7 +93,7 @@ test('full loop uses the Anthropic provider for every AI step', async () => {
   const health = await call<{ ok: boolean; ai: unknown }>('/health');
   assert.deepEqual(health.body, { ok: true, ai: { provider: 'anthropic', model: 'claude-fake' } });
 
-  token = (await call<AuthResponse>('/auth/register', json({ email: `ai-${Date.now()}@example.com`, password: 'password123', name: 'AI Tester' }))).body.token;
+  token = (await call<AuthResponse>('/auth/register', json({ email: `ai-${Date.now()}@example.com`, password: 'password123', name: 'AI Tester', ageRange: '18_24' }))).body.token;
 
   // 1-2. Summary + topic extraction
   const doc = await waitDone((await upload()).body.id);

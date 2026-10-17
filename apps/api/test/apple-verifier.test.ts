@@ -92,7 +92,7 @@ const notification = (type: string, signedTransactionInfo: string, signedRenewal
 const call = (path: string, init: RequestInit = {}, token?: string) =>
   app.request(path, { ...init, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers ?? {}) } });
 async function newUser() {
-  const r = await call('/auth/register', { method: 'POST', body: JSON.stringify({ email: `iap-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'I' }) });
+  const r = await call('/auth/register', { method: 'POST', body: JSON.stringify({ email: `iap-${crypto.randomUUID()}@example.com`, password: 'password123', name: 'I', ageRange: '18_24' }) });
   return (await r.json()) as AuthResponse;
 }
 const status = async (token: string) => (await (await call('/billing/status', {}, token)).json()) as Entitlement;

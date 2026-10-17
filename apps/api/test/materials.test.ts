@@ -54,7 +54,7 @@ const send = (method: string, body: unknown, token?: string) => ({ method, body:
 let n = 0;
 /** Lectures are a Student/Pro/trial feature: test users are on Student unless a test says otherwise. */
 async function newUser(email = `materials-${RUN}-${n++}@example.com`, plan: string | null = 'student_monthly') {
-  const r = await call<AuthResponse>('/auth/register', send('POST', { email, password: 'password123', name: 'Lecturer' }));
+  const r = await call<AuthResponse>('/auth/register', send('POST', { email, password: 'password123', name: 'Lecturer', ageRange: '18_24' }));
   assert.equal(r.status, 201);
   if (plan) assert.equal((await purchase(r.body.token, plan)).status, 200);
   return { token: r.body.token, id: r.body.user.id, email };

@@ -13,6 +13,9 @@ import type {
   BillingCatalog,
   BillingPeriod,
   BillingRedirect,
+  CheckoutConsent,
+  DeleteAccountResult,
+  EmailPreferences,
   Entitlement,
   MockState,
   PaidTier,
@@ -26,9 +29,16 @@ import type {
   CourseMaterialDetail,
   OnboardingAnswers,
   OnboardingState,
+  EmailVerificationState,
+  CreateFlashcardDeckInput,
+  FlashcardDeck,
+  FlashcardDeckSummary,
+  FlashcardResult,
+  ResendVerificationResult,
+  VerifyEmailResult,
 } from '@study/shared';
 import { MATERIAL_HEADERS } from '@study/shared';
-import type { AiLanguage } from '@study/shared';
+import type { AiLanguage, Language } from '@study/shared';
 import { File as FsFile, UploadType } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { apiUrlResult } from '@/config/app-config';
@@ -154,7 +164,7 @@ export const api = {
   me: () => request<User>('/auth/me'),
   /** Permanently deletes the account (server verifies the password). */
   deleteAccount: (password: string) =>
-    request<{ hadActiveSubscription: boolean }>('/auth/me', { method: 'DELETE', body: JSON.stringify({ password }) }),
+    request<DeleteAccountResult>('/auth/me', { method: 'DELETE', body: JSON.stringify({ password }) }),
 
   listDocuments: () => request<DocumentSummary[]>('/documents'),
   getDocument: (id: string) => request<DocumentDetail>(`/documents/${id}`),
@@ -190,11 +200,30 @@ export const api = {
   googlePurchase: (purchaseToken: string, productId: string) => post<Entitlement>('/billing/purchase', { store: 'google', purchaseToken, productId }),
   googleRestore: (purchases: { purchaseToken: string; productId: string }[]) => post<Entitlement>('/billing/restore', { store: 'google', purchases }),
   /** Web only: the Stripe Checkout page for a plan. Access is granted by the server once Stripe confirms the subscription. */
-  stripeCheckout: (plan: PaidTier, interval: BillingPeriod) => post<BillingRedirect>('/billing/stripe/checkout', { plan, interval }),
+  stripeCheckout: (plan: PaidTier, interval: BillingPeriod, consent: CheckoutConsent, language?: string) =>
+    post<BillingRedirect>('/billing/stripe/checkout', { plan, interval, consent, language }),
   /** Web only: Stripe's Customer Portal (payment method, invoices, change plan, cancel) for the signed-in user. */
   stripePortal: () => post<BillingRedirect>('/billing/stripe/portal', {}),
   cancelSubscription: () => post<Entitlement>('/billing/cancel', {}),
   setMockBillingState: (state: MockState) => post<Entitlement>('/billing/mock/state', { state }),
+
+  // Flashcards (generation uses the practice allowance; reviewing is free).
+  listFlashcardDecks: (documentId: string) => request<FlashcardDeckSummary[]>(`/documents/${documentId}/flashcards`),
+  createFlashcardDeck: (documentId: string, input: CreateFlashcardDeckInput) => post<FlashcardDeck>(`/documents/${documentId}/flashcards`, input),
+  getFlashcardDeck: (deckId: string) => request<FlashcardDeck>(`/flashcards/${deckId}`),
+  reviewFlashcard: (deckId: string, input: { cardId: string; result: FlashcardResult; round: number }) => post<FlashcardDeck>(`/flashcards/${deckId}/review`, input),
+  startFlashcardRound: (deckId: string, scope: 'all' | 'practice') => post<FlashcardDeck>(`/flashcards/${deckId}/rounds`, { scope }),
+
+  // Email verification (link emailed at sign-up).
+  getEmailVerification: () => request<EmailVerificationState>('/auth/email-verification'),
+  // Daily study-plan emails (the server decides who gets them).
+  getEmailPreferences: () => request<EmailPreferences>('/email/preferences'),
+  updateEmailPreferences: (studyReminders: boolean) => request<EmailPreferences>('/email/preferences', { method: 'PATCH', body: JSON.stringify({ studyReminders }) }),
+  /** From the link in a reminder email: no session needed. */
+  unsubscribeStudyReminders: (token: string) => post<{ ok: true }>('/email/unsubscribe', { token }),
+  verifyEmail: (token: string) => post<VerifyEmailResult>('/auth/email-verification/verify', { token }),
+  resendVerification: (language: Language | undefined) => post<ResendVerificationResult>('/auth/email-verification/resend', { language }),
+  requestVerification: (email: string, language: Language | undefined) => post<{ retryAfterSeconds: number }>('/auth/email-verification/request', { email, language }),
 
   // Student onboarding (five questions, asked once to new accounts).
   getOnboarding: () => request<OnboardingState>('/onboarding'),

@@ -1,0 +1,53 @@
+---
+/**
+ * One legal document (Privacy Policy or Terms of Use) in one language, rendered from the app's own
+ * text (src/data/legal.ts). Stays `noindex` while the text is a draft.
+ */
+import Base from '../layouts/Base.astro';
+import { isRtl, LEGAL_IS_DRAFT, LEGAL_LANG_NAMES, LEGAL_LANGS, LEGAL_UI, LEGAL_UPDATED, legalDoc, legalPath, type LegalDocId, type LegalLang } from '../data/legal';
+
+interface Props {
+  doc: LegalDocId;
+  lang: LegalLang;
+}
+const { doc, lang } = Astro.props;
+const d = legalDoc(doc, lang);
+const ui = LEGAL_UI[lang];
+const dir = isRtl(lang) ? 'rtl' : 'ltr';
+const path = legalPath(doc, lang);
+const alternates = LEGAL_LANGS.map((l) => ({ lang: l, path: legalPath(doc, l) }));
+const home = lang === 'en' ? '/' : `/${lang}/`;
+const updated = new Intl.DateTimeFormat(lang, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${LEGAL_UPDATED}T12:00:00Z`));
+---
+
+<Base title={`${d.title} — Exama`} description={ui.description[doc]} path={path} noindex={LEGAL_IS_DRAFT} lang={lang} alternates={alternates}>
+  <section class="section info-page">
+    <article class="container narrow legal" lang={lang} dir={dir} data-legal-doc={doc}>
+      <nav class="legal-langs" aria-label={ui.languages}>
+        {
+          LEGAL_LANGS.map((l) =>
+            l === lang ? (
+              <span aria-current="page" lang={l}>{LEGAL_LANG_NAMES[l]}</span>
+            ) : (
+              <a href={legalPath(doc, l)} hreflang={l} lang={l}>{LEGAL_LANG_NAMES[l]}</a>
+            ),
+          )
+        }
+      </nav>
+      <h1>{d.title}</h1>
+      <p class="legal-updated">{ui.updated}: <time datetime={LEGAL_UPDATED}>{updated}</time></p>
+      {LEGAL_IS_DRAFT && <p class="legal-draft" role="note">{ui.draft}</p>}
+      <div class="prose legal-body">
+        {
+          d.sections.map((s) => (
+            <section>
+              <h2>{s.heading}</h2>
+              {s.blocks.map((b) => (b.kind === 'p' ? <p>{b.text}</p> : <ul>{b.items.map((i) => <li>{i}</li>)}</ul>))}
+            </section>
+          ))
+        }
+      </div>
+      <p class="back"><a href={home}>{ui.back}</a></p>
+    </article>
+  </section>
+</Base>

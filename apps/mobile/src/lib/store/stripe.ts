@@ -20,8 +20,10 @@ export function goToStripe(url: string): void {
 
 export const stripeStore: StoreClient = {
   provider: 'stripe',
-  async purchase(plan) {
-    const { url } = await api.stripeCheckout(plan.tier, plan.period);
+  async purchase(plan, { consent, language }) {
+    // The paywall only enables the button once both boxes are ticked; the server checks again.
+    if (!consent) throw new ApiError(400, 'Please confirm both statements to continue.', 'checkout_consent_required');
+    const { url } = await api.stripeCheckout(plan.tier, plan.period, consent, language);
     goToStripe(url);
     // The page is unloading: this never resolves, so the button keeps its busy state until Stripe opens.
     return new Promise<Entitlement>(() => {});

@@ -1,16 +1,24 @@
 ---
-import { faqs } from '../data/content';
+import { SECTIONS, TRIAL_DAYS } from '../data/content';
+import { site } from '../config/site';
+import { copy, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const c = copy(Astro.props.lang).faq;
+const items = c.items(site.webCheckoutAvailable, TRIAL_DAYS);
 ---
 
-<section id="faq" class="section" aria-labelledby="faq-title">
+<section id={SECTIONS.faq} class="section" aria-labelledby="faq-title">
   <div class="container narrow">
     <div class="section-head">
-      <p class="eyebrow">FAQ</p>
-      <h2 id="faq-title">Frequently asked questions</h2>
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="faq-title">{c.title}</h2>
     </div>
 
     <div class="faq">
-      {faqs.map((f) => (
+      {items.map((f) => (
         <details>
           <summary>{f.q}</summary>
           <div class="faq-a">

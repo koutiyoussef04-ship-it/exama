@@ -147,6 +147,39 @@ const envSchema = z
       .trim()
       .optional()
       .transform((v) => v || undefined),
+    // ---- Email verification ----
+    // Web app page origin that verification links open, e.g. https://app.exama.app (links go to
+    // <WEB_APP_URL>/verify-email). Unset: the first CORS_ORIGINS entry, or http://localhost:8081 in development.
+    WEB_APP_URL: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
+    // true = new accounts must confirm their email: after the grace period below, courses and exams answer
+    // 403 email_not_verified until they do. Accounts created before verification existed are never restricted.
+    // Default false: verification emails are sent and the app asks for them, but nothing is blocked.
+    EMAIL_VERIFICATION_REQUIRED: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v === 'true'),
+    // Hours a new account can use everything before verifying (only matters when EMAIL_VERIFICATION_REQUIRED=true).
+    EMAIL_VERIFICATION_GRACE_HOURS: z.coerce.number().int().min(0).max(720).default(72),
+    // ---- Daily study-plan reminder emails (services/study-reminders.ts) ----
+    // true = students with a study plan and no active subscription get one email a day with that day's
+    // tasks (no AI is used). Default false: nothing is sent until you turn it on.
+    STUDY_REMINDER_EMAILS_ENABLED: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v === 'true'),
+    // Local hour (0–23, in each plan's time zone) from which the day's reminder is sent. Default 8 (08:00).
+    STUDY_REMINDER_LOCAL_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+    // Public https origin of this API, for one-click unsubscribe (List-Unsubscribe-Post). Unset: Render's
+    // RENDER_EXTERNAL_URL; if neither is set, emails only carry the web app's unsubscribe page.
+    API_PUBLIC_URL: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
     // Browser origins allowed to call the API (Expo web). Empty: any origin in development, none in production.
     // Native iOS/Android apps don't use CORS.
     CORS_ORIGINS: csv,
@@ -219,6 +252,26 @@ const envSchema = z
     if (production && e.EMAIL_PROVIDER === 'log') {
       ctx.addIssue({ code: 'custom', path: ['EMAIL_PROVIDER'], message: 'EMAIL_PROVIDER=log is not allowed when NODE_ENV=production (reset codes would only reach the server log).' });
     }
+    if (e.WEB_APP_URL) {
+      const u = URL.canParse(e.WEB_APP_URL) ? new URL(e.WEB_APP_URL) : null;
+      if (!u || !(u.protocol === 'https:' || (!production && u.protocol === 'http:'))) {
+        ctx.addIssue({ code: 'custom', path: ['WEB_APP_URL'], message: 'WEB_APP_URL must be the web app origin (https in production), e.g. https://app.exama.app.' });
+      }
+    }
+    if (e.EMAIL_VERIFICATION_REQUIRED) {
+      // Never restrict accounts that cannot receive the email that unlocks them.
+      const provider = e.EMAIL_PROVIDER ?? (production ? 'disabled' : 'log');
+      if (provider === 'disabled' || (production && provider !== 'resend')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['EMAIL_VERIFICATION_REQUIRED'],
+          message: 'EMAIL_VERIFICATION_REQUIRED=true needs a working email provider (EMAIL_PROVIDER=resend with RESEND_API_KEY and EMAIL_FROM), or new students could be locked out.',
+        });
+      }
+      if (production && !webAppUrlFrom(e.WEB_APP_URL, e.CORS_ORIGINS, true)) {
+        ctx.addIssue({ code: 'custom', path: ['WEB_APP_URL'], message: 'EMAIL_VERIFICATION_REQUIRED=true needs WEB_APP_URL (or an https CORS_ORIGINS entry) for the verification links.' });
+      }
+    }
     if (e.EMAIL_PROVIDER === 'resend' && (!e.RESEND_API_KEY || !e.EMAIL_FROM)) {
       ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'EMAIL_PROVIDER=resend needs RESEND_API_KEY and EMAIL_FROM.' });
     }
@@ -287,6 +340,13 @@ export function parseServiceAccount(raw: string): GoogleServiceAccount | null {
   return null;
 }
 
+/** Origin of the web app for links in emails: WEB_APP_URL, else the first CORS origin; localhost in development. */
+function webAppUrlFrom(explicit: string | undefined, corsOrigins: string[], production: boolean): string | undefined {
+  const pick = explicit ?? corsOrigins.find((o) => URL.canParse(o) && (new URL(o).protocol === 'https:' || !production));
+  if (pick) return pick.replace(/\/+$/, '');
+  return production ? undefined : 'http://localhost:8081';
+}
+
 function loadConfig() {
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -301,12 +361,13 @@ function loadConfig() {
       | 'assemblyai'
       | 'disabled',
     EMAIL_PROVIDER: (parsed.data.EMAIL_PROVIDER ?? (parsed.data.NODE_ENV === 'production' ? 'disabled' : 'log')) as 'log' | 'resend' | 'disabled',
+    WEB_APP_URL: webAppUrlFrom(parsed.data.WEB_APP_URL, parsed.data.CORS_ORIGINS, parsed.data.NODE_ENV === 'production'),
   };
   if (cfg.STRIPE_ENABLED && cfg.BILLING_MOCK_ENABLED) {
     console.warn('⚠ STRIPE_ENABLED=true but BILLING_MOCK_ENABLED=true: the mock provider replaces every real provider, so Stripe is NOT used. Set BILLING_MOCK_ENABLED=false to test Stripe.');
   }
   if (cfg.EMAIL_PROVIDER === 'disabled') {
-    console.warn('⚠ EMAIL_PROVIDER is disabled: password-reset emails are not sent. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.');
+    console.warn('⚠ EMAIL_PROVIDER is disabled: password-reset and email-verification emails are not sent. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.');
   }
   if (cfg.ANTHROPIC_API_KEY && !cfg.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
     console.warn('⚠ ANTHROPIC_API_KEY does not start with "sk-ant-" — double-check you copied the whole key.');

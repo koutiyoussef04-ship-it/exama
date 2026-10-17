@@ -1,6 +1,6 @@
 /**
  * Account deletion: password re-auth, every user-owned row and file removed, analytics
- * anonymized, sessions invalidated, and other accounts untouched.
+ * anonymized, sessions invalidated, other accounts untouched, and the email held for 30 days.
  */
 import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
@@ -14,6 +14,7 @@ const { app } = await import('../src/app.js');
 const { sql } = await import('../src/db/client.js');
 const { flushAnalytics } = await import('../src/analytics/index.js');
 const { config } = await import('../src/config.js');
+const { emailHoldHash } = await import('../src/services/email-hold.js');
 after(() => sql.end());
 
 const pdf = await readFile(new URL('./fixtures/biology-notes.pdf', import.meta.url));
@@ -28,7 +29,7 @@ async function call<T>(path: string, init: RequestInit & { token?: string } = {}
 const json = (method: string, body: unknown, token?: string) => ({ method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' }, token });
 
 async function newUser(tag: string) {
-  const r = await call<AuthResponse>('/auth/register', json('POST', { email: `del-${tag}-${RUN}@example.com`, password: 'password123', name: 'Del' }));
+  const r = await call<AuthResponse>('/auth/register', json('POST', { email: `del-${tag}-${RUN}@example.com`, password: 'password123', name: 'Del', ageRange: '18_24' }));
   assert.equal(r.status, 201);
   return { token: r.body.token, id: r.body.user.id, email: `del-${tag}-${RUN}@example.com` };
 }
@@ -115,8 +116,13 @@ test('delete account: removes all data and files, anonymizes analytics, invalida
   assert.equal((await call(`/documents/${otherDoc}`, { token: bystander.token })).status, 200);
   assert.ok(await exists(join(resolve(config.STORAGE_DIR), bystander.id)));
 
-  // The email can be used again for a brand-new, empty account.
-  const again = await call<AuthResponse>('/auth/register', json('POST', { email: victim.email, password: 'password123', name: 'New' }));
+  // For 30 days the email can't sign up again (test/email-hold.test.ts covers the details)…
+  const held = await call<{ code: string }>('/auth/register', json('POST', { email: victim.email, password: 'password123', name: 'New', ageRange: '18_24' }));
+  assert.equal(held.status, 409);
+  assert.equal(held.body.code, 'signup_email_unavailable');
+  // …after that it can be used again for a brand-new, empty account.
+  await sql`update deleted_email_holds set expires_at = now() - interval '1 second' where email_hash = ${emailHoldHash(victim.email)}`;
+  const again = await call<AuthResponse>('/auth/register', json('POST', { email: victim.email, password: 'password123', name: 'New', ageRange: '18_24' }));
   assert.equal(again.status, 201);
   assert.notEqual(again.body.user.id, victim.id);
   assert.equal((await call<DocumentDetail[]>('/documents', { token: again.body.token })).body.length, 0);

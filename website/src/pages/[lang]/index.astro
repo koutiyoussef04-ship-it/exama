@@ -1,0 +1,12 @@
+---
+/** /es/, /fr/ and /ar/ — the home page in Spanish, French and Arabic (right-to-left). English is /. */
+import Home from '../../components/Home.astro';
+import { LANGS, type Lang } from '../../i18n';
+
+export function getStaticPaths() {
+  return LANGS.filter((lang) => lang !== 'en').map((lang) => ({ params: { lang } }));
+}
+const { lang } = Astro.params as { lang: Lang };
+---
+
+<Home lang={lang} />

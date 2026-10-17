@@ -37,21 +37,31 @@ export class MaterialIndex {
   }
 }
 
-export type RejectReason = 'ungrounded' | 'bad_topic' | 'bad_mcq';
+export type RejectReason = 'ungrounded' | 'bad_topic' | 'bad_mcq' | 'duplicate';
+
+/** Same question asked twice (same wording and same answer), e.g. by two generation batches. */
+const questionKey = (q: GeneratedQuestion) => `${normalizeText(q.prompt)}|${normalizeText(q.correctAnswer)}`;
 
 /**
- * Keeps only well-formed, grounded questions and snaps topic names to the allowed list.
+ * Keeps only well-formed, grounded, non-repeated questions and snaps topic names to the allowed list.
+ * `alreadyKept`: questions accepted earlier for the same exam (a top-up must not repeat them).
  * Returns kept questions plus rejection counts (for logging).
  */
 export function validateQuestions(
   questions: GeneratedQuestion[],
-  opts: { material: MaterialIndex; allowedTopics: string[] },
+  opts: { material: MaterialIndex; allowedTopics: string[]; alreadyKept?: GeneratedQuestion[] },
 ) {
   const byLower = new Map(opts.allowedTopics.map((t) => [t.toLowerCase().trim(), t]));
-  const rejected: Record<RejectReason, number> = { ungrounded: 0, bad_topic: 0, bad_mcq: 0 };
+  const rejected: Record<RejectReason, number> = { ungrounded: 0, bad_topic: 0, bad_mcq: 0, duplicate: 0 };
   const kept: GeneratedQuestion[] = [];
+  const seen = new Set((opts.alreadyKept ?? []).map(questionKey));
 
   for (const q of questions) {
+    const key = questionKey(q);
+    if (seen.has(key)) {
+      rejected.duplicate++;
+      continue;
+    }
     const topic = byLower.get(q.topic.toLowerCase().trim());
     if (!topic) {
       rejected.bad_topic++;
@@ -69,6 +79,7 @@ export function validateQuestions(
       rejected.ungrounded++;
       continue;
     }
+    seen.add(key);
     kept.push({ ...q, topic });
   }
   return { kept, rejected };

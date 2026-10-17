@@ -1,0 +1,48 @@
+---
+/** The home page in one language (/ for English, /es/, /fr/, /ar/). */
+import Base from '../layouts/Base.astro';
+import Hero from './Hero.astro';
+import HowItWorks from './HowItWorks.astro';
+import Materials from './Materials.astro';
+import Grounded from './Grounded.astro';
+import Exams from './Exams.astro';
+import WeakTopics from './WeakTopics.astro';
+import StudyPlan from './StudyPlan.astro';
+import Product from './Product.astro';
+import Pricing from './Pricing.astro';
+import Faq from './Faq.astro';
+import FinalCta from './FinalCta.astro';
+import { TRIAL_DAYS } from '../data/content';
+import { site } from '../config/site';
+import { alternatesFor, copy, pathFor, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang);
+// Structured data describes only what is visibly on the page (FAQ text, site name). No ratings, no reviews.
+const jsonLd = [
+  { '@context': 'https://schema.org', '@type': 'WebSite', name: site.name, url: site.url, inLanguage: lang },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    inLanguage: lang,
+    mainEntity: c.faq.items(site.webCheckoutAvailable, TRIAL_DAYS).map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a.join(' ') } })),
+  },
+];
+---
+
+<Base title={c.meta.title} description={c.meta.description} path={pathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={alternatesFor('')}>
+  <Hero lang={lang} />
+  <HowItWorks lang={lang} />
+  <Materials lang={lang} />
+  <Grounded lang={lang} />
+  <Exams lang={lang} />
+  <WeakTopics lang={lang} />
+  <StudyPlan lang={lang} />
+  <Product lang={lang} />
+  <Pricing lang={lang} />
+  <Faq lang={lang} />
+  <FinalCta lang={lang} />
+</Base>
