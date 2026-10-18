@@ -33,7 +33,7 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { StudyPlan, TaskActivity } from '@study/shared';
-import { and, count, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { getEntitlement, isOwner } from '../billing/entitlements.js';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
@@ -453,22 +453,52 @@ async function planForToday(userId: string, p: PlanRow, title: string, now: Date
 }
 
 /**
- * What the app last reported about the device (`app_opened`, signed in): its app language and time zone.
- * Only these two fields are read; invalid values are ignored.
+ * What the app last reported about the device (`app_opened`): its app language and time zone. Only these two
+ * fields are read; invalid values are ignored.
+ *
+ * 1. The account's own signed-in `app_opened` events.
+ * 2. Otherwise, signed-out `app_opened` events of an install this account has used: the anonymous id the app
+ *    keeps per install and sends with every event, taken from this account's own signed-in client events.
+ *    The app sends `app_opened` once at launch (and on return from the background), so a student who opens the
+ *    app signed out and signs up in that same session has only a signed-out one — the cause of no reminders
+ *    being sent on 2026-10-18. Events of other accounts are never used.
  */
 async function deviceSignals(userId: string): Promise<{ language: Lang | null; timeZone: string | null }> {
-  const events = await db
-    .select({ properties: analyticsEvents.properties })
-    .from(analyticsEvents)
-    .where(and(eq(analyticsEvents.userId, userId), eq(analyticsEvents.name, 'app_opened'), eq(analyticsEvents.source, 'client')))
-    .orderBy(desc(analyticsEvents.createdAt))
-    .limit(20);
   let language: Lang | null = null;
   let timeZone: string | null = null;
-  for (const { properties: e } of events) {
-    if (!language && isLang(e.app_language)) language = e.app_language;
-    if (!timeZone && typeof e.time_zone === 'string' && isValidTimeZone(e.time_zone)) timeZone = e.time_zone;
-    if (language && timeZone) break;
+  const take = (events: { properties: Record<string, unknown> }[]) => {
+    for (const { properties: e } of events) {
+      if (!language && isLang(e.app_language)) language = e.app_language;
+      if (!timeZone && typeof e.time_zone === 'string' && isValidTimeZone(e.time_zone)) timeZone = e.time_zone;
+      if (language && timeZone) return;
+    }
+  };
+  const opened = and(eq(analyticsEvents.name, 'app_opened'), eq(analyticsEvents.source, 'client'));
+  take(
+    await db
+      .select({ properties: analyticsEvents.properties })
+      .from(analyticsEvents)
+      .where(and(eq(analyticsEvents.userId, userId), opened))
+      .orderBy(desc(analyticsEvents.createdAt))
+      .limit(20),
+  );
+  if (language && timeZone) return { language, timeZone };
+
+  const installs = await db
+    .selectDistinct({ id: analyticsEvents.anonymousId })
+    .from(analyticsEvents)
+    .where(and(eq(analyticsEvents.userId, userId), eq(analyticsEvents.source, 'client'), isNotNull(analyticsEvents.anonymousId)))
+    .limit(20);
+  const ids = installs.map((i) => i.id).filter((id): id is string => !!id);
+  if (ids.length) {
+    take(
+      await db
+        .select({ properties: analyticsEvents.properties })
+        .from(analyticsEvents)
+        .where(and(opened, inArray(analyticsEvents.anonymousId, ids), isNull(analyticsEvents.userId), sql`${analyticsEvents.properties}->>'authenticated' = 'false'`))
+        .orderBy(desc(analyticsEvents.createdAt))
+        .limit(20),
+    );
   }
   return { language, timeZone };
 }
@@ -495,6 +525,7 @@ const mark = (userId: string, date: string, status: 'sent' | 'failed' | 'skipped
   db.update(studyReminderEmails).set({ status, updatedAt: new Date() }).where(and(eq(studyReminderEmails.userId, userId), eq(studyReminderEmails.localDate, date)));
 
 let lastUnavailable: string | null = null;
+let lastSummary: string | null = null;
 let running = false;
 
 /** One pass over all eligible accounts (`userIds` limits it, for tests). */
@@ -597,6 +628,10 @@ export async function runStudyReminders(now = new Date(), opts: { userIds?: stri
       }
     }
     if (result.sent || result.failed) console.log(`[study-reminders] sent ${result.sent}, failed ${result.failed}, nothing to send ${result.skipped}.`);
+    // Why nobody got an email is otherwise invisible: log the counts whenever they change (not every 15 minutes).
+    const summary = `${rows.length} account(s) with a confirmed address, reminders on and one course: sent ${result.sent}, failed ${result.failed}, nothing to send ${result.skipped}, before the local send hour ${result.notDue}, no known time zone ${result.noTimeZone}, not eligible (billing) ${result.subscribers}`;
+    if (!opts.userIds && summary !== lastSummary) console.log(`[study-reminders] run: ${summary}.`);
+    if (!opts.userIds) lastSummary = summary;
     await db.delete(studyReminderEmails).where(lt(studyReminderEmails.updatedAt, new Date(now.getTime() - PURGE_DAYS * 86_400_000)));
     return result;
   } finally {

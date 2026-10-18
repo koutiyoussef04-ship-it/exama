@@ -484,3 +484,77 @@ test('missing email configuration: the run logs why and sends nothing, without t
   assert.equal(mailsTo(u).length, 0);
   assert.equal((await reminders.runStudyReminders(at('09:00'), { userIds: [u.id] })).sent, 1, 'works again once configured');
 });
+
+// ---------------------------------------------------------------- regression: 2026-10-18 (no emails sent)
+
+/** One install: the anonymous id the app keeps per device and sends with every event. */
+const event = (anonymousId: string, name: string, properties: Record<string, unknown>, token?: string) =>
+  call('/events', send('POST', { anonymousId, events: [{ name, properties }] }, token));
+
+test('signed up in the same app session: the time zone from the signed-out app_opened of that install is used', async () => {
+  // Production, 2026-10-18: the only eligible account opened the app signed out (app_opened without a user,
+  // with its time zone), signed up, uploaded a course and took an exam in that same session. The app sent
+  // no signed-in app_opened, so the account had no known time zone and was silently skipped every run.
+  const install = randomUUID();
+  assert.equal((await event(install, 'app_opened', { platform: 'web', authenticated: false, app_language: 'fr', time_zone: 'Africa/Tunis' })).status, 202);
+  const u = await newUser();
+  const docId = await newCourse(u);
+  assert.equal((await event(install, 'course_opened', { document_id: docId, status: 'ready' }, u.token)).status, 202);
+  const [linked] = await sql`select count(*)::int as n from analytics_events where user_id = ${u.id} and name = 'app_opened'`;
+  assert.equal(linked.n, 0, 'no signed-in app_opened, exactly as in production');
+
+  // 08:30 in Tunis (UTC+1) is 07:30 UTC: due. 06:30 UTC (07:30 there) is not.
+  assert.equal((await run(u, at('06:30'))).notDue, 1, 'the device zone is known: not due before 08:00 there');
+  const r = await run(u, at('07:30'));
+  assert.equal(r.sent, 1, JSON.stringify(r));
+  const [mail] = mailsTo(u);
+  assert.match(mail!.subject, /^Reprenez là où vous en étiez : /, 'in the app language that install reported (fr)');
+  assert.equal(mail!.idempotencyKey, `study-reminder/${u.id}/${localDate(at('07:30'), 'Africa/Tunis')}`);
+  assert.equal((await run(u, at('10:00'))).sent, 0, 'still one per local day');
+});
+
+test('install fallback: never another install’s zone, never another account’s signed-in event; the account’s own app_opened wins', async () => {
+  // An install this account never used (no client event of the account carries its id): ignored.
+  const stranger = randomUUID();
+  await event(stranger, 'app_opened', { platform: 'web', authenticated: false, time_zone: 'Asia/Tokyo' });
+  const u = await newUser();
+  await newCourse(u);
+  assert.equal((await run(u)).noTimeZone, 1);
+
+  // The same install, but the app_opened belongs to ANOTHER signed-in account: not used for this one.
+  const shared = randomUUID();
+  const other = await newUser();
+  await event(shared, 'app_opened', { platform: 'ios', authenticated: true, time_zone: 'Asia/Tokyo' }, other.token);
+  await sql`insert into analytics_events (name, source, user_id, anonymous_id, properties) values ('course_opened', 'client', ${u.id}, ${shared}, '{}'::jsonb)`;
+  assert.equal((await run(u)).noTimeZone, 1, 'another account’s event is never borrowed');
+
+  // A signed-out app_opened of an install this account used: its zone is used.
+  await event(shared, 'app_opened', { platform: 'ios', authenticated: false, time_zone: 'America/New_York' });
+  assert.equal((await run(u, at('11:00'))).notDue, 1, '07:00 in New York');
+  // The account's own signed-in app_opened takes precedence over the install fallback.
+  await opened(u, { time_zone: 'UTC' });
+  assert.equal((await run(u, at('09:00'))).sent, 1);
+});
+
+test('each scheduled run’s outcome is logged when it changes (why nobody got an email is visible in the logs)', async () => {
+  const when = at('09:00', 2);
+  const logged = async () => {
+    const logs: string[] = [];
+    const original = console.log;
+    console.log = (...args: unknown[]) => void logs.push(args.join(' '));
+    try {
+      await reminders.runStudyReminders(when);
+    } finally {
+      console.log = original;
+    }
+    return logs.filter((l) => l.startsWith('[study-reminders] run:'));
+  };
+  const first = await logged(); // sends that day's emails
+  const second = await logged(); // nothing left to send: a different outcome, logged
+  const third = await logged(); // same outcome again: not repeated every 15 minutes
+  assert.equal(first.length, 1);
+  assert.match(first[0]!, /account\(s\) with a confirmed address, reminders on and one course: sent \d+, failed \d+, nothing to send \d+, before the local send hour \d+, no known time zone \d+, not eligible \(billing\) \d+\.$/);
+  assert.equal(second.length, 1);
+  assert.match(second[0]!, /: sent 0, failed 0, nothing to send 0,/);
+  assert.equal(third.length, 0);
+});

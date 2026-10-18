@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Body, colors, Loading, space, Title } from '@/components/ui';
 import { API_CONFIG_ERROR } from '@/lib/api';
 import { platform, track } from '@/lib/analytics';
+import { appOpenedOnAuthChange, INITIAL_APP_OPENED_STATE } from '@/lib/app-opened';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { PreferencesProvider, usePreferences } from '@/lib/preferences';
 import { clearLegacyReminders } from '@/lib/reminders';
@@ -103,12 +104,17 @@ function deviceZone(): { time_zone?: string } {
   }
 }
 
-/** app_opened on launch (once the session is restored) and whenever the app returns from the background. */
+/**
+ * app_opened on launch (once the session is restored), whenever the app returns from the background, and
+ * when the student signs in or signs up during the session. The last one links the device time zone to the
+ * account: without it, someone who opened the app signed out and created an account in the same session had
+ * no signed-in app_opened, so the server never knew their time zone for the daily study email.
+ */
 function useAppOpenedTracking(authenticated: boolean | null) {
   const { appLanguage, aiLanguage } = usePreferences();
   const props = useRef({ authenticated, appLanguage, aiLanguage });
   props.current = { authenticated, appLanguage, aiLanguage };
-  const launched = useRef(false);
+  const opened = useRef(INITIAL_APP_OPENED_STATE);
 
   const send = () => {
     const p = props.current;
@@ -117,9 +123,9 @@ function useAppOpenedTracking(authenticated: boolean | null) {
   };
 
   useEffect(() => {
-    if (authenticated === null || launched.current) return;
-    launched.current = true;
-    send();
+    const next = appOpenedOnAuthChange(opened.current, authenticated);
+    opened.current = next.state;
+    if (next.send) send();
   }, [authenticated]);
 
   useEffect(() => {
