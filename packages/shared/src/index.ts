@@ -164,12 +164,19 @@ export type ExamSummary = {
 
 export type Exam = ExamSummary & {
   questions: Question[] | GradedQuestion[];
+  /** Seconds the student spent taking the exam (graded exams; null when it was not recorded). */
+  durationSeconds?: number | null;
 };
+
+/** Longest exam time the app reports (24 h). The app clamps to it, so a forgotten open exam never blocks a submit. */
+export const MAX_EXAM_DURATION_SECONDS = 24 * 60 * 60;
 
 export const submitExamSchema = z.object({
   answers: z
     .array(z.object({ questionId: z.uuid(), answer: z.string().max(5000) }))
     .min(1),
+  /** Time spent taking the exam, measured by the app (optional: older apps do not send it). */
+  durationSeconds: z.number().int().min(0).max(MAX_EXAM_DURATION_SECONDS).optional(),
 });
 export type SubmitExamInput = z.input<typeof submitExamSchema>;
 

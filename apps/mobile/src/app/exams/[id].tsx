@@ -32,8 +32,10 @@ import { trackOnce } from '@/lib/analytics';
 import { handleLimitError, openPaywall, useEntitlement } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { examDrafts } from '@/lib/exam-drafts';
+import { examTimers, formatElapsed, toDurationSeconds } from '@/lib/exam-timer';
 import { isAnswered, optionLetter, questionStates } from '@/lib/exam-ui';
 import { usePreferences } from '@/lib/preferences';
+import { useExamClock } from '@/lib/use-exam-clock';
 
 export default function ExamScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -99,16 +101,25 @@ function TakeExam({ exam }: { exam: Exam }) {
   }, [index, questions.length, t]);
 
   const submit = useMutation({
+    // The time is read when the student submits; the clock is paused while grading runs (and resumes if it fails).
     mutationFn: () =>
-      api.submitExam(exam.id, { answers: questions.map((x) => ({ questionId: x.id, answer: answers[x.id] ?? '' })) }),
+      api.submitExam(exam.id, {
+        answers: questions.map((x) => ({ questionId: x.id, answer: answers[x.id] ?? '' })),
+        durationSeconds: toDurationSeconds(examTimers.elapsedMs(exam.id)),
+      }),
     onSuccess: (graded) => {
       examDrafts.clear(exam.id);
+      examTimers.clear(exam.id);
       qc.setQueryData(['exam', exam.id], graded);
       qc.invalidateQueries({ queryKey: ['progress', exam.documentId] });
       // The server adapted the study plan to these results (and completed the task, if any).
       qc.invalidateQueries({ queryKey: ['study-plan', exam.documentId] });
     },
   });
+
+  // Elapsed time: runs from when the student opens the exam (not when it was generated), across questions
+  // and visits, and stops while the answers are being submitted.
+  const elapsed = useExamClock(exam.id, !submit.isPending && !submit.isSuccess);
 
   const askSubmit = async () => {
     if (unanswered > 0) {
@@ -158,6 +169,7 @@ function TakeExam({ exam }: { exam: Exam }) {
             onGoTo={goTo}
             firstUnanswered={firstUnanswered}
             isLast={isLast}
+            elapsed={formatElapsed(elapsed)}
           />
 
           <QuestionEnter>
@@ -250,6 +262,14 @@ function Results({ exam }: { exam: Exam }) {
         <Text style={{ fontSize: 52, fontWeight: '800', color: scoreColor(score) }}>{pct(score)}</Text>
         <Body style={{ fontWeight: '700', fontSize: 18 }}>{headline}</Body>
         <Body muted>{t('exam.correctOf', { correct, count: questions.length })}</Body>
+        {exam.durationSeconds != null && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }} accessible accessibilityLabel={t('exam.timeTakenA11y', { time: formatElapsed(exam.durationSeconds * 1000) })}>
+            <Body muted>{t('exam.timeTaken')}</Body>
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'], writingDirection: 'ltr' }} testID="exam-time-taken">
+              {formatElapsed(exam.durationSeconds * 1000)}
+            </Text>
+          </View>
+        )}
       </Card>
 
       {practice.isPending ? (

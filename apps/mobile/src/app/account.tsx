@@ -120,6 +120,7 @@ export default function Account() {
             <>
               <ManageBillingButton />
               <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.manageBillingHint')}</Body>
+              {e.status === 'trialing' && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.webTrialCancelHint')}</Body>}
             </>
           ) : (
             <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('account.managedOnWebHint')}</Body>

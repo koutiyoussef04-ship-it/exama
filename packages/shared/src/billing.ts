@@ -302,7 +302,7 @@ export const BILLING_PERIODS = ['monthly', 'yearly'] as const satisfies readonly
  * Version (date) of the Terms of Use and Privacy Policy in force. Recorded with every web checkout so it
  * is clear which terms the customer accepted. The app's legal texts use the same value (LEGAL_UPDATED).
  */
-export const LEGAL_VERSION = '2026-10-17';
+export const LEGAL_VERSION = '2026-10-18';
 
 /**
  * What the customer must expressly confirm before web checkout (two separate, unticked checkboxes):

@@ -279,8 +279,15 @@ async function checkConflict(ctx: StripeBilling, sub: StripeSubscriptionLike, up
 
 /** Which analytics event a state change represents. */
 export function reasonFor(previous: SubscriptionRow | null, update: SubscriptionUpdate): ChangeReason {
-  if (update.status === 'expired') return 'silent';
-  const sameLive = !!previous && previous.provider === 'stripe' && previous.providerRef === update.providerRef && previous.status !== 'expired';
+  const same = !!previous && previous.provider === 'stripe' && previous.providerRef === update.providerRef;
+  const sameLive = same && previous.status !== 'expired';
+  if (update.status === 'expired') {
+    // A renewing free trial that ends before its trial end date was cancelled (see mapStripeSubscription).
+    const trialCancelled = sameLive && previous.status === 'trialing' && previous.willRenew && !!previous.currentPeriodEndsAt && !!update.currentPeriodEndsAt && update.currentPeriodEndsAt < previous.currentPeriodEndsAt;
+    return trialCancelled ? 'cancel' : 'silent';
+  }
+  // The same trial is live again after its cancellation: the cancellation was undone in the Customer Portal.
+  if (same && previous.status === 'expired' && !!previous.trialEndsAt && update.status === 'trialing') return 'restore';
   if (!sameLive) return update.status === 'trialing' ? 'trial' : update.status === 'active' ? 'purchase' : 'silent';
   if (previous.willRenew && !update.willRenew) return 'cancel';
   if (!previous.willRenew && update.willRenew) return 'restore';

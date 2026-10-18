@@ -11,6 +11,9 @@
  * and ends when the store gives up.
  *
  *   trialing            full access for the selected plan until the trial ends          → trialing
+ *   trialing + cancelling  the customer cancelled the free trial: access ends as soon as Stripe
+ *                       confirms the cancellation (not at the trial end) — nothing was paid  → expired
+ *                       (Undoing the cancellation in the Portal before the trial ends restores the trial.)
  *   active              full access until the current period ends                        → active
  *   active + cancelling access continues until the period ends, then ends (no renewal)   → cancelled
  *   past_due            renewal payment failed, Stripe is retrying: access continues for
@@ -145,8 +148,14 @@ export function mapStripeSubscription(sub: StripeSubscriptionLike, prices: Strip
       if (!end) return ended(now);
       const access = limit(end);
       if (access <= now) return ended(access);
+      // A confirmed cancellation of the free trial ends premium access now, not at the trial end: the
+      // trial is free, so there is no paid period to honour. (A paid subscription that is cancelled keeps
+      // its access until the period ends — see `active` below.) Stripe itself may keep the subscription
+      // `trialing` until the trial end; this mapping is what removes the access. Idempotent: every later
+      // event re-reads the same Stripe state and maps to the same answer.
+      if (cancelling) return ended(now);
       // trialEndsAt === currentPeriodEndsAt marks a trial period (trial limits apply, see entitlements).
-      return { ...base, status: cancelling ? 'cancelled' : 'trialing', trialEndsAt: access, currentPeriodEndsAt: access, willRenew: !cancelling };
+      return { ...base, status: 'trialing', trialEndsAt: access, currentPeriodEndsAt: access, willRenew: true };
     }
     case 'active': {
       if (!periodEnd) return ended(now);

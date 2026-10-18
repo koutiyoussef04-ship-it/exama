@@ -221,7 +221,7 @@ export const es: Copy = {
             {
               q: '¿Qué pasa después de la prueba?',
               a: [
-                `Cuando terminan los ${days} días, empieza el plan que elegiste y se cobra su precio en tu tarjeta, salvo que canceles antes de que termine la prueba. Si cancelas, pasas al plan Free y conservas tus cursos y tu progreso.`,
+                `Cuando terminan los ${days} días, empieza el plan que elegiste y se cobra su precio en tu tarjeta, salvo que canceles antes de que termine la prueba. Si cancelas durante la prueba, pasas al plan Free en cuanto se confirma la cancelación y conservas tus cursos y tu progreso.`,
                 'Después puedes cancelar o cambiar de plan cuando quieras desde Cuenta → Gestionar facturación; un plan cancelado sigue funcionando hasta el final del periodo que pagaste.',
               ],
             },

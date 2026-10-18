@@ -226,7 +226,7 @@ export async function getExam(userId: string, examId: string): Promise<Exam> {
     isCorrect: a?.isCorrect ?? false,
     feedback: a?.feedback ?? '',
   }));
-  return { ...summary, questions: graded };
+  return { ...summary, questions: graded, durationSeconds: exam.durationSeconds ?? null };
 }
 
 /** Grades the exam (MCQ locally, short answers via AI), stores answers and updates topic mastery. */
@@ -266,7 +266,7 @@ export async function submitExam(userId: string, examId: string, input: SubmitEx
     // Conditional update guards against a double submit racing past the check above.
     const claimed = await tx
       .update(exams)
-      .set({ status: 'graded', score: total, gradedAt: new Date() })
+      .set({ status: 'graded', score: total, gradedAt: new Date(), durationSeconds: input.durationSeconds ?? null })
       .where(and(eq(exams.id, exam.id), eq(exams.status, 'in_progress')))
       .returning({ id: exams.id });
     if (claimed.length === 0) throw new HttpError(409, 'Exam already submitted', 'exam_already_submitted');

@@ -137,8 +137,9 @@ export async function getEntitlement(userId: string, exec: Exec = db): Promise<E
   }
 
   // Web (Stripe) trials are NOT the restricted `trial` tier: the customer has the full plan they selected
-  // — its tier, features and monthly limits — from the first moment of the trial (also after cancelling,
-  // until it ends), so they fall through to the paid-plan answer below, with status `trialing`.
+  // — its tier, features and monthly limits — from the first moment of the trial, so they fall through to
+  // the paid-plan answer below, with status `trialing`. Cancelling a web trial ends it at once (the row is
+  // stored as expired, see providers/stripe.ts), so a cancelled web trial never reaches this point.
   // Store (Apple/Google) and mock trials keep the restricted trial tier.
   if (isTrialPeriod(sub) && sub.provider !== 'stripe') {
     // Free trial (also after cancelling, until it ends): trial limits over the whole trial.

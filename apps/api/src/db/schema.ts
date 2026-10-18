@@ -278,6 +278,8 @@ export const exams = pgTable(
     /** Language the questions and feedback are written in (ISO 639-1). */
     language: text('language').notNull().default('en'),
     score: real('score'),
+    /** Time the student spent taking the exam, in seconds (reported by the app on submit; null before this was recorded). */
+    durationSeconds: integer('duration_seconds'),
     createdAt: createdAt(),
     gradedAt: timestamp('graded_at', { withTimezone: true }),
   },

@@ -615,21 +615,113 @@ test('trial entitlements are ENFORCED by the server: a Pro trial can do what Pro
   await assert.rejects(assertCanUploadMaterial(basic.id, 'media'), (e: unknown) => (e as { status?: number }).status === 402);
 });
 
-test('cancelling during the trial: the full plan stays until the trial ends, nothing is charged, then access ends', async () => {
+const eventsOf = async (userId: string) => {
+  await flushAnalytics();
+  return ((await sql`select name from analytics_events where user_id = ${userId} order by created_at`) as unknown as { name: string }[]).map((r) => r.name);
+};
+
+test('cancelling during the trial: premium access ends as soon as Stripe confirms the cancellation, not at the trial end', async () => {
   const u = await newUser();
   const sub = await subscribe(u, trialingSub({ plan: 'pro_monthly' }));
-  Object.assign(sub, { cancelAtPeriodEnd: true });
-  assert.equal((await change(sub)).handled, true);
-  let e = await getEntitlement(u.id);
-  assert.deepEqual([e.status, e.tier, e.isPremium, e.willRenew], ['cancelled', 'pro', true, false], 'cancelled, but the customer keeps what they were given until the trial ends');
-  assert.deepEqual(e.features, TIER_FEATURES.pro);
-  assert.equal(+new Date(e.currentPeriodEndsAt!), sec(NOW + 2 * DAY) * 1000);
+  assert.deepEqual([(await getEntitlement(u.id)).status, (await getEntitlement(u.id)).tier], ['trialing', 'pro'], 'an active trial has the full plan');
 
-  // The trial runs out without converting: Stripe ends the subscription.
-  Object.assign(sub, { status: 'canceled', endedAt: sec(NOW - 1000), canceledAt: sec(NOW - 1000), trialEnd: sec(NOW - 1000) });
+  // The customer cancels in the Customer Portal. Stripe keeps the subscription `trialing` with
+  // cancel_at_period_end until the trial end — Exama ends the premium access now.
+  Object.assign(sub, { cancelAtPeriodEnd: true, canceledAt: sec(Date.now()) });
+  const before = Date.now();
+  assert.equal((await change(sub)).handled, true);
+  const e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.accessPlan, e.isPremium, e.willRenew, e.trialEnded, e.trialEligible], ['expired', 'free', 'expired', false, false, true, false], 'Free at once; the trial is used up');
+  assert.deepEqual(e.features, TIER_FEATURES.free, 'only the free features');
+  assert.ok(+new Date(e.currentPeriodEndsAt!) <= Date.now() && +new Date(e.currentPeriodEndsAt!) >= before - 1000, 'access ended at the confirmation, not at the trial end');
+  assert.deepEqual(world.cancelled.filter((id) => id === sub.id), [], 'Exama does not cancel or change the subscription in Stripe itself');
+
+  // The server enforces it: premium-only features are refused straight away.
+  assert.deepEqual(e.limits, LIMITS.free, 'the free limits (Free keeps its own allowance, e.g. one lecture per account)');
+  await assert.rejects(reserveExamGeneration(u.id, 'standard', LIMITS.pro.maxQuestionsPerExam), (err: unknown) => (err as { status?: number }).status === 402);
+
+  // The account and its data are untouched; the cancellation is recorded once.
+  assert.equal((await sql`select count(*)::int as n from users where id = ${u.id}`)[0].n, 1);
+  const names = await eventsOf(u.id);
+  assert.equal(names.filter((n) => n === 'subscription_cancelled').length, 1, names.join());
+
+  // Later, at the trial end, Stripe ends the subscription: still Free, nothing is charged, no second cancellation.
+  Object.assign(sub, { status: 'canceled', endedAt: sec(NOW + 2 * DAY), trialEnd: sec(NOW + 2 * DAY) });
   await change(sub, 'customer.subscription.deleted');
+  const after = await getEntitlement(u.id);
+  assert.deepEqual([after.status, after.tier, after.isPremium, after.trialEnded, after.trialEligible], ['expired', 'free', false, true, false], 'back to Free, and the trial is not offered again');
+  assert.equal((await eventsOf(u.id)).filter((n) => n === 'subscription_cancelled').length, 1);
+});
+
+test('trial cancellation: retried and out-of-order events stay revoked (Stripe is re-read every time)', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'student_yearly' }));
+  sub.cancelAtPeriodEnd = true;
+  const cancelEvent = { id: `evt_${uid()}`, type: 'customer.subscription.updated', object: { id: sub.id, customer: sub.customerId } };
+  assert.equal((await deliver(cancelEvent)).status, 200);
+  assert.equal((await getEntitlement(u.id)).tier, 'free');
+
+  // Stripe retries the same event: a duplicate, nothing changes.
+  const retry = (await (await deliver(cancelEvent)).json()) as { duplicate?: boolean };
+  assert.equal(retry.duplicate, true);
+  // Older events from before the cancellation arrive late, carrying the old (trialing, renewing) payload.
+  for (const type of ['customer.subscription.created', 'checkout.session.completed', 'customer.subscription.trial_will_end', 'customer.subscription.updated']) {
+    const object =
+      type === 'checkout.session.completed'
+        ? { id: `cs_${uid()}`, mode: 'subscription', customer: sub.customerId, subscription: sub.id, client_reference_id: u.id, metadata: { exama_user_id: u.id } }
+        : { id: sub.id, customer: sub.customerId, status: 'trialing', cancel_at_period_end: false };
+    assert.equal((await deliver({ type, object })).status, 200, type);
+    const e = await getEntitlement(u.id);
+    assert.deepEqual([e.status, e.tier, e.isPremium], ['expired', 'free', false], `${type} after the cancellation cannot bring the trial back`);
+  }
+  // Concurrent repeats converge on the same answer.
+  await Promise.all(Array.from({ length: 5 }, () => change(sub)));
+  assert.deepEqual([(await getEntitlement(u.id)).tier, (await getSubscription(u.id))!.status], ['free', 'expired']);
+  assert.equal((await eventsOf(u.id)).filter((n) => n === 'subscription_cancelled').length, 1, 'recorded once');
+  assert.equal((await sql`select count(*)::int as n from subscriptions where user_id = ${u.id}`)[0].n, 1);
+});
+
+test('trial cancellation: opening the Customer Portal (or a cancellation Stripe has not confirmed) changes nothing', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'pro_monthly' }));
+  assert.equal((await post('/billing/stripe/portal', u)).status, 200);
+  let e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium], ['trialing', 'pro', true], 'the portal alone does not revoke');
+  // An event arrives while Stripe still reports the trial as renewing (e.g. the customer left the portal without confirming).
+  await change(sub);
   e = await getEntitlement(u.id);
-  assert.deepEqual([e.status, e.tier, e.isPremium, e.trialEnded, e.trialEligible], ['expired', 'free', false, true, false], 'back to Free, and the trial is not offered again');
+  assert.deepEqual([e.status, e.tier, e.willRenew], ['trialing', 'pro', true]);
+  // A cancellation scheduled for AFTER the trial (a later period) is not a trial cancellation: the trial continues.
+  sub.cancelAt = sec(NOW + 40 * DAY);
+  await change(sub);
+  e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium], ['trialing', 'pro', true]);
+});
+
+test('trial cancellation undone in the Customer Portal before the trial ends: the trial (and its plan) comes back', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'pro_monthly' }));
+  sub.cancelAtPeriodEnd = true;
+  await change(sub);
+  assert.equal((await getEntitlement(u.id)).tier, 'free');
+  sub.cancelAtPeriodEnd = false;
+  await change(sub);
+  const e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium, e.willRenew], ['trialing', 'pro', true, true]);
+  assert.equal(+new Date(e.trialEndsAt!), sec(NOW + 2 * DAY) * 1000, 'the original trial end, not a new trial');
+  const names = await eventsOf(u.id);
+  assert.equal(names.filter((n) => n === 'trial_started').length, 1, `no second trial start: ${names.join()}`);
+  assert.equal(names.filter((n) => n === 'subscription_restored').length, 1);
+  assert.equal(outbox.filter((m) => m.to === u.email && /Exama subscription/.test(m.subject)).length, 1, 'one confirmation email (from the start), none for the undo');
+});
+
+test('a trial cancelled immediately in Stripe (canceled status) also ends access at once — that behaviour is kept', async () => {
+  const u = await newUser();
+  const sub = await subscribe(u, trialingSub({ plan: 'basic_monthly' }));
+  Object.assign(sub, { status: 'canceled', endedAt: sec(Date.now()), canceledAt: sec(Date.now()) });
+  await change(sub, 'customer.subscription.deleted');
+  const e = await getEntitlement(u.id);
+  assert.deepEqual([e.status, e.tier, e.isPremium, e.trialEnded], ['expired', 'free', false, true]);
 });
 
 test('Apple and Google trials are unchanged: they keep the restricted store-trial tier, not the full plan', async () => {
@@ -714,6 +806,8 @@ test('customer.subscription.updated: cancel at period end keeps access until the
   let e = await getEntitlement(u.id);
   assert.deepEqual([e.status, e.tier, e.isPremium, e.willRenew], ['cancelled', 'student', true, false], 'cancelled but still inside the paid period');
   assert.equal(+new Date(e.currentPeriodEndsAt!), sec(NOW + 10 * DAY) * 1000);
+  assert.deepEqual(e.features, TIER_FEATURES.student, 'a PAID cancellation is unchanged by the trial rule: the full plan until the period ends');
+  await assertCanUploadMaterial(u.id, 'media');
 
   sub.cancelAtPeriodEnd = false;
   await change(sub);
@@ -948,6 +1042,16 @@ test('reasonFor: analytics reasons for state changes', () => {
   assert.equal(service.reasonFor(live({}), upd({ planId: 'pro_monthly' })), 'purchase', 'plan change');
   assert.equal(service.reasonFor(live({}), upd({})), 'silent', 'a renewal or a repeat');
   assert.equal(service.reasonFor(live({}), upd({ status: 'expired' })), 'silent');
+  // Free trial cancelled: the same renewing trial ends before its trial end date.
+  const trialRow = live({ status: 'trialing', currentPeriodEndsAt: new Date(NOW + 2 * DAY), trialEndsAt: new Date(NOW + 2 * DAY) });
+  assert.equal(service.reasonFor(trialRow, upd({ status: 'expired', willRenew: false, currentPeriodEndsAt: new Date(NOW) })), 'cancel', 'trial cancelled');
+  assert.equal(service.reasonFor(trialRow, upd({ status: 'expired', willRenew: false, currentPeriodEndsAt: new Date(NOW + 2 * DAY) })), 'silent', 'trial ran out');
+  assert.equal(service.reasonFor(live({ status: 'trialing', willRenew: false, currentPeriodEndsAt: new Date(NOW + 2 * DAY) }), upd({ status: 'expired', currentPeriodEndsAt: new Date(NOW) })), 'silent');
+  assert.equal(service.reasonFor(live({ providerRef: 'sub_other', status: 'trialing', currentPeriodEndsAt: new Date(NOW + 2 * DAY) }), upd({ status: 'expired', currentPeriodEndsAt: new Date(NOW) })), 'silent', 'another subscription');
+  const cancelledTrialRow = live({ status: 'expired', willRenew: false, trialEndsAt: new Date(NOW), currentPeriodEndsAt: new Date(NOW) });
+  assert.equal(service.reasonFor(cancelledTrialRow, upd({ status: 'trialing' })), 'restore', 'the trial cancellation was undone');
+  assert.equal(service.reasonFor(live({ providerRef: 'sub_old', status: 'expired', willRenew: false, trialEndsAt: new Date(NOW) }), upd({ status: 'trialing' })), 'trial', 'a different subscription');
+  assert.equal(service.reasonFor(live({ status: 'expired', willRenew: false, trialEndsAt: null }), upd({})), 'purchase', 'paid again after an ended paid period: unchanged');
 });
 
 // ================================================================ mapping rules (pure)
@@ -960,8 +1064,17 @@ test('mapping: every Stripe status has an explicit Exama outcome', () => {
   assert.deepEqual([trial.status, trial.provider, trial.planId, trial.willRenew, trial.trialUsed, trial.environment], ['trialing', 'stripe', 'student_monthly', true, true, 'sandbox']);
   assert.equal(+trial.trialEndsAt!, +trial.currentPeriodEndsAt!, 'trialEndsAt === currentPeriodEndsAt marks a trial period');
 
-  const cancelledTrial = map(trialingSub({ cancelAtPeriodEnd: true }))!;
-  assert.deepEqual([cancelledTrial.status, cancelledTrial.willRenew], ['cancelled', false], 'cancelled trial keeps access until the trial ends');
+  // A cancelled free trial ends now (the trial is free: no paid period to honour).
+  for (const [why, over] of [
+    ['cancel at period end', { cancelAtPeriodEnd: true }],
+    ['cancellation scheduled inside the trial', { cancelAt: sec(NOW + DAY) }],
+    ['cancellation scheduled at the trial end', { cancelAt: sec(NOW + 2 * DAY) }],
+  ] as const) {
+    const cancelledTrial = map(trialingSub(over))!;
+    assert.deepEqual([cancelledTrial.status, cancelledTrial.willRenew, +cancelledTrial.currentPeriodEndsAt!, +cancelledTrial.trialEndsAt!], ['expired', false, NOW, NOW], `${why}: access ends at once, shown as "trial ended"`);
+  }
+  const laterCancel = map(trialingSub({ cancelAt: sec(NOW + 40 * DAY) }))!;
+  assert.deepEqual([laterCancel.status, laterCancel.willRenew], ['trialing', true], 'a cancellation after the trial is not a trial cancellation');
 
   const active = map(makeSub({ plan: 'pro_yearly', livemode: true }))!;
   assert.deepEqual([active.status, active.planId, active.trialEndsAt, active.willRenew, active.environment], ['active', 'pro_yearly', null, true, 'production']);

@@ -24,6 +24,7 @@ export function ExamHero({
   onGoTo,
   firstUnanswered,
   isLast,
+  elapsed,
 }: {
   label: string;
   index: number;
@@ -33,6 +34,8 @@ export function ExamHero({
   onGoTo: (i: number) => void;
   firstUnanswered: number | null;
   isLast: boolean;
+  /** Time spent on the exam so far, already formatted (MM:SS or HH:MM:SS). */
+  elapsed: string;
 }) {
   const { t } = useTranslation();
   const total = states.length;
@@ -44,6 +47,14 @@ export function ExamHero({
           <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>{label}</Text>
         </View>
         <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>{t('exam.questionOf', { current: index + 1, total })}</Text>
+      </View>
+
+      {/* Elapsed time: digits are always shown left to right (also in Arabic). Not a live region — a screen reader reads it on focus. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }} accessible accessibilityLabel={t('exam.timeElapsedA11y', { time: elapsed })}>
+        <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 13, fontWeight: '600' }}>{t('exam.timeElapsed')}</Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], writingDirection: 'ltr' }} testID="exam-timer">
+          {elapsed}
+        </Text>
       </View>
 
       {/* One segment per question: answered, current, still open. */}

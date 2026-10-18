@@ -1,0 +1,1 @@
+ALTER TABLE "exams" ADD COLUMN "duration_seconds" integer;

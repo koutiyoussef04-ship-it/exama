@@ -221,7 +221,7 @@ export const fr: Copy = {
             {
               q: 'Que se passe-t-il après l’essai ?',
               a: [
-                `À la fin des ${days} jours, l’offre choisie commence et son prix est prélevé sur votre carte, sauf si vous résiliez avant la fin de l’essai. Si vous résiliez, vous passez à l’offre Free et conservez vos cours et votre progression.`,
+                `À la fin des ${days} jours, l’offre choisie commence et son prix est prélevé sur votre carte, sauf si vous résiliez avant la fin de l’essai. Si vous résiliez pendant l’essai, vous passez à l’offre Free dès que la résiliation est confirmée et conservez vos cours et votre progression.`,
                 'Ensuite, vous pouvez résilier ou changer d’offre à tout moment depuis Compte → Gérer la facturation ; une offre résiliée reste active jusqu’à la fin de la période payée.',
               ],
             },

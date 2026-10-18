@@ -221,7 +221,7 @@ export const en: Copy = {
             {
               q: 'What happens after the trial?',
               a: [
-                `When the ${days} days end, the plan you chose begins and your card is charged its price — unless you cancel before the trial ends. If you cancel, you move to the Free plan and keep your courses and progress.`,
+                `When the ${days} days end, the plan you chose begins and your card is charged its price — unless you cancel before the trial ends. If you cancel during the trial, you move to the Free plan as soon as the cancellation is confirmed and keep your courses and progress.`,
                 'After that you can cancel or change plan any time from Account → Manage billing; a cancelled plan keeps working until the end of the period you paid for.',
               ],
             },
