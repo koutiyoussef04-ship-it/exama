@@ -29,6 +29,7 @@ All read from the database on every run; anything unclear means no email.
 | Rule | Reason |
 |---|---|
 | address **not** confirmed | the whole point; confirmed accounts are never touched |
+| address looks deliverable: valid, not a role address (`info@`, `test@`, `noreply@`…), not a disposable-mail domain, and the domain can receive mail (MX or address record; a null MX means no); DNS that does not answer clearly holds the address back | a bounce costs far more than the email: this account sends about a dozen emails a month, so one bounce is several percent (`services/address-vetting.ts`) |
 | asked at sign-up (`email_verification_required`) | accounts that predate verification were never asked; they are **held out unless `--include-legacy`** |
 | not on `email_suppressions` | bounces, complaints, manual |
 | no earlier Exama email to the address bounced, was reported or was suppressed, **from Resend’s own delivery log** (`GET /emails`) | the sign-up email stores no Resend id, so the log is the only source for its outcome. A second email to a bounced address only adds a bounce, and this account sends very few emails. If the log cannot be read, **a send refuses** (the dry run says so) |
@@ -45,10 +46,9 @@ This is the engineering position, not legal advice; the open points need the leg
 
 | Group | Verification reminder | Reactivation campaign |
 |---|---|---|
-| Unconfirmed, asked at sign-up | **Yes** (default): a service message about the account they created, to the address they gave, no marketing content, once | **No**, never: an unconfirmed address is not proven to belong to the person |
-| Unconfirmed, predates verification | **Operator’s decision** (`--include-legacy`): same message, but they were never asked before. Reasonable for recent sign-ups; leave out if in doubt | **No** until they confirm |
-| Confirmed adult with a plan | not applicable | existing rules; purpose already in the privacy policy (daily study-plan email) |
-| Confirmed adult without a plan | not applicable | **blocked on the legal decision** in `reactivation-campaign.md` (not in the privacy policy yet) |
+| Unconfirmed, asked at sign-up | **Yes** (default): a service message about the account they created, to the address they gave, no marketing content, once. The privacy policy discloses the confirmation email | **No**, never: an unconfirmed address is not proven to belong to the person |
+| Unconfirmed, predates verification | **Operator’s decision** (`--include-legacy`): same message, but they were never asked before. Reasonable for recent sign-ups; leave out if in doubt | **No** until they confirm, and then still **no**: they have no age group |
+| Confirmed adult | not applicable | **Not cleared**: Exama’s register says marketing needs consent and none is recorded (`who-we-can-email.md`). The campaign’s technical rules still apply on top |
 | Under 18, or no age group | allowed (account message) | **never** |
 | Bounced, complained, suppressed | **never** | **never** |
 
@@ -68,6 +68,7 @@ From the exama-api Shell on Render (the database only accepts connections from i
 | `send --limit 5 --approval CODE [--include-legacy]` | sends that batch; needs `VERIFICATION_REMINDER_SEND=true` |
 | `sync` | reads each reminder’s status back from Resend; every address Resend recorded a bounce or complaint for (any Exama email, including the sign-up email) goes on the suppression list |
 | `report` | sent, delivered, bounced, complaints, confirmed after the reminder, still unconfirmed |
+| `email:audiences` (separate command: `npm run email:audiences:prod -w @study/api`) | read-only counts of who can be emailed for each type of email (this reminder now / in 24 h / with legacy, the daily study-plan email, the reactivation campaign) and why the rest are held out |
 | `check-resend` | **read-only diagnosis** of the delivery-log lookup: one request without a key (is Resend reachable?) and one with the production key, attempt by attempt, with a plain verdict. Sends nothing |
 | `inspect-legacy [--list]` | **read-only** description of the accounts that were never asked to confirm: registration days, age group, whether anyone signed in again, address domains and checks (role address, disposable domain, mailbox twice, domain without a mail server), Resend bounces. Addresses are masked; nothing is changed or included |
 

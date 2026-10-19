@@ -37,8 +37,8 @@ import { config } from '../config.js';
 import { db, sql as pg } from '../db/client.js';
 import { emailCampaignSends } from '../db/schema.js';
 import { sendVerificationReminder, verificationAvailable } from './email-verification.js';
+import { addressProblem, cachedMailServer, domainOf, isMajorDomain, mailboxKey, type MailServer } from './address-vetting.js';
 import { isValidTimeZone } from './planner/dates.js';
-import { resolve4, resolve6, resolveMx } from 'node:dns/promises';
 import { maskEmail, suppress, syncDelivery } from './reactivation-campaign.js';
 import { deviceSignals, localHour } from './study-reminders.js';
 
@@ -67,7 +67,13 @@ export type ReminderExclude =
   | 'legacy_not_asked'
   | 'too_old'
   | 'too_new'
-  | 'link_still_valid';
+  | 'link_still_valid'
+  // Address checks (services/address-vetting.ts): deliverability, so an unconfirmed address can't cost a bounce.
+  | 'invalid_address'
+  | 'role_address'
+  | 'disposable_domain'
+  | 'no_mail_server'
+  | 'dns_inconclusive';
 
 export type ReminderCandidate = {
   userId: string;
@@ -265,6 +271,25 @@ export async function fetchDeliveryHistory(opts: HistoryOptions = {}): Promise<D
   }
 }
 
+/**
+ * Resend's own log of what Exama already sent, for the operator tools: the log (or null with EMAIL_PROVIDER other than
+ * resend) and, when it could not be read completely, a plain-language problem. Never throws, never silent.
+ */
+export async function readDeliveryHistory(): Promise<{ history: DeliveryHistory | null; problem: string | null }> {
+  if (config.EMAIL_PROVIDER !== 'resend') return { history: null, problem: null };
+  try {
+    const history = await fetchDeliveryHistory();
+    return { history, problem: history.complete ? null : 'Resend’s log is longer than the pages read (or a page could not be followed): older bounces were not checked' };
+  } catch (err) {
+    if (err instanceof ResendLogError) {
+      const d = err.detail;
+      const hint = err.kind === 'permission' ? ' — the API key is send-only; run `check-resend`' : ' — run `check-resend` for the details';
+      return { history: null, problem: `could not read Resend’s delivery log: ${err.kind}${d.status ? ` (HTTP ${d.status}${d.name ? ` ${d.name}` : ''})` : ''}, ${err.message}; ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, ${(d.elapsedMs / 1000).toFixed(1)} s${hint}` };
+    }
+    return { history: null, problem: `could not read Resend’s delivery log (${err instanceof Error ? `${err.name}: ${err.message}` : 'error'})` };
+  }
+}
+
 // ---------------------------------------------------------------- who
 
 type Row = {
@@ -280,10 +305,11 @@ type Row = {
 };
 
 /** Everyone whose address is not confirmed, classified: eligible candidates and, for the rest, the first rule that excludes them. */
-export async function selectReminderAudience(opts: { now?: Date; maxAgeDays?: number; includeLegacy?: boolean; anyTime?: boolean; userIds?: string[]; history?: DeliveryHistory | null } = {}): Promise<ReminderAudience> {
+export async function selectReminderAudience(opts: { now?: Date; maxAgeDays?: number; includeLegacy?: boolean; anyTime?: boolean; userIds?: string[]; history?: DeliveryHistory | null; mx?: (domain: string) => Promise<MailServer> } = {}): Promise<ReminderAudience> {
   const now = opts.now ?? new Date();
   const maxAgeMs = (opts.maxAgeDays ?? DEFAULT_MAX_ACCOUNT_AGE_DAYS) * DAY_MS;
   const only = opts.userIds ?? null;
+  const mailServer = cachedMailServer(opts.mx);
   const [{ n: usersTotal }] = await pg<{ n: number }[]>`select count(*)::int as n from users where (${only}::uuid[] is null or id = any(${only}::uuid[]))`;
   const rows = await pg<Row[]>`
     select u.id, u.email, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range,
@@ -324,6 +350,14 @@ export async function selectReminderAudience(opts: { now?: Date; maxAgeDays?: nu
     if (age > maxAgeMs) { out('too_old'); continue; }
     if (age < TTL_MS) { out('too_new'); continue; }
     if (r.last_link_ms !== null && now.getTime() - r.last_link_ms < TTL_MS) { out('link_still_valid'); continue; }
+    const problem = addressProblem(r.email);
+    if (problem) { out(problem); continue; }
+    const domain = domainOf(r.email);
+    if (!isMajorDomain(domain)) {
+      const server = await mailServer(domain);
+      if (server === 'none') { out('no_mail_server'); continue; }
+      if (server === 'unknown') { out('dns_inconclusive'); continue; }
+    }
     const device = await deviceSignals(r.id);
     const language: Language = isLang(device.language) ? device.language : 'en';
     audience.eligible.push({ userId: r.id, email: r.email, language, timeZone: device.timeZone, asked: r.asked, link: r.links === 0 ? 'none' : 'expired', dueNow: !!opts.anyTime || inReminderWindow(now, device.timeZone) });
@@ -523,11 +557,6 @@ export function explainDiagnosis(d: ResendDiagnosis): string {
 
 // ---------------------------------------------------------------- legacy accounts (read-only)
 
-const MAJOR_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.fr', 'yahoo.es', 'outlook.com', 'outlook.fr', 'outlook.es', 'hotmail.com', 'hotmail.fr', 'hotmail.es', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'gmx.net', 'yandex.com', 'mail.com', 'orange.fr', 'free.fr', 'wanadoo.fr', 'laposte.net', 'sfr.fr']);
-const DISPOSABLE_DOMAINS = new Set(['mailinator.com', 'guerrillamail.com', 'guerrillamail.net', '10minutemail.com', 'tempmail.com', 'temp-mail.org', 'yopmail.com', 'trashmail.com', 'sharklasers.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com', 'fakeinbox.com', 'mailnesia.com', 'mohmal.com']);
-const ROLE_LOCALPARTS = new Set(['admin', 'administrator', 'info', 'support', 'contact', 'hello', 'noreply', 'no-reply', 'donotreply', 'test', 'tester', 'example', 'sales', 'office', 'postmaster', 'abuse', 'webmaster', 'root', 'mail', 'help']);
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
 export type LegacyRow = { masked: string; day: string; domain: string; flags: string[]; signedIn: boolean; lastActiveDaysAgo: number | null; courses: number; plans: number };
 export type LegacyReport = {
   total: number;
@@ -549,36 +578,16 @@ const mask = (email: string) => {
   return m === email ? `${email.slice(0, 1)}***` : m;
 };
 
-const mailboxKey = (email: string) => {
-  const [local = '', domain = ''] = email.toLowerCase().split('@');
-  const base = local.split('+')[0]!;
-  return `${domain === 'googlemail.com' ? 'gmail.com' : domain}|${domain === 'gmail.com' || domain === 'googlemail.com' ? base.replace(/\./g, '') : base}`;
-};
-
 /**
  * Accounts that were never asked to confirm (they predate verification), looked at without touching them: when and how they were
  * made (registration day), whether anyone ever came back, and whether the address looks real and current. Aggregated, with
  * addresses masked: safe to paste. Reads the database, optionally Resend's log (passed in) and DNS (domain names only). It
  * sends nothing, changes nothing, and does not include anyone in anything.
  */
-export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistory | null; mx?: (domain: string) => Promise<'ok' | 'none' | 'unknown'>; userIds?: string[] } = {}): Promise<LegacyReport> {
+export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistory | null; mx?: (domain: string) => Promise<MailServer>; userIds?: string[] } = {}): Promise<LegacyReport> {
   const now = opts.now ?? new Date();
   const only = opts.userIds ?? null;
-  // "No mail server" only when there is neither an MX record nor an address record (RFC 5321: a domain with just an A/AAAA record
-  // accepts mail), so a resolver that can't answer MX queries doesn't turn real domains into false alarms. Any other DNS error is "unknown".
-  const notFound = (err: unknown) => ['ENOTFOUND', 'ENODATA'].includes((err as { code?: string }).code ?? '');
-  const mx =
-    opts.mx ??
-    (async (domain: string): Promise<'ok' | 'none' | 'unknown'> => {
-      for (const lookup of [resolveMx, resolve4, resolve6] as const) {
-        try {
-          if ((await lookup(domain)).length) return 'ok';
-        } catch (err) {
-          if (!notFound(err)) return 'unknown';
-        }
-      }
-      return 'none';
-    });
+  const mx = cachedMailServer(opts.mx);
   type R = { id: string; email: string; created_ms: number; age_range: string | null; suppressed: boolean; logged_in: boolean; opened: boolean; last_ms: number | null; courses: number; plans: number };
   const rows = await pg<R[]>`
     select u.id, u.email, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range,
@@ -593,13 +602,13 @@ export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistor
   const byDay = new Map<string, number>();
   const domainCount = new Map<string, number>();
   const mailboxes = new Map<string, number>();
-  const verdict = new Map<string, 'ok' | 'none' | 'unknown'>();
+  const verdict = new Map<string, MailServer>();
   for (const r of rows) {
     const domain = r.email.split('@')[1]?.toLowerCase() ?? '';
     domainCount.set(domain, (domainCount.get(domain) ?? 0) + 1);
     mailboxes.set(mailboxKey(r.email), (mailboxes.get(mailboxKey(r.email)) ?? 0) + 1);
   }
-  for (const domain of domainCount.keys()) if (domain && !MAJOR_DOMAINS.has(domain)) verdict.set(domain, await mx(domain));
+  for (const domain of domainCount.keys()) if (domain && !isMajorDomain(domain)) verdict.set(domain, await mx(domain));
 
   const report: LegacyReport = {
     total: rows.length,
@@ -613,7 +622,7 @@ export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistor
     rows: [],
   };
   for (const r of rows) {
-    const [local = '', domain = ''] = r.email.toLowerCase().split('@');
+    const domain = domainOf(r.email);
     const day = new Date(r.created_ms).toISOString().slice(0, 10);
     byDay.set(day, (byDay.get(day) ?? 0) + 1);
     if (r.age_range) report.ageGroup.given++; else report.ageGroup.none++;
@@ -626,9 +635,10 @@ export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistor
     if (r.plans) report.activity.withPlan++;
     if (r.suppressed) report.suppressed++;
     const flags: string[] = [];
-    if (!EMAIL_SHAPE.test(r.email)) flags.push('invalid_syntax');
-    if (ROLE_LOCALPARTS.has(local.split('+')[0]!)) flags.push('role_account');
-    if (DISPOSABLE_DOMAINS.has(domain)) flags.push('disposable_domain');
+    const problem = addressProblem(r.email);
+    if (problem === 'invalid_address') flags.push('invalid_syntax');
+    if (problem === 'role_address') flags.push('role_account');
+    if (problem === 'disposable_domain') flags.push('disposable_domain');
     if ((mailboxes.get(mailboxKey(r.email)) ?? 0) > 1) flags.push('shared_mailbox');
     const v = verdict.get(domain);
     if (v === 'none') flags.push('no_mail_server');
@@ -641,12 +651,12 @@ export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistor
     if (r.suppressed) flags.push('suppressed');
     for (const [flag, key] of [['invalid_syntax', 'invalidSyntax'], ['role_account', 'roleAccount'], ['disposable_domain', 'disposable'], ['shared_mailbox', 'sharedMailbox'], ['no_mail_server', 'noMailServer'], ['dns_inconclusive', 'lookupInconclusive']] as const)
       if (flags.includes(flag)) report.hygiene[key]++;
-    report.rows.push({ masked: mask(r.email), day, domain: MAJOR_DOMAINS.has(domain) ? domain : '(other)', flags, signedIn: r.logged_in, lastActiveDaysAgo: lastDays, courses: r.courses, plans: r.plans });
+    report.rows.push({ masked: mask(r.email), day, domain: isMajorDomain(domain) ? domain : '(other)', flags, signedIn: r.logged_in, lastActiveDaysAgo: lastDays, courses: r.courses, plans: r.plans });
   }
   report.byDay = [...byDay].map(([day, n]) => ({ day, n })).sort((a, b) => a.day.localeCompare(b.day));
-  const major = [...domainCount].filter(([d]) => MAJOR_DOMAINS.has(d)).sort((a, b) => b[1] - a[1]);
+  const major = [...domainCount].filter(([d]) => isMajorDomain(d)).sort((a, b) => b[1] - a[1]);
   report.domains.top = major.map(([domain, n]) => ({ domain, n }));
-  const other = [...domainCount].filter(([d]) => !MAJOR_DOMAINS.has(d));
+  const other = [...domainCount].filter(([d]) => !isMajorDomain(d));
   report.domains.otherDomains = other.length;
   report.domains.otherAccounts = other.reduce((n, [, c]) => n + c, 0);
   return report;

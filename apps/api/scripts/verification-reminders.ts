@@ -25,10 +25,9 @@ import {
   DEFAULT_MAX_PER_DAY,
   REMINDER_CAMPAIGN,
   RESEND_DAILY_LIMIT,
-  ResendLogError,
   diagnoseResend,
   explainDiagnosis,
-  fetchDeliveryHistory,
+  readDeliveryHistory,
   inspectLegacy,
   nextReminderBatch,
   reminderApprovalCode,
@@ -69,23 +68,12 @@ const REASON: Record<ReminderExclude, string> = {
   too_old: 'account older than --max-age-days',
   too_new: 'account younger than 24 h (the sign-up link is still valid)',
   link_still_valid: 'a verification link was sent in the last 24 h',
+  invalid_address: 'address is not a valid email address',
+  role_address: 'role address (info@, test@, noreply@…): not a person’s inbox',
+  disposable_domain: 'disposable-mail domain',
+  no_mail_server: 'the domain cannot receive mail (no MX or address record)',
+  dns_inconclusive: 'DNS did not answer clearly: held back, run again later',
 };
-
-/** Resend's own log of what Exama already sent. Only available with EMAIL_PROVIDER=resend; a failure is never silent. */
-async function loadHistory(): Promise<{ history: DeliveryHistory | null; problem: string | null }> {
-  if (config.EMAIL_PROVIDER !== 'resend') return { history: null, problem: null };
-  try {
-    const history = await fetchDeliveryHistory();
-    return { history, problem: history.complete ? null : 'Resend’s log is longer than the pages read (or a page could not be followed): older bounces were not checked' };
-  } catch (err) {
-    if (err instanceof ResendLogError) {
-      const d = err.detail;
-      const hint = err.kind === 'permission' ? ' — the API key is send-only; run `check-resend`' : ' — run `check-resend` for the details';
-      return { history: null, problem: `could not read Resend’s delivery log: ${err.kind}${d.status ? ` (HTTP ${d.status}${d.name ? ` ${d.name}` : ''})` : ''}, ${err.message}; ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, ${(d.elapsedMs / 1000).toFixed(1)} s${hint}` };
-    }
-    return { history: null, problem: `could not read Resend’s delivery log (${err instanceof Error ? `${err.name}: ${err.message}` : 'error'})` };
-  }
-}
 
 function printAudience(a: ReminderAudience, includeLegacy: boolean, history: DeliveryHistory | null, historyProblem: string | null) {
   const count = (pred: (c: ReminderAudience['eligible'][number]) => boolean) => a.eligible.filter(pred).length;
@@ -121,7 +109,7 @@ async function dryRun() {
   const maxPerDay = int('max-per-day', DEFAULT_MAX_PER_DAY, 1);
   const limit = int('limit', 5, 1);
   const includeLegacy = flag('include-legacy');
-  const { history, problem } = await loadHistory();
+  const { history, problem } = await readDeliveryHistory();
   const audience = await selectReminderAudience({ maxAgeDays: int('max-age-days', DEFAULT_MAX_ACCOUNT_AGE_DAYS, 1), includeLegacy, anyTime: flag('any-time'), history });
   printAudience(audience, includeLegacy, history, problem);
   const batch = nextReminderBatch(audience, Math.min(limit, maxPerDay));
@@ -141,6 +129,7 @@ async function dryRun() {
     console.log(`  Approval code for exactly this batch and this wording: ${code}`);
     console.log(`  To send it:  VERIFICATION_REMINDER_SEND=true npm run campaign:verification-reminder:prod -w @study/api -- send --limit ${batch.length} --approval ${code}${includeLegacy ? ' --include-legacy' : ''}`);
   }
+  if (includeLegacy && batch.length) console.log(`  Accounts that predate verification have never been emailed: send a small first batch (--limit 3), run \`sync\` a few hours later, and continue only if nothing bounced.`);
   console.log(`\nReady to send? ${pf.blockers.length || problem ? 'NO' : 'yes'}`);
   for (const b of pf.blockers) console.log(`  ✗ ${b}`);
   if (problem) console.log(`  ✗ ${problem}`);
@@ -155,7 +144,7 @@ async function send() {
   if (limit > maxPerDay) fail(`--limit ${limit} is above the daily cap (${maxPerDay}). Send in daily batches.`);
   const pf = reminderPreflight();
   if (pf.blockers.length) fail(`Not sending:\n${pf.blockers.map((b) => `  ✗ ${b}`).join('\n')}`);
-  const { history, problem } = await loadHistory();
+  const { history, problem } = await readDeliveryHistory();
   if (problem) fail(`Not sending: ${problem}.`);
   const audience = await selectReminderAudience({ maxAgeDays: int('max-age-days', DEFAULT_MAX_ACCOUNT_AGE_DAYS, 1), includeLegacy: flag('include-legacy'), anyTime: flag('any-time'), history });
   const batch = nextReminderBatch(audience, limit);
@@ -208,7 +197,7 @@ async function main() {
       return;
     }
     case 'inspect-legacy': {
-      const { history, problem } = await loadHistory();
+      const { history, problem } = await readDeliveryHistory();
       const r = await inspectLegacy({ history });
       console.log(`\nAccounts never asked to confirm their email (they predate verification) — read-only, nothing is changed or included\n`);
       console.log(`Accounts                      ${r.total}`);

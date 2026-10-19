@@ -93,6 +93,8 @@ added only after counsel confirms this table.
 | "Under 13" device marker (24 h, timestamp only) | none about the person | legitimate interest; ePrivacy: arguably necessary to enforce the requested sign-up rule — counsel to confirm | holds no answer, name or email |
 | Daily study-plan email (`docs/study-reminders.md`) | first name, email, course titles, today's planned tasks and stored focus notes; a per-day send log | legitimate interest (6(1)(f)) in helping the student follow the plan they made, **or** contract — to decide | on by default, only to confirmed addresses, one-click unsubscribe in every email and a switch in Account. Content is the student's own plan, no offers or upgrade prompts. It goes only to students **without** a subscription, so counsel should confirm it is a service message, not direct marketing (ePrivacy Art. 13 would need prior consent or the soft opt-in). Minors: weigh in the balancing test |
 | Marketing | — | **none today**: no marketing emails, no ads, no advertising ids, no tracking across apps/sites | any future marketing needs consent (and the Art. 8 ages above for minors) |
+| Confirmation reminder (one email per unconfirmed account, `docs/email/verification-reminder.md`) | email, language, time of the reminder (`email_campaign_sends`: user id, status — no address, no content) | contract / legitimate interest, same as the confirmation email it repeats (6(1)(b), 6(1)(f)) | an account message, not marketing: the same link and wording plus “this is the only reminder”; one per account; to addresses the person gave; bounces are suppressed. Accounts that predate verification only on an explicit operator decision. *Counsel: confirm it is outside ePrivacy Art. 13* |
+| Reactivation campaign (`docs/email/reactivation-campaign.md`) | same table plus first-party click counts | **consent** (see Marketing above); the soft opt-in is doubtful for a free sign-up | **blocked**: not sent; the send is locked by `REACTIVATION_CAMPAIGN_SEND` and the register has no consent. Needs a consent flag and policy wording first (`docs/email/who-we-can-email.md`) |
 | Support requests | what the person sends | contract / legitimate interest | — |
 
 ## 4. Other open questions for counsel
@@ -221,6 +223,19 @@ all four languages. Disabled in production until `STUDY_REMINDER_EMAILS_ENABLED=
 | 1 | **Default on vs. opt-in** | on by default (opt-out). If counsel classes it as direct marketing, switch the default to off (`users.study_reminder_emails` default) and ask in the app instead — the code needs no other change |
 | 2 | **Legal basis** | see the §3 table; add it when the legal bases are written into the policy |
 | 3 | **Minors (13–17)** | same email for every age group; confirm the balancing test |
+
+## 8. Confirmation reminder and reactivation campaign (2026-10-19) — built, not sent; for counsel to confirm
+
+What exists (`docs/email/verification-reminder.md`, `docs/email/reactivation-campaign.md`, `docs/email/who-we-can-email.md`): two operator-run tools, **never run by the server**, locked by separate environment switches that are off. Nothing has been sent by either.
+
+| # | Decision | Notes |
+|---|---|---|
+| 1 | **Is the one-off confirmation reminder a service message?** | Engineering view: yes (same email as the disclosed confirmation link, no promotional content, once). Confirm it is outside ePrivacy Art. 13, including for accounts that predate verification (they were never asked) and for 13–17-year-olds |
+| 2 | **Marketing consent** | None recorded. The smallest compliant design is an unticked in-app opt-in stored as `users.marketing_consent_at` + the wording version, withdrawn by the one-click unsubscribe, required by the campaign. Do not ask for it by email (that is marketing). Needs a migration, four-language screens and policy wording |
+| 3 | **Soft opt-in for a free sign-up** | Doubtful in Spain/France; do not rely on it without counsel |
+| 4 | **Privacy policy** | Add the confirmation reminder to “account emails”; add marketing only together with the consent flow |
+| 5 | **Suppression list** | `email_suppressions` keeps the **address** of anyone who bounced or complained so they are not emailed again; it is not deleted with the account. Confirm this is acceptable (legitimate interest in not re-contacting an objector) and whether to hash it |
+| 6 | **Accounts that predate verification** | No age group (the question shipped with verification) and no way to set one: they can never be in an adult-only marketing audience without an in-app age prompt |
 
 ## Sources (checked 2026-10-15; consumer-law sources 2026-10-16)
 

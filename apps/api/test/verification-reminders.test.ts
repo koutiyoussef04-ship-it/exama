@@ -70,7 +70,8 @@ async function newUnconfirmed(over: { ageHours?: number; linkAgeHours?: number |
   }
   return { id, email };
 }
-const audience = (users: U[], over: Partial<Parameters<typeof rem.selectReminderAudience>[0]> = {}) => rem.selectReminderAudience({ userIds: users.map((u) => u.id), anyTime: true, history: null, ...over });
+// Offline by default: example.com has a null MX, so the real DNS answer would (rightly) say it takes no mail.
+const audience = (users: U[], over: Partial<Parameters<typeof rem.selectReminderAudience>[0]> = {}) => rem.selectReminderAudience({ userIds: users.map((u) => u.id), anyTime: true, history: null, mx: async () => 'ok', ...over });
 const only = async (u: U, over?: Parameters<typeof audience>[1]) => (await audience([u], over)).eligible[0];
 const reasonOf = async (u: U, over?: Parameters<typeof audience>[1]) => {
   const a = await audience([u], over);
@@ -154,6 +155,82 @@ test('the dry-run path is read-only: no email, no token, no claim, nobody confir
   assert.equal(await tokenCount(u), before.tokens);
   assert.equal(await row(u), undefined);
   assert.equal(await verifiedAt(u), null);
+});
+
+// ---------------------------------------------------------------- address vetting (deliverability)
+
+test('addresses that would probably bounce or are not a person are left out of an automatic send, with the reason', async () => {
+  const mk = async (email: string, over: Parameters<typeof newUnconfirmed>[0] = {}) => {
+    const u = await newUnconfirmed(over);
+    await sql`update users set email = ${email} where id = ${u.id}`;
+    return { ...u, email };
+  };
+  const tag = `${RUN}-${n++}`;
+  const role = await mk(`info+${tag}@acme-real.test`);
+  const disposable = await mk(`x${tag}@mailinator.com`);
+  const invalid = await mk(`not-an-address-${tag}`);
+  const nomail = await mk(`x${tag}@no-such-domain.test`);
+  const flaky = await mk(`x${tag}@slow-dns.test`);
+  const fine = await mk(`x${tag}@fine-domain.test`);
+  const gmail = await mk(`x${tag}@gmail.com`);
+  const asked: string[] = [];
+  const mx = async (domain: string) => (asked.push(domain), domain === 'no-such-domain.test' ? ('none' as const) : domain === 'slow-dns.test' ? ('unknown' as const) : ('ok' as const));
+  const reason = async (u: U) => Object.keys((await audience([u], { mx })).excluded)[0];
+  assert.equal(await reason(role), 'role_address');
+  assert.equal(await reason(disposable), 'disposable_domain');
+  assert.equal(await reason(invalid), 'invalid_address');
+  assert.equal(await reason(nomail), 'no_mail_server');
+  assert.equal(await reason(flaky), 'dns_inconclusive');
+  assert.ok((await audience([fine], { mx })).eligible.length === 1, 'a normal address on a mail-serving domain is eligible');
+  assert.ok((await audience([gmail], { mx })).eligible.length === 1);
+  assert.ok(!asked.includes('gmail.com'), 'big providers are not looked up');
+  assert.equal(asked.filter((d) => d === 'fine-domain.test').length >= 1, true);
+});
+
+test('one DNS lookup per domain per run, and the vetting never decides anything the eligibility rules had already decided', async () => {
+  const tag = `${RUN}-${n++}`;
+  const users: U[] = [];
+  for (let i = 0; i < 3; i++) {
+    const u = await newUnconfirmed();
+    await sql`update users set email = ${`p${i}-${tag}@shared-domain.test`} where id = ${u.id}`;
+    users.push({ ...u, email: `p${i}-${tag}@shared-domain.test` });
+  }
+  const asked: string[] = [];
+  const a = await audience(users, { mx: async (d) => (asked.push(d), 'ok') });
+  assert.equal(a.eligible.length, 3);
+  assert.deepEqual(asked, ['shared-domain.test']);
+  // A legacy account is still held out by its own rule, before any address check.
+  const legacyAccount = await newUnconfirmed({ asked: false, linkAgeHours: null });
+  const calls: string[] = [];
+  assert.equal(Object.keys((await audience([legacyAccount], { mx: async (d) => (calls.push(d), 'none') })).excluded)[0], 'legacy_not_asked');
+  assert.deepEqual(calls, []);
+});
+
+test('a null MX ("0 .") means the domain takes no mail; a domain with only an address record does', async () => {
+  const v = await import('../src/services/address-vetting.js');
+  assert.equal(v.addressProblem('Someone+tag@Example.com'), null);
+  assert.equal(v.addressProblem('postmaster@example.com'), 'role_address');
+  assert.equal(v.addressProblem('a@b'), 'invalid_address');
+  assert.equal(await v.lookupMailServer(''), 'none');
+  const cached = v.cachedMailServer(async () => 'ok');
+  assert.equal(await cached('a.test'), 'ok');
+  assert.equal(v.mailboxKey('Dot.Ted+x@googlemail.com'), v.mailboxKey('dotted@gmail.com'));
+});
+
+test('a legacy account that the operator includes can confirm by the link and nothing else changes about it', async () => {
+  const u = await newUnconfirmed({ asked: false, linkAgeHours: null, ageRange: null });
+  assert.equal(await reasonOf(u), 'legacy_not_asked');
+  const batch = rem.nextReminderBatch(await audience([u], { includeLegacy: true }), 5);
+  assert.equal(batch.length, 1);
+  const r = await rem.sendReminderBatch({ batch, limit: 5, ...fast });
+  assert.equal(r.sent, 1);
+  assert.equal(await verifiedAt(u), null, 'sending confirms nobody');
+  const mail = reminderMails(u.email)[0]!;
+  assert.match(mail.subject, /^Reminder:/);
+  assert.equal((await call('/auth/email-verification/verify', post({ token: tokenOf(mail.text) }))).status, 200);
+  assert.ok(await verifiedAt(u), 'confirmed by its owner opening the link');
+  const [row] = await sql<{ asked: boolean; age: string | null }[]>`select email_verification_required as asked, age_range as age from users where id = ${u.id}`;
+  assert.deepEqual({ ...row }, { asked: false, age: null }, 'still a legacy account without an age group: it can never join the marketing campaign');
 });
 
 // ---------------------------------------------------------------- sending
@@ -548,19 +625,39 @@ test('inspect-legacy describes accounts that were never asked to confirm, withou
   assert.equal(await reasonOf(a), 'legacy_not_asked', 'and they are still not included in the reminder');
 });
 
-test('the server never imports the reminder tool: deploying and running the API cannot send one', async () => {
+test('the server can never reach the reminder tool or the audiences report: deploying and running the API cannot send or count anything', async () => {
+  const src = new URL('../src/', import.meta.url).pathname;
   const walk = async (dir: string): Promise<string[]> => {
     const out: string[] = [];
     for (const e of await readdir(dir, { withFileTypes: true })) out.push(...(e.isDirectory() ? await walk(join(dir, e.name)) : [join(dir, e.name)]));
     return out;
   };
-  const src = new URL('../src/', import.meta.url).pathname;
   const files = (await walk(src)).filter((f) => f.endsWith('.ts'));
   assert.ok(files.length > 20);
-  const importers: string[] = [];
-  for (const f of files) if (/(from|import\()\s*['"][^'"]*verification-reminders/.test(await readFile(f, 'utf8'))) importers.push(f.slice(src.length));
-  assert.deepEqual(importers, [], 'nothing under src/ (server, scheduler, routes, other services) imports it');
+  const importsOf = async (file: string) =>
+    [...(await readFile(file, 'utf8')).matchAll(/(?:from|import\()\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map((m) => join(file, '..', m[1]!.replace(/\.js$/, '.ts')));
+  const direct = async (name: string) => {
+    const who: string[] = [];
+    for (const f of files) if ((await importsOf(f)).some((i) => i.endsWith(`/${name}.ts`))) who.push(f.slice(src.length));
+    return who;
+  };
+  // Only the read-only report may import the reminder service, and nothing in src/ imports the report.
+  assert.deepEqual(await direct('verification-reminders'), ['services/email-audiences.ts']);
+  assert.deepEqual(await direct('email-audiences'), []);
+
+  // And neither is reachable from the entry points (index.ts starts the server and the schedulers; app.ts is the HTTP app).
+  const seen = new Set<string>();
+  const queue = [join(src, 'index.ts'), join(src, 'app.ts')];
+  while (queue.length) {
+    const f = queue.pop()!;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    if (files.includes(f)) queue.push(...(await importsOf(f)));
+  }
+  assert.ok(seen.size > 30, 'the walk really covers the server');
+  assert.equal([...seen].some((f) => /\/(verification-reminders|email-audiences)\.ts$/.test(f)), false);
+
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
-  const runners = Object.entries(pkg.scripts).filter(([name, cmd]) => name !== 'test' && /verification-reminders/.test(cmd)).map(([name]) => name);
-  assert.deepEqual(runners.sort(), ['campaign:verification-reminder', 'campaign:verification-reminder:prod'], 'only the operator scripts run it (never start, start:prod, db:migrate or the pre-deploy command)');
+  const runners = Object.entries(pkg.scripts).filter(([name, cmd]) => name !== 'test' && /verification-reminders|email-audiences/.test(cmd)).map(([name]) => name);
+  assert.deepEqual(runners.sort(), ['campaign:verification-reminder', 'campaign:verification-reminder:prod', 'email:audiences', 'email:audiences:prod'], 'only the operator scripts run them (never start, start:prod, db:migrate or the pre-deploy command)');
 });
