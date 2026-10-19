@@ -7,6 +7,7 @@ import { users } from '../db/schema.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { RateLimiter } from '../lib/rate-limit.js';
 import { config } from '../config.js';
+import { recordClick } from '../services/reactivation-campaign.js';
 import { billingEligibility, remindersAvailable, unsubscribePageUrl, unsubscribeWithToken } from '../services/study-reminders.js';
 
 const unsubscribeLimiter = new RateLimiter(30, 15 * 60_000, 'Too many attempts. Please wait a little and try again.');
@@ -34,6 +35,8 @@ async function preferences(userId: string): Promise<EmailPreferences> {
  *   GET /email/unsubscribe         a mail client or person that opens the one-click URL instead of POSTing it is
  *                                  sent to the web page, which asks for confirmation. A GET never unsubscribes
  *                                  (link scanners open links too).
+ *   GET /email/click/:sendId       the button of a re-engagement campaign email (services/reactivation-campaign.ts):
+ *                                  counts the click (scanner-looking requests separately) and redirects to the web app.
  */
 export const emailRoutes = new Hono<AuthEnv>()
   .get('/preferences', requireAuth, async (c) => c.json<EmailPreferences>(await preferences(c.var.userId)))
@@ -45,6 +48,12 @@ export const emailRoutes = new Hono<AuthEnv>()
   .get('/unsubscribe', (c) => {
     if (!config.WEB_APP_URL) throw new HttpError(404, 'Not found', 'not_found');
     return c.redirect(unsubscribePageUrl(encodeURIComponent(c.req.query('token') ?? '')), 302);
+  })
+  .get('/click/:sendId', async (c) => {
+    if (!config.WEB_APP_URL) throw new HttpError(404, 'Not found', 'not_found');
+    const to = await recordClick(c.req.param('sendId'), { userAgent: c.req.header('user-agent'), ip: clientKey(c), countIt: c.req.method !== 'HEAD' });
+    c.header('Cache-Control', 'no-store');
+    return c.redirect(to, 302);
   })
   .post('/unsubscribe', async (c) => {
     unsubscribeLimiter.take(clientKey(c));

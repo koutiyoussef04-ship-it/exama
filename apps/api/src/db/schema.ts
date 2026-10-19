@@ -66,6 +66,68 @@ export const studyReminderEmails = pgTable(
 );
 
 /**
+ * Re-engagement campaign emails (services/reactivation-campaign.ts, run by an operator, never by the server):
+ * one row per campaign, step and user, claimed BEFORE sending, so a retry, a second run or two operators can
+ * never email the same person the same step twice. Deleting the account deletes its rows.
+ */
+export const emailCampaignSends = pgTable(
+  'email_campaign_sends',
+  {
+    id: id(),
+    campaign: text('campaign').notNull(),
+    step: integer('step').notNull(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    segment: text('segment').$type<'has_plan' | 'no_plan'>().notNull(),
+    /** Which version of the email this person got (e.g. exam_upcoming, exam_passed, course_ready, no_course). */
+    variant: text('variant').notNull(),
+    language: text('language').notNull(),
+    /** Where the email's button leads inside the web app (path and query), fixed when the email is sent. */
+    target: text('target').notNull(),
+    /** claimed → sent | failed (retried by a later run, 3 attempts at most). */
+    status: text('status').$type<'claimed' | 'sent' | 'failed'>().notNull().default('claimed'),
+    attempts: integer('attempts').notNull().default(1),
+    /** Resend's email id, to read delivery status back. */
+    providerMessageId: text('provider_message_id'),
+    /** Short error code of the last failed attempt (never a message with personal data). */
+    error: text('error'),
+    batchId: text('batch_id'),
+    /** Last event Resend reports for the message: delivered | bounced | complained | delivery_delayed | … */
+    deliveryStatus: text('delivery_status'),
+    deliverySyncedAt: timestamp('delivery_synced_at', { withTimezone: true }),
+    claimedAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('email_campaign_sends_uq').on(t.campaign, t.step, t.userId),
+    index('email_campaign_sends_user_idx').on(t.userId),
+    index('email_campaign_sends_sent_idx').on(t.sentAt),
+  ],
+);
+
+/** First-party click tracking of the campaign button (GET /email/click/:sendId): no cookies, no IP, no user agent stored. */
+export const emailCampaignClicks = pgTable(
+  'email_campaign_clicks',
+  {
+    id: id(),
+    sendId: uuid('send_id').notNull().references(() => emailCampaignSends.id, { onDelete: 'cascade' }),
+    /** The click came from a link scanner or preview bot (no or a robot-like user agent): not counted as a person. */
+    suspectedBot: boolean('suspected_bot').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index('email_campaign_clicks_send_idx').on(t.sendId)],
+);
+
+/**
+ * Addresses no campaign may email: hard bounces and spam complaints read back from Resend, or added by an
+ * operator. Lower-case addresses (see normalizeEmail).
+ */
+export const emailSuppressions = pgTable('email_suppressions', {
+  email: text('email').primaryKey(),
+  reason: text('reason').$type<'bounced' | 'complained' | 'manual'>().notNull(),
+  createdAt: createdAt(),
+});
+
+/**
  * Re-registration hold after account deletion (services/email-hold.ts). One row per recently deleted
  * address, holding only an HMAC (keyed with JWT_SECRET) of the NORMALIZED email — never the address, a
  * name or a user id — and when the hold ends (deletion + DELETED_EMAIL_HOLD_DAYS). Expired rows are

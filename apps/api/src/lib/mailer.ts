@@ -16,6 +16,8 @@ export type Mail = {
   headers?: Record<string, string>;
   /** Resend idempotency key (24 h): a retried request with the same key is not sent twice. */
   idempotencyKey?: string;
+  /** Resend tags (letters, digits, `_` and `-` only), to filter campaigns in the Resend dashboard. */
+  tags?: { name: string; value: string }[];
 };
 
 /** Emails "sent" with the log provider (development and tests only). */
@@ -23,14 +25,15 @@ export const outbox: Mail[] = [];
 /** Tests only (log provider): make a send fail, to exercise error handling. */
 export const mailTestHooks: { fail?: (mail: Mail) => boolean } = {};
 
-export async function sendMail(mail: Mail): Promise<void> {
+/** `id`: the provider's id of the sent email (Resend), to read its delivery status back; null for the log provider. */
+export async function sendMail(mail: Mail): Promise<{ id: string | null }> {
   switch (config.EMAIL_PROVIDER) {
     case 'log':
       if (mailTestHooks.fail?.(mail)) throw new Error('Simulated email failure');
       outbox.push(mail);
       if (outbox.length > 100) outbox.shift();
       if (process.env.NODE_ENV !== 'test') console.log(`[mail] to ${mail.to}: ${mail.subject}\n${mail.text}`);
-      return;
+      return { id: null };
     case 'resend': {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -39,11 +42,12 @@ export async function sendMail(mail: Mail): Promise<void> {
           'Content-Type': 'application/json',
           ...(mail.idempotencyKey && { 'Idempotency-Key': mail.idempotencyKey }),
         },
-        body: JSON.stringify({ from: config.EMAIL_FROM, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html, ...(mail.headers && { headers: mail.headers }) }),
+        body: JSON.stringify({ from: config.EMAIL_FROM, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html, ...(mail.headers && { headers: mail.headers }), ...(mail.tags && { tags: mail.tags }) }),
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) throw new Error(`Resend responded ${res.status}`);
-      return;
+      const sent = (await res.json().catch(() => null)) as { id?: unknown } | null;
+      return { id: typeof sent?.id === 'string' ? sent.id : null };
     }
     default:
       throw new Error('Email is not configured (EMAIL_PROVIDER=disabled).');
