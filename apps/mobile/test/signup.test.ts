@@ -92,3 +92,41 @@ test('the Free course-limit message is used for Free only (trial and paid plans 
   const courses = readFileSync(new URL('../src/lib/courses.ts', import.meta.url), 'utf8');
   assert.ok(courses.includes("openPaywall('limit_courses'"));
 });
+
+// ---- Account type (student vs organization) ----
+import { canSubmitSignup as canSubmit2, organizationFieldsComplete, signupRequest as request2 } from '../src/lib/signup-form';
+
+test('account type: students need nothing more; an organization sign-up needs the organization name and kind', () => {
+  assert.equal(canSubmit2(form()), true, 'no account type = student (older flows)');
+  assert.equal(canSubmit2(form({ accountType: 'student' })), true);
+  assert.equal(canSubmit2(form({ accountType: 'organization' })), false);
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte' })), false, 'market missing');
+  assert.equal(canSubmit2(form({ accountType: 'organization', market: 'academy' })), false, 'name missing');
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: ' A ', market: 'academy' })), false, 'name too short');
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy' })), true);
+  assert.equal(organizationFieldsComplete({ accountType: 'student' }), true);
+});
+
+test('the request carries the account type only for organizations, with the trimmed organization name and the market', () => {
+  const student = request2({ ...form(), ageRange: '18_24' }, { language: 'es' });
+  assert.ok(!('accountType' in student) && !('organizationName' in student) && !('market' in student));
+  const org = request2({ ...form({ accountType: 'organization', organizationName: '  Academia Norte ', market: 'training_provider' }), ageRange: '25_34' }, { language: 'es' });
+  assert.deepEqual(org, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'es', ageRange: '25_34', accountType: 'organization', organizationName: 'Academia Norte', market: 'training_provider' });
+  assert.ok(!JSON.stringify(org).includes('confirm'));
+});
+
+test('sign-up screen: the "How will you use Exama?" step comes first; organization fields appear only for organizations; the student app redirects organization accounts', () => {
+  const src = readFileSync(new URL('../src/app/sign-up.tsx', import.meta.url), 'utf8');
+  assert.ok(src.includes('<AccountTypeChoice onChoose={setAccountType} />'), 'the choice screen renders until a type is chosen');
+  assert.ok(src.indexOf('if (!accountType) {') < src.indexOf("label={t('auth.firstName')}"), 'choice before the form');
+  assert.ok(src.includes("{isOrganization && (") && src.includes("label={t('auth.organizationName')}"), 'organization fields only for organizations');
+  const choice = readFileSync(new URL('../src/components/account-type-choice.tsx', import.meta.url), 'utf8');
+  assert.ok(choice.includes("t('auth.accountType.question')") && choice.includes("testID={`account-type-${value}`}"));
+  const home = readFileSync(new URL('../src/app/index.tsx', import.meta.url), 'utf8');
+  assert.ok(home.includes(`if (user?.accountType === 'organization') return <Redirect href="/org" />;`), 'organization accounts never see the student course list');
+  const layout = readFileSync(new URL('../src/app/_layout.tsx', import.meta.url), 'utf8');
+  for (const screen of ['org/index', 'org/courses', 'org/courses/[id]', 'org/review', 'org/items/[id]', 'org/bank', 'org/export', 'org/members']) {
+    assert.ok(layout.includes(`name="${screen}"`), `${screen} registered behind the signed-in guard`);
+  }
+  assert.ok(layout.indexOf('name="org/index"') > layout.indexOf('<Stack.Protected guard={!!user}>'), 'org screens need a session');
+});

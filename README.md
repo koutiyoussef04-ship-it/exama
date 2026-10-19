@@ -62,10 +62,11 @@ study-app/
 
 ## Data model
 
-`users` → `documents` (a course: status, summary, `topics` = PDF topics + topics added by materials) → `document_chunks` (page-grouped PDF text and timestamped lecture transcripts; `material_id` says which)
+`users` (`account_type` student | organization) → `documents` (a course: status, summary, `topics` = PDF topics + topics added by materials; `organization_id` set for organization courses) → `document_chunks` (page-grouped PDF text and timestamped lecture transcripts; `material_id` says which)
 `course_materials` (lectures and extra PDFs added to a course: kind, format, status, duration, billed minutes, structured knowledge)
 `exams` (standard | follow_up, focus topics, score) → `questions` (mcq | short_answer, topic) → `answers` (score 0–1, feedback)
 `topic_mastery` (user × document × topic, recency-weighted mastery) → drives weak areas (< 70%) and follow-ups.
+`organizations` → `organization_members` (role) · `bank_items` (reviewable, versioned questions) → `question_sources`, `bank_item_revisions`, `bank_item_events` — see Organizations below.
 
 ## API
 
@@ -92,6 +93,17 @@ POST /documents/:id/materials        add material: raw file as the body (streame
 GET  /documents/:id/materials/:mid   status + extracted knowledge (poll while processing)
 POST /documents/:id/materials/:mid/retry · DELETE /documents/:id/materials/:mid
 Errors: { error, code } — `code` is stable and translated by the app (src/lib/errors.ts)
+
+Organizations (B2B workspace; membership + role checked on the server on every call, 404 for outsiders):
+GET  /orgs · POST /orgs { name, market }                         the caller's organizations · create one (organization accounts only)
+GET  /orgs/:orgId · PATCH /orgs/:orgId { name }                  overview (counts, usage, limits) · rename (admin)
+GET|POST /orgs/:orgId/members · PATCH|DELETE /orgs/:orgId/members/:userId   members by email of an existing account; roles admin | editor | reviewer (admin)
+GET|POST /orgs/:orgId/courses · GET|DELETE /orgs/:orgId/courses/:id · POST …/reprocess   organization courses (same pipeline as a student's course)
+POST /orgs/:orgId/courses/:id/generate { count, topic?, pageStart?, pageEnd?, questionTypes? }   AI drafts with located sources — never approved automatically (editor)
+GET  /orgs/:orgId/items?status&documentId&topic&section · POST /orgs/:orgId/items (by hand) · GET /orgs/:orgId/topics
+GET|PATCH|DELETE /orgs/:orgId/items/:id · POST …/approve|reject|reopen (reviewer+) · POST …/retire (editor+)
+GET  /orgs/:orgId/export?format=csv|gift&documentId&topic      approved questions only (editor+)
+GET  /admin/organizations · PATCH /admin/organizations/:id { limits, status }   owner only: allowances and suspension (billing is manual)
 ```
 
 ## Run locally (Windows, macOS, Linux)
@@ -260,9 +272,21 @@ Course → **Course materials → Add material**, or from the course list: **Add
 - Server errors carry stable `code`s that the app translates; the paywall, legal pages, dialogs, accessibility labels and empty/loading/error states are all translated.
 - Tests: `npm test -w @study/mobile` checks every language has every key and plural form, placeholders match, RTL rules, persistence, and that screens contain no hardcoded English.
 
+## Organizations (B2B workspace)
+
+Exama serves two kinds of accounts, chosen at sign-up (`users.account_type`, set by the server): **students** (the study app, unchanged) and **organizations** — a training provider (`training_provider`) or an oposiciones academy (`academy`). An organization sign-up creates the organization and makes the account its first admin in the same transaction; existing accounts are students and nothing about them changes. Account type decides which experience the app opens; access to an organization's data comes only from `organization_members` (role read on every request, `apps/api/src/auth/org-access.ts`). Account types cannot be switched by the user (no self-service switching yet).
+
+- **Data:** `organizations`, `organization_members`, organization-owned `documents` (`organization_id` set, `user_id` = uploader, cleared when that account is deleted), `bank_items` (draft → approved / rejected → retired; every content edit = new version in `bank_item_revisions` and back to draft), `question_sources` (chunk id + SHA-256 of its text, page range or lecture seconds, verbatim quote with character offsets, match score, `located` false when the quote could not be placed in one passage — then no page is claimed), `bank_item_events` (who did what). Composite foreign keys keep every item inside its own organization's courses. Migration `0022_organizations` is additive; existing rows need no backfill.
+- **Generation** (`services/bank/generate.ts`): the same `studyAI.generateQuestions` + quote check as student exams, from explicitly chosen material (a topic and/or page range of one course); then each quote is located in one chunk (`services/sources/locate.ts`), deterministic checks add review flags (`services/bank/checks.ts`: unlocated, fuzzy quote, number not in source, weak distractors) and an advisory verifier call (`studyAI.verifyQuestions`) asks whether the passage really supports the keyed answer. Everything is stored as a draft; a person approves, rejects, edits or retires. A verifier failure flags the items instead of failing the request.
+- **Markets** are data, not conditionals: `marketProfile(market)` in `packages/shared/src/organizations.ts` (academies: MCQ only, "tema" unit label, legal reference fields — law, official publication, article, effective date — entered by staff, never generated).
+- **Exports:** CSV (RFC 4180, UTF-8 BOM) and GIFT (Moodle), approved items only, organization-scoped, with the source label (`Course, p. 3-4` / `Course, 02:05` / `Course (location not confirmed)`).
+- **Usage and cost:** organization work is metered in `usage_ledger` with `organization_id` (course uploads, generated questions; pilot defaults in `billing/org-limits.ts`, per-organization overrides via the owner API) and never counts against a staff member's personal plan; `ai_usage.organization_id` attributes AI cost per organization. Organization billing is manual (invoice per pilot): no Stripe product exists for it.
+- **Files** of organization courses live under `org/<orgId>/…`, so deleting a staff member's account (`<userId>/`) never touches them.
+- **App:** sign-up asks "How will you use Exama?" first; organization accounts open `/org` (dashboard, courses, review queue, question bank, export, members); students never see organization screens unless an admin adds them (then the workspace is linked from Account). Web-first, same codebase and languages.
+
 ## Account deletion
 
-Account → Delete account: warning, "I understand" checkbox, password (verified by the server) and a final confirmation. `DELETE /auth/me` deletes the user row (cascading to courses, chunks, exams, answers, mastery, subscription and usage rows), removes the user's whole file folder, anonymizes their analytics events (user id and install id cleared), and every existing token stops working immediately. An App Store subscription is not cancelled by this — the screen warns and links to "Manage subscription". Tested in `apps/api/test/account.test.ts`.
+Account → Delete account: warning, "I understand" checkbox, password (verified by the server) and a final confirmation. `DELETE /auth/me` deletes the user's personal courses (cascading to chunks, materials, exams, answers, plan), their personal usage rows and then the user row (cascading to mastery, subscription, memberships), removes the user's whole file folder, anonymizes their analytics events (user id and install id cleared), and every existing token stops working immediately. Organization courses, questions, usage and files the person created stay with the organization (only the link to the person is cleared). An App Store subscription is not cancelled by this — the screen warns and links to "Manage subscription". Tested in `apps/api/test/account.test.ts`.
 
 ## Product analytics
 
