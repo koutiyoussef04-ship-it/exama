@@ -921,6 +921,8 @@ const es: LocaleDict = {
   },
   errors: {
     network: 'No se puede conectar con Exama. Comprueba tu conexión a internet e inténtalo de nuevo.',
+    picker: 'No hemos podido abrir ese archivo. Elige un PDF o una presentación de PowerPoint (.pptx) guardados en este dispositivo e inténtalo de nuevo.',
+    request: 'La aplicación no ha podido enviar ese archivo. Inténtalo de nuevo o elige otro archivo. Si sigue ocurriendo, actualiza la aplicación.',
     generic: 'Algo salió mal. Inténtalo de nuevo.',
     server: 'Exama tiene un problema en este momento. Inténtalo de nuevo en unos instantes.',
     config: 'Esta versión de la app no está bien configurada. Actualiza la app.',

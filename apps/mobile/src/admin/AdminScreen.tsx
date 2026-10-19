@@ -31,6 +31,7 @@ import { Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-nat
 import { Chips } from '@/components/planner';
 import { Badge, Body, Button, Card, colors, ErrorState, Loading, Screen, SectionLabel, space, Title } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
+import { eventDetails } from './event-details';
 
 type Tab = 'overview' | 'customers' | 'ai' | 'billing' | 'analytics' | 'health';
 const TABS: { value: Tab; label: string }[] = [
@@ -420,7 +421,7 @@ function CustomerDetail({ id, onBack }: { id: string; onBack: () => void }) {
             <CustomerAISection d={d} />
             <CustomerPaymentsSection payments={d.payments} />
             <Section title="Recent events" source="analytics">
-              <Table columns={['Event', 'Source', 'When']} rows={d.recentEvents.map((e) => [e.name, e.source, new Date(e.createdAt).toISOString().replace('T', ' ').slice(0, 16)])} />
+              <Table columns={['Event', 'Source', 'When', 'Details']} rows={d.recentEvents.map((e) => [e.name, e.source, new Date(e.createdAt).toISOString().replace('T', ' ').slice(0, 16), eventDetails(e.properties)])} />
             </Section>
           </>
         )}

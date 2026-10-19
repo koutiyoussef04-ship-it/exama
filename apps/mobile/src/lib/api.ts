@@ -180,13 +180,20 @@ export const api = {
   getProgress: (id: string) => request<DocumentProgress>(`/documents/${id}/progress`),
   uploadDocument: (file: PickedFile, language: AiLanguage) => {
     const form = new FormData();
-    if (Platform.OS === 'web' && file.file) {
-      form.append('file', file.file);
-    } else {
-      // Expo SDK 57 replaces the global fetch with expo/fetch, which does NOT support React Native's
-      // legacy `{ uri, name, type }` FormData parts (it throws before sending). expo-file-system's
-      // File implements Blob, which expo/fetch streams into the multipart body.
-      form.append('file', new FsFile(file.uri) as unknown as Blob);
+    try {
+      if (Platform.OS === 'web' && file.file) {
+        form.append('file', file.file);
+      } else {
+        // Expo SDK 57 replaces the global fetch with expo/fetch, which does NOT support React Native's
+        // legacy `{ uri, name, type }` FormData parts (it throws before sending). expo-file-system's
+        // File implements Blob, which expo/fetch streams into the multipart body.
+        form.append('file', new FsFile(file.uri) as unknown as Blob);
+      }
+    } catch (err) {
+      // Preparing the file failed before anything was sent: say so (`request_failed`) instead of blaming the network.
+      // The message is fixed on purpose: the original may contain the file's path or name.
+      log.error('[api] could not prepare the upload:', err);
+      throw new ApiError(0, 'Could not prepare the file for upload', 'request_failed');
     }
     // The picked file lives in the cache under a generated name, so send the original name separately.
     form.append('title', file.name);

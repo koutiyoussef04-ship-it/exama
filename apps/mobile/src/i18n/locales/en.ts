@@ -928,6 +928,8 @@ const en = {
   },
   errors: {
     network: 'Can’t reach Exama. Check your internet connection and try again.',
+    picker: 'We couldn’t open that file. Choose a PDF or PowerPoint (.pptx) that is saved on this device, then try again.',
+    request: 'The app couldn’t send that file. Try again or choose a different file. If it keeps happening, update the app.',
     generic: 'Something went wrong. Please try again.',
     server: 'Exama is having a problem right now. Please try again in a moment.',
     config: 'This version of the app isn’t configured correctly. Please update the app.',

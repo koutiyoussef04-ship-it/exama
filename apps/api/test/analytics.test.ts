@@ -153,6 +153,19 @@ test('client events: accepted when allowlisted, linked to user when signed in, a
   assert.ok(anon.every((r) => r.user_id === null));
 });
 
+test('upload_failed accepts every diagnostic category (the original values included) and still refuses free text', async () => {
+  const reasons = ['network', 'too_large', 'not_pdf', 'server', 'unknown', 'picker', 'request', 'auth', 'not_verified', 'limit', 'rate_limited'];
+  for (const failure_reason of reasons) {
+    const r = await call<{ accepted: number }>('/events', { ...json({ anonymousId: ANON, events: [{ name: 'upload_failed', properties: { platform: 'web', failure_reason } }] }), token });
+    assert.equal(r.status, 202, failure_reason);
+  }
+  await analytics.flushAnalytics();
+  const stored = (await sql`select properties->>'failure_reason' as reason from analytics_events where user_id = ${userId} and name = 'upload_failed'`) as unknown as { reason: string }[];
+  for (const reason of reasons) assert.ok(stored.some((s) => s.reason === reason), reason);
+  const bad = await call('/events', { ...json({ anonymousId: ANON, events: [{ name: 'upload_failed', properties: { platform: 'web', failure_reason: 'C:\\Users\\x\\Secret.pdf' } }] }), token });
+  assert.equal(bad.status, 400, 'a path or file name is still refused');
+});
+
 test('client events: rejects unknown events, server-only events, extra/free-text properties and oversized batches', async () => {
   const send = (events: unknown[], anonymousId: unknown = ANON) => call('/events', { ...json({ anonymousId, events }), token });
   const ok = { name: 'app_opened', properties: { platform: 'ios', authenticated: true } };

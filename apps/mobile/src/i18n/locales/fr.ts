@@ -921,6 +921,8 @@ const fr: LocaleDict = {
   },
   errors: {
     network: 'Impossible de joindre Exama. Vérifiez votre connexion internet et réessayez.',
+    picker: 'Impossible d’ouvrir ce fichier. Choisissez un PDF ou une présentation PowerPoint (.pptx) enregistré sur cet appareil, puis réessayez.',
+    request: 'L’application n’a pas pu envoyer ce fichier. Réessayez ou choisissez un autre fichier. Si le problème persiste, mettez l’application à jour.',
     generic: 'Un problème est survenu. Veuillez réessayer.',
     server: 'Exama rencontre un problème pour le moment. Réessayez dans un instant.',
     config: 'Cette version de l’app n’est pas correctement configurée. Veuillez mettre l’app à jour.',

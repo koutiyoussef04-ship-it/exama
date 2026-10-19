@@ -58,7 +58,11 @@ export const clientEventSchema = z.discriminatedUnion('name', [
     name: z.literal('upload_failed'),
     properties: z.strictObject({
       platform,
-      failure_reason: z.enum(['network', 'too_large', 'not_pdf', 'server', 'unknown']),
+      // Coarse categories only (never file names or error text). The first five are the original values and keep their meaning;
+      // the rest say WHERE it failed so a missing course can be diagnosed: picker (file picker or copying the picked file),
+      // request (the app could not build or send the request), auth (401/403), not_verified (email not confirmed),
+      // limit (plan limit, 402), rate_limited (429). `not_pdf` covers every unsupported file type (415).
+      failure_reason: z.enum(['network', 'too_large', 'not_pdf', 'server', 'unknown', 'picker', 'request', 'auth', 'not_verified', 'limit', 'rate_limited']),
     }),
   }),
   z.object({

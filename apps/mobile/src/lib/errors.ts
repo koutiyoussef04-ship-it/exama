@@ -6,6 +6,7 @@ import type { BillingProviderId, LimitErrorBody } from '@study/shared';
 import i18n from '@/i18n';
 import { ApiError } from './api';
 import { isFreeLectureLimit } from './material-options';
+import { clientFailureMessageKey } from './upload-failure';
 import { storeName } from './store/offers';
 
 const t = i18n.t.bind(i18n);
@@ -39,6 +40,9 @@ export function documentErrorMessage(code: string | null, fallback: string | nul
 }
 
 export function errorMessage(err: unknown): string {
+  // The file picker failed, or the app could not prepare/send the file: no server response to take a code from.
+  const clientKey = clientFailureMessageKey(err);
+  if (clientKey) return t(clientKey);
   if (err instanceof ApiError) {
     if (err.code === 'app_misconfigured') return t('errors.config');
     if (err.status === 0) return t('errors.network');

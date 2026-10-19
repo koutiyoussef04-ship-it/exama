@@ -12,6 +12,7 @@ import { handleLimitError, openPaywall } from './billing';
 import { limitMessage } from './errors';
 import { log } from './log';
 import { usePreferences } from './preferences';
+import { PickerError } from './upload-failure';
 
 /** Friendly pre-check (the server enforces the real limit): at the course cap, open the paywall instead of the picker. */
 export function courseCapReached(e: Entitlement | undefined): boolean {
@@ -26,9 +27,17 @@ export function useCourseUpload(onOpen: (id: string) => void = (id) => router.pu
   const { aiLanguage } = usePreferences();
   return useMutation({
     mutationFn: async (types: string[]) => {
-      const res = await DocumentPicker.getDocumentAsync({ type: types, copyToCacheDirectory: true });
-      if (res.canceled) return null;
+      let res: DocumentPicker.DocumentPickerResult;
+      try {
+        res = await DocumentPicker.getDocumentAsync({ type: types, copyToCacheDirectory: true });
+      } catch (err) {
+        // The picker (or copying the picked file) failed: not the same as cancelling, and not a network problem.
+        log.error('[upload] file picker failed:', err);
+        throw new PickerError();
+      }
+      if (res.canceled) return null; // cancelling is a choice, not a failure: no error, no event
       const a = res.assets[0];
+      if (!a) throw new PickerError();
       track('upload_started', { platform, file_size_kb: a.size ? Math.round(a.size / 1024) : undefined });
       return api.uploadDocument({ uri: a.uri, name: a.name, mimeType: a.mimeType, file: a.file }, aiLanguage);
     },

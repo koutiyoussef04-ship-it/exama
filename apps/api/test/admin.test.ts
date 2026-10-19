@@ -575,3 +575,26 @@ test('customer payments: live Stripe charges for that customer only, refunds and
     assert.equal((await call(path)).status, 401, path);
   }
 });
+
+test('a customer’s Recent events keep upload events visible however many app_opened (or other) events follow them, newest first', async () => {
+  const u = await newUser();
+  const props = (o: unknown) => JSON.stringify(o);
+  // An upload attempt three days ago, then a flood of newer events.
+  await sql`insert into analytics_events (name, user_id, source, properties, created_at) values
+    ('upload_started', ${u.id}::uuid, 'client', ${props({ platform: 'web', file_size_kb: 812 })}::jsonb, now() - interval '3 days'),
+    ('upload_failed', ${u.id}::uuid, 'client', ${props({ platform: 'web', failure_reason: 'request' })}::jsonb, now() - interval '3 days' + interval '2 seconds')`;
+  await sql`insert into analytics_events (name, user_id, source, properties, created_at)
+    select 'app_opened', ${u.id}::uuid, 'client', ${props({ platform: 'web', authenticated: true })}::jsonb, now() - make_interval(mins => g) from generate_series(1, 80) g`;
+  await sql`insert into analytics_events (name, user_id, source, properties, created_at)
+    select 'course_opened', ${u.id}::uuid, 'client', ${props({ status: 'ready' })}::jsonb, now() - make_interval(mins => g) from generate_series(1, 60) g`;
+
+  const d = (await call<AdminCustomerDetail>(`/admin/customers/${u.id}`, { token: owner.token })).body;
+  const names = d.recentEvents.map((e) => e.name);
+  assert.ok(names.includes('upload_started') && names.includes('upload_failed'), 'the upload attempt is still listed');
+  const failed = d.recentEvents.find((e) => e.name === 'upload_failed')!;
+  assert.deepEqual({ platform: failed.properties.platform, reason: failed.properties.failure_reason }, { platform: 'web', reason: 'request' }, 'with the properties the dashboard shows');
+  assert.equal(names.filter((n) => n === 'app_opened').length, 10, 'app_opened has its own small quota');
+  assert.ok(d.recentEvents.length <= 70);
+  const times = d.recentEvents.map((e) => +new Date(e.createdAt));
+  assert.deepEqual(times, [...times].sort((a, b) => b - a), 'newest first');
+});

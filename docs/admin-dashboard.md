@@ -142,3 +142,40 @@ No new environment variables are needed:
 
 - The owner comes from the existing `OWNER_USER_IDS` / `OWNER_EMAILS`.
 - Stripe reads use the existing `STRIPE_SECRET_KEY`. Use a restricted key with read access to charges and refunds if one is created later.
+
+## Diagnosing a failed upload
+
+A customer says "my upload failed" and the dashboard shows 0 courses: no course row is created until the file reaches the API, so a failure before that leaves no trace in the counters. The trace is in **Customers → the customer → Recent events**. The **Details** column shows `platform`, `failure_reason` and `file_size_kb` (an allow-list; nothing else is shown). Upload events and `app_opened` each have their own quota in that list (up to 30 upload events, 10 `app_opened`, 30 others), so frequent `app_opened` rows cannot push an upload out of view.
+
+`upload_failed.failure_reason` — one coarse category, never a file name, path or error text:
+
+| Reason | Meaning | What the student is told |
+|---|---|---|
+| `picker` | the file picker failed, or copying the picked file failed (before anything was sent). Cancelling is **not** a failure and records nothing | choose a PDF or PowerPoint (.pptx) saved on this device and try again |
+| `request` | the app could not prepare or send the request (before any response), or the request reached the server without the file | try again or choose another file; update the app |
+| `network` | no response: offline, dropped connection, timeout | check the internet connection |
+| `auth` | 401 / 403: not signed in, session expired | sign in again |
+| `not_verified` | 403 `email_not_verified` (only when verification is enforced and the grace period is over) | confirm the email address |
+| `limit` | 402: the plan's limit (the paywall opens) | the limit message |
+| `rate_limited` | 429 | wait and try again |
+| `too_large` | 413 (the app's limit, or the edge's) | the size limit |
+| `not_pdf` | 415: any unsupported file type (including old .ppt) | what is supported |
+| `server` | 5xx | try again in a moment |
+| `unknown` | anything else | try again |
+
+The first five existing values (`network`, `too_large`, `not_pdf`, `server`, `unknown`) keep their meaning.
+
+**Reading a trace.** `upload_started` is sent when a file has been picked, before the request. `upload_started` then `upload_succeeded` is a success. `upload_failed` with `picker` and **no** `upload_started` means the picker failed. `upload_started` with neither a later `upload_failed` nor `upload_succeeded` means the connection dropped (see below) or the app was closed mid-upload. No upload events at all: no file was picked (cancelled, or the picker offered nothing) or the app never reached that screen.
+
+**Limitation (deliberate).** `upload_failed` is sent once, best-effort, as the failure happens. If the network is down at that moment the event is lost. No retry or on-device queue was added: events carry no id, so a retry after a timeout could record the same failure twice, and unsent events kept in client storage are not reliable (cleared by the OS, lost on reinstall, shared between sessions). The pattern above (a started upload with no outcome) is the signal for this case. The API logs also show every upload request that arrives (`<-- POST /documents` and its status); an upload that never reaches the API leaves nothing there, and Cloudflare edge rejections are not in the app logs.
+
+**Read-only query** (Render Shell, `psql`; replace the address):
+
+```sql
+select e.created_at, e.name, e.properties->>'platform' as platform, e.properties->>'failure_reason' as reason
+from analytics_events e join users u on u.id = e.user_id
+where u.email = '<customer email>' and e.name in ('upload_started','upload_failed','upload_succeeded','app_opened')
+order by e.created_at;
+```
+
+Across all customers: `select properties->>'platform' as platform, properties->>'failure_reason' as reason, count(*) from analytics_events where name = 'upload_failed' group by 1, 2 order by 3 desc;`

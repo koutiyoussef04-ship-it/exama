@@ -534,7 +534,18 @@ export async function customerDetail(userId: string): Promise<AdminCustomerDetai
       from usage_ledger where user_id = ${userId}::uuid and created_at > now() - interval '12 months' group by 1, 2 order by 1 desc, 2`),
     rows(sql`select feature, count(*) as calls, coalesce(sum(input_tokens), 0) as input, coalesce(sum(output_tokens), 0) as output, coalesce(sum(estimated_cost_micro_usd), 0) as cost
       from ai_usage where user_id = ${userId}::uuid group by 1 order by cost desc`),
-    rows(sql`select name, source, created_at, properties from analytics_events where user_id = ${userId}::uuid order by created_at desc limit 50`),
+    // Recent events: upload events and app_opened each get their own quota, so frequent app_opened rows (or any other chatty event)
+    // can't push an upload failure out of view. Up to 30 upload events + 10 app_opened + 30 others, newest first.
+    rows(sql`
+      (select name, source, created_at, properties from analytics_events where user_id = ${userId}::uuid
+         and (left(name, 7) = 'upload_' or left(name, 16) = 'material_upload_') order by created_at desc limit 30)
+      union all
+      (select name, source, created_at, properties from analytics_events where user_id = ${userId}::uuid
+         and name = 'app_opened' order by created_at desc limit 10)
+      union all
+      (select name, source, created_at, properties from analytics_events where user_id = ${userId}::uuid
+         and name <> 'app_opened' and left(name, 7) <> 'upload_' and left(name, 16) <> 'material_upload_' order by created_at desc limit 30)
+      order by created_at desc`),
     rows(sql`select ${sql.join(
       (['all', '7', '30'] as const).map((w) => {
         const f = w === 'all' ? sql`true` : sql`created_at > now() - ${`${w} days`}::interval`;

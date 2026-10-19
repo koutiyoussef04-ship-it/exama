@@ -7,7 +7,7 @@
 import type { ClientEventName, ClientEventProperties } from '@study/shared';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { api, ApiError } from './api';
+import { api } from './api';
 
 const ANON_KEY = 'analytics_anon_id';
 let anonId: string | null = null;
@@ -60,12 +60,4 @@ export function trackOnce<N extends ClientEventName>(key: string, name: N, prope
   track(name, properties);
 }
 
-/** Coarse, non-identifying category for a failed upload. */
-export function uploadFailureReason(err: unknown): 'network' | 'too_large' | 'not_pdf' | 'server' | 'unknown' {
-  if (!(err instanceof ApiError)) return 'unknown';
-  if (err.status === 0) return 'network';
-  if (err.status === 413) return 'too_large';
-  if (err.status === 415) return 'not_pdf';
-  if (err.status >= 500) return 'server';
-  return 'unknown';
-}
+export { uploadFailureReason } from './upload-failure';
