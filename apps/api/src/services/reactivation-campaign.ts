@@ -452,13 +452,13 @@ export async function recordClick(sendId: string, opts: { userAgent?: string | n
     const [{ n }] = await pg<{ n: number }[]>`select count(*)::int as n from email_campaign_clicks where send_id = ${sendId}`;
     if (n < 25) await db.insert(emailCampaignClicks).values({ sendId, suspectedBot: !opts.userAgent || BOT_UA.test(opts.userAgent) });
   }
-  return appUrl(row.target, row.step as Step, row.segment, row.variant as Variant);
+  return appUrl(row.target, row.step as Step, row.segment as Segment, row.variant as Variant);
 }
 
 // ---------------------------------------------------------------- delivery status and suppression
 
 /** Reads each sent email's latest event back from Resend; hard bounces and complaints go to the suppression list. */
-export async function syncDelivery(opts: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {}): Promise<{ checked: number; updated: number; suppressed: number; stopped?: string }> {
+export async function syncDelivery(opts: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void>; campaign?: string } = {}): Promise<{ checked: number; updated: number; suppressed: number; stopped?: string }> {
   const out = { checked: 0, updated: 0, suppressed: 0 } as { checked: number; updated: number; suppressed: number; stopped?: string };
   if (config.EMAIL_PROVIDER !== 'resend' || !config.RESEND_API_KEY) return { ...out, stopped: 'EMAIL_PROVIDER is not resend' };
   const f = opts.fetchImpl ?? fetch;
@@ -466,7 +466,7 @@ export async function syncDelivery(opts: { fetchImpl?: typeof fetch; sleep?: (ms
   const rows = await pg<{ id: string; message_id: string; email: string }[]>`
     select s.id, s.provider_message_id as message_id, u.email
     from email_campaign_sends s join users u on u.id = s.user_id
-    where s.campaign = ${CAMPAIGN} and s.status = 'sent' and s.provider_message_id is not null
+    where s.campaign = ${opts.campaign ?? CAMPAIGN} and s.status = 'sent' and s.provider_message_id is not null
       and (s.delivery_status is null or s.delivery_status not in ('bounced', 'complained'))
       and s.sent_at > now() - interval '10 days'`;
   for (const r of rows) {

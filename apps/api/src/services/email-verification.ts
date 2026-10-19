@@ -10,6 +10,10 @@
  *                        send says so and doesn't use up the cooldown.
  *   request(email)     → the same for a signed-out student: always the same answer, whether or not
  *                        the email has an account (or is already verified), so it reveals nothing.
+ *   reminder (operator)→ one reminder email for an account that never confirmed, sent only by the operator CLI
+ *                        (services/verification-reminders.ts, scripts/verification-reminders.ts). Same link, same
+ *                        24-hour single-use token, same cooldown: it goes through the same `issueToken`. It never
+ *                        marks anything verified; only the student opening the link does.
  *
  * Only an HMAC (keyed with JWT_SECRET) of the 32-byte random token is stored; tokens are never logged.
  *
@@ -72,7 +76,9 @@ export const verificationAvailable = () => config.EMAIL_PROVIDER !== 'disabled' 
 
 // ---------- Email ----------
 
-const EMAIL: Record<Language, { subject: string; intro: string; button: string; outro: (h: number) => string }> = {
+type EmailCopy = { subject: string; intro: string; button: string; outro: (h: number) => string };
+
+const EMAIL: Record<Language, EmailCopy> = {
   en: {
     subject: 'Confirm your email for Exama',
     intro: 'Welcome to Exama! Please confirm that this is your email address:',
@@ -99,11 +105,42 @@ const EMAIL: Record<Language, { subject: string; intro: string; button: string; 
   },
 };
 
+/**
+ * The one reminder for an account that never confirmed (operator CLI only). Same button, link and expiry as the
+ * sign-up email, and nothing else in it: no study plan, no offer, no "come back". It says it is the only reminder.
+ */
+const REMINDER: Record<Language, EmailCopy> = {
+  en: {
+    subject: 'Reminder: confirm your email for Exama',
+    intro: 'You created an Exama account, but this email address isn’t confirmed yet. Please confirm that it’s yours:',
+    button: EMAIL.en.button,
+    outro: (h) => `The link works once and expires in ${h} hours. This is the only reminder we’ll send. If you didn’t create an Exama account, you can ignore this email.`,
+  },
+  fr: {
+    subject: 'Rappel : confirmez votre adresse e-mail pour Exama',
+    intro: 'Vous avez créé un compte Exama, mais cette adresse e-mail n’est pas encore confirmée. Confirmez qu’elle est bien la vôtre :',
+    button: EMAIL.fr.button,
+    outro: (h) => `Le lien ne fonctionne qu’une fois et expire dans ${h} heures. Ce rappel est le seul que nous enverrons. Si vous n’avez pas créé de compte Exama, ignorez cet e-mail.`,
+  },
+  es: {
+    subject: 'Recordatorio: confirma tu correo para Exama',
+    intro: 'Creaste una cuenta de Exama, pero esta dirección de correo aún no está confirmada. Confirma que es tuya:',
+    button: EMAIL.es.button,
+    outro: (h) => `El enlace funciona una sola vez y caduca en ${h} horas. Este es el único recordatorio que enviaremos. Si no creaste una cuenta de Exama, ignora este correo.`,
+  },
+  ar: {
+    subject: 'تذكير: أكّد بريدك الإلكتروني في Exama',
+    intro: 'لقد أنشأت حسابًا في Exama، لكن هذا البريد الإلكتروني لم يتم تأكيده بعد. يُرجى تأكيد أنه بريدك:',
+    button: EMAIL.ar.button,
+    outro: (h) => `يعمل الرابط مرة واحدة فقط وتنتهي صلاحيته بعد ${h} ساعة. هذا هو التذكير الوحيد الذي سنرسله. إذا لم تُنشئ حسابًا في Exama، فتجاهل هذه الرسالة.`,
+  },
+};
+
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 export const verificationLink = (token: string) => `${config.WEB_APP_URL}/verify-email#token=${token}`;
 
-function verificationEmail(to: string, token: string, language: Language) {
-  const t = EMAIL[language] ?? EMAIL.en;
+function verificationEmail(to: string, token: string, language: Language, copy: Record<Language, EmailCopy> = EMAIL) {
+  const t = copy[language] ?? copy.en;
   const link = verificationLink(token);
   const outro = t.outro(EMAIL_VERIFICATION_TTL_HOURS);
   const text = `${t.intro}\n\n${link}\n\n${outro}`;
@@ -116,6 +153,9 @@ function verificationEmail(to: string, token: string, language: Language) {
     `<p style="font-size:14px;color:#646A7E">${escapeHtml(outro)}</p></div>`;
   return { to, subject: t.subject, text, html };
 }
+
+/** The reminder email (operator CLI and its previews). */
+export const verificationReminderEmail = (to: string, token: string, language: Language) => verificationEmail(to, token, language, REMINDER);
 
 // ---------- State ----------
 
@@ -255,6 +295,40 @@ export async function requestVerification(email: string, language: Language, cli
     await forget(issued.id).catch(() => {});
   });
   return fresh;
+}
+
+/** What happened to one operator reminder. Anything but `sent` means nothing was emailed and no link is left behind. */
+export type VerificationReminderResult =
+  | { status: 'sent'; id: string | null }
+  | { status: 'already_verified' | 'unavailable' | 'cooldown' | 'rate_limited' | 'not_found' }
+  | { status: 'failed'; error: string };
+
+/**
+ * Operator only (services/verification-reminders.ts): one reminder with a new link for an account that never
+ * confirmed. The same rules as every other link: a new token that replaces older ones, the 60-second cooldown
+ * (stored in the database, so it holds across processes), the per-account hourly limit, and a failed send removes
+ * the token again. Never marks the email verified.
+ */
+export async function sendVerificationReminder(userId: string, language: Language, opts: { now?: number; idempotencyKey?: string; tags?: { name: string; value: string }[] } = {}): Promise<VerificationReminderResult> {
+  const now = opts.now ?? Date.now();
+  const [u] = await db.select(accountColumns).from(users).where(eq(users.id, userId));
+  if (!u) return { status: 'not_found' };
+  if (u.emailVerifiedAt) return { status: 'already_verified' };
+  if (!verificationAvailable()) return { status: 'unavailable' };
+  const issued = await issueToken(u.id, now);
+  if (!('token' in issued)) return { status: 'cooldown' };
+  if (!emailLimiter.tryTake(u.id, now)) {
+    await forget(issued.id);
+    return { status: 'rate_limited' };
+  }
+  try {
+    const { id } = await sendMail({ ...verificationReminderEmail(u.email, issued.token, language), idempotencyKey: opts.idempotencyKey, tags: opts.tags });
+    return { status: 'sent', id };
+  } catch (err) {
+    logFailure(err);
+    await forget(issued.id);
+    return { status: 'failed', error: err instanceof Error ? err.message : 'unknown error' };
+  }
 }
 
 // ---------- Verifying ----------

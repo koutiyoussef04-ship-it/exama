@@ -463,7 +463,7 @@ async function planForToday(userId: string, p: PlanRow, title: string, now: Date
  *    app signed out and signs up in that same session has only a signed-out one — the cause of no reminders
  *    being sent on 2026-10-18. Events of other accounts are never used.
  */
-async function deviceSignals(userId: string): Promise<{ language: Lang | null; timeZone: string | null }> {
+export async function deviceSignals(userId: string): Promise<{ language: Lang | null; timeZone: string | null }> {
   let language: Lang | null = null;
   let timeZone: string | null = null;
   const take = (events: { properties: Record<string, unknown> }[]) => {

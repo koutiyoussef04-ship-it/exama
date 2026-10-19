@@ -16,7 +16,7 @@ Code: `apps/api/src/services/reactivation-campaign.ts` (who and how), `reactivat
 
 All checked from the database on every run; anything unclear means no email.
 
-- confirmed address; study emails still on (`users.study_reminder_emails` — the unsubscribe link switches it off); not on the suppression list;
+- confirmed address (an unconfirmed address is never emailed by the campaign; to reach those accounts there is a separate one-off, non-marketing reminder to confirm: `verification-reminder.md`); study emails still on (`users.study_reminder_emails` — the unsubscribe link switches it off); not on the suppression list;
 - adult age group (18+). Under 18 and “no age group given” are left out;
 - Free and never paid (the same `billingEligibility` the daily reminders use, fail closed): no owners, nobody with access now (paid, store or web trial, cancelled but not ended), nobody who started a web checkout. Former subscribers are held out unless `--include-lapsed`;
 - account at least 3 days old and no app opening in the last 7 days; no other Exama email (daily reminder, other campaign) in the last 7 days;

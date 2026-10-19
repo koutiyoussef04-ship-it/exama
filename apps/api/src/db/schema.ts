@@ -77,7 +77,8 @@ export const emailCampaignSends = pgTable(
     campaign: text('campaign').notNull(),
     step: integer('step').notNull(),
     userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    segment: text('segment').$type<'has_plan' | 'no_plan'>().notNull(),
+    /** Audience of the email; `unverified` = the one-off verification reminder (services/verification-reminders.ts). */
+    segment: text('segment').$type<'has_plan' | 'no_plan' | 'unverified'>().notNull(),
     /** Which version of the email this person got (e.g. exam_upcoming, exam_passed, course_ready, no_course). */
     variant: text('variant').notNull(),
     language: text('language').notNull(),

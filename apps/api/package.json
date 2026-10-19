@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --env-file=.env --test test/flow.test.ts test/anthropic.test.ts test/anthropic-flow.test.ts test/ai-response-limits.test.ts test/config.test.ts test/analytics.test.ts test/billing.test.ts test/account.test.ts test/multilingual.test.ts test/apple.test.ts test/apple-verifier.test.ts test/password-reset.test.ts test/onboarding.test.ts test/email-verification.test.ts test/email-verification-enforced.test.ts test/age-range.test.ts test/flashcards.test.ts test/google-billing.test.ts test/plans.test.ts test/pptx.test.ts test/planner.test.ts test/study-plan.test.ts test/materials.test.ts test/media.test.ts test/assemblyai.test.ts test/email-hold.test.ts test/study-reminders.test.ts test/exam-duration.test.ts test/reactivation-campaign.test.ts",
+    "test": "tsx --env-file=.env --test test/flow.test.ts test/anthropic.test.ts test/anthropic-flow.test.ts test/ai-response-limits.test.ts test/config.test.ts test/analytics.test.ts test/billing.test.ts test/account.test.ts test/multilingual.test.ts test/apple.test.ts test/apple-verifier.test.ts test/password-reset.test.ts test/onboarding.test.ts test/email-verification.test.ts test/email-verification-enforced.test.ts test/age-range.test.ts test/flashcards.test.ts test/google-billing.test.ts test/plans.test.ts test/pptx.test.ts test/planner.test.ts test/study-plan.test.ts test/materials.test.ts test/media.test.ts test/assemblyai.test.ts test/email-hold.test.ts test/study-reminders.test.ts test/exam-duration.test.ts test/reactivation-campaign.test.ts test/verification-reminders.test.ts",
     "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
     "transcription:check": "tsx --env-file=.env scripts/transcription-check.ts",
     "analytics:report": "tsx --env-file=.env scripts/analytics-report.ts",
@@ -18,6 +18,8 @@
     "account:release-email": "tsx --env-file=.env scripts/release-email-hold.ts",
     "campaign:reactivation": "tsx --env-file=.env scripts/reactivation-campaign.ts",
     "campaign:reactivation:prod": "tsx scripts/reactivation-campaign.ts",
+    "campaign:verification-reminder": "tsx --env-file=.env scripts/verification-reminders.ts",
+    "campaign:verification-reminder:prod": "tsx scripts/verification-reminders.ts",
     "db:migrate:prod": "tsx src/db/migrate.ts"
   },
   "dependencies": {
