@@ -6,7 +6,7 @@
  * material introduces are merged into documents.topics, so mastery, weak topics and the planner
  * pick them up. Processing runs in the background (./pipeline.ts); the app polls the status.
  */
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Readable } from 'node:stream';
 import {
   MAX_MATERIALS_PER_COURSE,
@@ -340,9 +340,16 @@ export async function prepareCourseDeletion(documentId: string): Promise<string[
   return rows.map((r) => r.fileKey).filter((k): k is string => !!k);
 }
 
-/** Called before an account is deleted: stop that user's jobs (their files go with the user folder). */
+/**
+ * Called before an account is deleted: stop the jobs of that user's PERSONAL courses (their files go with the
+ * user folder). Materials of organization courses keep processing: they belong to the organization.
+ */
 export async function cancelUserMaterialJobs(userId: string): Promise<void> {
-  const rows = await db.select({ id: courseMaterials.id }).from(courseMaterials).where(eq(courseMaterials.userId, userId));
+  const rows = await db
+    .select({ id: courseMaterials.id })
+    .from(courseMaterials)
+    .innerJoin(documents, eq(documents.id, courseMaterials.documentId))
+    .where(and(eq(courseMaterials.userId, userId), isNull(documents.organizationId)));
   rows.forEach((r) => materialJobs.cancel(r.id));
 }
 

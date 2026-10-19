@@ -544,12 +544,13 @@ export async function runStudyReminders(now = new Date(), opts: { userIds?: stri
   try {
     // Accounts with a confirmed address, reminders on and exactly one course (all of the user's documents
     // count, like the plan's course limit).
-    const courseCounts = db.select({ userId: documents.userId, n: count().as('n') }).from(documents).groupBy(documents.userId).as('course_counts');
+    // Personal courses only: organization courses are not studied by the staff who uploaded them.
+    const courseCounts = db.select({ userId: documents.userId, n: count().as('n') }).from(documents).where(isNull(documents.organizationId)).groupBy(documents.userId).as('course_counts');
     const rows = await db
       .select({ userId: users.id, email: users.email, name: users.name, doc: { id: documents.id, title: documents.title, status: documents.status, aiLanguage: documents.aiLanguage, summaryLanguage: documents.summaryLanguage }, plan: studyPlans })
       .from(users)
       .innerJoin(courseCounts, and(eq(courseCounts.userId, users.id), eq(courseCounts.n, 1)))
-      .innerJoin(documents, eq(documents.userId, users.id))
+      .innerJoin(documents, and(eq(documents.userId, users.id), isNull(documents.organizationId)))
       .leftJoin(studyPlans, eq(studyPlans.documentId, documents.id))
       .where(
         and(

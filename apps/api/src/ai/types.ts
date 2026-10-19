@@ -50,7 +50,22 @@ export type GenerateQuestionsInput = {
   language: string;
   /** Questions already in this exam (top-up request): the model must not repeat them. */
   avoid?: string[];
+  /** Organizations: multiple-choice only (4 options), no short answers. Default: the usual 60/40 mix. */
+  mcqOnly?: boolean;
 };
+
+/** A generated question plus the one passage it was located in, for the verifier. */
+export type QuestionToVerify = {
+  id: string;
+  prompt: string;
+  options: string[] | null;
+  correctAnswer: string;
+  explanation: string;
+  /** The passage (one chunk) the supporting quote was found in. */
+  passage: string;
+};
+/** supported: the passage states what the keyed answer says · partial: only partly · unsupported: not, or contradicted. */
+export type QuestionVerification = { id: string; verdict: 'supported' | 'partial' | 'unsupported'; note: string };
 
 export type ShortAnswerToGrade = {
   id: string;
@@ -134,4 +149,9 @@ export interface StudyAI {
   extractKnowledge(input: KnowledgeExtractionInput): Promise<KnowledgeExtraction>;
   /** Question → answer flashcards from the material (validated and grounded by the caller). */
   generateFlashcards(input: GenerateFlashcardsInput): Promise<GeneratedFlashcard[]>;
+  /**
+   * Organizations' question bank: does each passage really support the keyed answer (and only it)?
+   * Advisory — the result is shown to the reviewer, it never approves anything.
+   */
+  verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]>;
 }

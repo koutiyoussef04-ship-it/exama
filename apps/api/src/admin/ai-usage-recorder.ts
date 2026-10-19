@@ -15,6 +15,7 @@ export function recordAIUsage(r: AIUsageReport, ctx: AIUsageContext): void {
     .insert(aiUsage)
     .values({
       userId: ctx.userId,
+      organizationId: ctx.organizationId ?? null,
       feature: ctx.feature,
       provider: r.provider,
       model: r.model,

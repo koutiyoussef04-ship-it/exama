@@ -101,7 +101,7 @@ test('invalid values are refused and leave nothing behind', async () => {
 test('the age group never leaves the server: not in sign-up/sign-in/me answers, not in analytics', async () => {
   const e = email('private');
   const r = await register({ email: e, password: 'password123', name: 'Ada', ageRange: '13_17' });
-  assert.deepEqual(Object.keys(r.body.user).sort(), ['email', 'id', 'name']);
+  assert.deepEqual(Object.keys(r.body.user).sort(), ['accountType', 'email', 'id', 'name', 'organizations']); // account type + memberships (organizations) are the only additions; never the age group
   const me = await app.request('/auth/me', { headers: { Authorization: `Bearer ${r.body.token}` } });
   assert.ok(!(await me.text()).includes('13_17'));
   const login = await app.request('/auth/login', { method: 'POST', body: JSON.stringify({ email: e, password: 'password123' }), headers: { 'Content-Type': 'application/json' } });

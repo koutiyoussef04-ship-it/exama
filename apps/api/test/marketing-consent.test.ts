@@ -383,7 +383,8 @@ async function assertSchema(db: ReturnType<typeof postgresModule.default>) {
 
 test('migration 0021 on a FRESH database: all migrations apply in order and consent starts absent', async () => {
   const journal = JSON.parse(await readFile(join(DRIZZLE, 'meta/_journal.json'), 'utf8')) as { entries: { tag: string }[] };
-  assert.equal(journal.entries.at(-1)!.tag, '0021_marketing_consent');
+  // 0021 is in the journal, after 0020 (later migrations, e.g. 0022_organizations, may follow it).
+  assert.ok(journal.entries.findIndex((e) => e.tag === '0021_marketing_consent') === journal.entries.findIndex((e) => e.tag === '0020_reactivation_campaign') + 1);
   await withTempDatabase(async (connect) => {
     const db = connect();
     await migrate(drizzle(db), { migrationsFolder: DRIZZLE });
@@ -397,13 +398,16 @@ test('migration 0021 on a FRESH database: all migrations apply in order and cons
 test('migration 0021 on an EXISTING database: accounts keep every value, get no consent, and the previous schema keeps working', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'exama-migrations-'));
   try {
-    // The migrations as they were before 0021: everything up to 0020.
+    // The migrations as they were before 0021: everything up to 0020 (0021 and anything after it removed).
     await cp(DRIZZLE, folder, { recursive: true });
-    await rm(join(folder, '0021_marketing_consent.sql'));
-    await rm(join(folder, 'meta/0021_snapshot.json'));
     const journalPath = join(folder, 'meta/_journal.json');
-    const journal = JSON.parse(await readFile(journalPath, 'utf8')) as { entries: { tag: string }[] };
-    journal.entries = journal.entries.filter((e) => e.tag !== '0021_marketing_consent');
+    const journal = JSON.parse(await readFile(journalPath, 'utf8')) as { entries: { tag: string; idx: number }[] };
+    const first = journal.entries.find((e) => e.tag === '0021_marketing_consent')!;
+    for (const e of journal.entries.filter((e) => e.idx >= first.idx)) {
+      await rm(join(folder, `${e.tag}.sql`));
+      await rm(join(folder, `meta/${e.tag.slice(0, 4)}_snapshot.json`));
+    }
+    journal.entries = journal.entries.filter((e) => e.idx < first.idx);
     await writeFile(journalPath, JSON.stringify(journal));
 
     await withTempDatabase(async (connect) => {

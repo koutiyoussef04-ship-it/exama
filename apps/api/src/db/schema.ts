@@ -1,8 +1,31 @@
-import type { AgeRange, BillingEnvironment, FlashcardResult, MarketingConsentSource, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
+import type {
+  AccountType,
+  AgeRange,
+  BankItemStatus,
+  BankItemType,
+  BillingEnvironment,
+  Difficulty,
+  FlashcardResult,
+  LegalRef,
+  MarketingConsentSource,
+  MaterialFormat,
+  MaterialKnowledge,
+  OnboardingAnswers,
+  OrganizationLimits,
+  OrganizationMarket,
+  OrganizationRole,
+  PlanId,
+  PreparedLevel,
+  ReviewFlag,
+  StudyMinutes,
+  TopicInsight,
+  Verification,
+} from '@study/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -54,6 +77,12 @@ export const users = pgTable('users', {
   marketingConsentLanguage: text('marketing_consent_language'),
   /** Where it was given: `signup` or `account`. Set by the server. */
   marketingConsentSource: text('marketing_consent_source').$type<MarketingConsentSource>(),
+  /**
+   * student (the existing app; every account created before organizations existed) or organization
+   * (opens the organization workspace). Chosen at sign-up, enforced by the server; access to an
+   * organization's data always comes from organization_members, never from this value.
+   */
+  accountType: text('account_type').$type<AccountType>().notNull().default('student'),
 }, (t) => [
   check('users_age_range_check', sql`${t.ageRange} is null or ${t.ageRange} in ('13_17', '18_24', '25_34', '35_plus')`),
   // All four consent columns are NULL (no consent) or all set with valid values: a half-written or invented consent can't exist.
@@ -62,6 +91,7 @@ export const users = pgTable('users', {
     sql`(${t.marketingConsentAt} is null and ${t.marketingConsentVersion} is null and ${t.marketingConsentLanguage} is null and ${t.marketingConsentSource} is null)
       or (${t.marketingConsentAt} is not null and ${t.marketingConsentVersion} is not null and ${t.marketingConsentLanguage} in ('en', 'es', 'fr', 'ar') and ${t.marketingConsentSource} in ('signup', 'account'))`,
   ),
+  check('users_account_type_check', sql`${t.accountType} in ('student', 'organization')`),
   // Signups over time (admin dashboard).
   index('users_created_idx').on(t.createdAt),
 ]);
@@ -238,12 +268,57 @@ export const passwordResetCodes = pgTable(
   (t) => [index('password_reset_codes_user_idx').on(t.userId)],
 );
 
-/** An uploaded piece of course material (a PDF for now). */
+// ---------------- Organizations (B2B) ----------------
+
+/**
+ * A training provider or an oposiciones academy. The tenant of every organization-owned row
+ * (courses, question bank, usage). Created by an organization sign-up or by an organization account;
+ * deleting one is an owner-only operation, never a cascade from a user.
+ */
+export const organizations = pgTable(
+  'organizations',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    market: text('market').$type<OrganizationMarket>().notNull(),
+    status: text('status').$type<'active' | 'suspended'>().notNull().default('active'),
+    /** Per-organization allowances (see billing/org-limits.ts for the defaults applied when null). */
+    limits: jsonb('limits').$type<Partial<OrganizationLimits>>().notNull().default({}),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('organizations_market_check', sql`${t.market} in ('training_provider', 'academy')`)],
+);
+
+/** Who belongs to an organization and what they may do there. Leaving or deleting an account removes only the membership. */
+export const organizationMembers = pgTable(
+  'organization_members',
+  {
+    organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').$type<OrganizationRole>().notNull(),
+    addedBy: uuid('added_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.userId] }),
+    index('organization_members_user_idx').on(t.userId),
+    check('organization_members_role_check', sql`${t.role} in ('admin', 'editor', 'reviewer')`),
+  ],
+);
+
+/**
+ * An uploaded piece of course material (a PDF or PowerPoint). Personal course: user_id set, organization_id
+ * null. Organization course: organization_id set; user_id is only who uploaded it and becomes null when
+ * that account is deleted (the course stays with the organization).
+ */
 export const documents = pgTable(
   'documents',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'restrict' }),
     title: text('title').notNull(),
     fileKey: text('file_key').notNull(),
     mimeType: text('mime_type').notNull(),
@@ -266,7 +341,13 @@ export const documents = pgTable(
     baseTopics: jsonb('base_topics').$type<string[]>(),
     createdAt: createdAt(),
   },
-  (t) => [index('documents_user_idx').on(t.userId)],
+  (t) => [
+    index('documents_user_idx').on(t.userId),
+    index('documents_organization_idx').on(t.organizationId, t.createdAt),
+    // Lets child tables reference (id, organization_id): a bank item can only point at a course of its own organization.
+    uniqueIndex('documents_id_organization_uq').on(t.id, t.organizationId),
+    check('documents_owner_check', sql`${t.organizationId} is not null or ${t.userId} is not null`),
+  ],
 );
 
 /**
@@ -305,9 +386,8 @@ export const courseMaterials = pgTable(
     documentId: uuid('document_id')
       .notNull()
       .references(() => documents.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Who added it. Null once that account is deleted while the course belongs to an organization. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     kind: materialKind('kind').notNull(),
     format: text('format').$type<MaterialFormat>().notNull(),
     title: text('title').notNull(),
@@ -526,6 +606,8 @@ export const usageKind = pgEnum('usage_kind', [
   'study_plan_generation',
   'media_upload',
   'media_minutes',
+  /** Organizations: AI-generated draft questions (amount = questions kept). */
+  'bank_items',
 ]);
 
 /**
@@ -536,14 +618,19 @@ export const usageLedger = pgTable(
   'usage_ledger',
   {
     id: id(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    /** The student (personal usage), or the staff member who acted for an organization (null once deleted). */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Set for organization usage: counts against the organization's allowance, never the person's plan. */
+    organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
     kind: usageKind('kind').notNull(),
     amount: integer('amount').notNull().default(1),
     createdAt: createdAt(),
   },
-  (t) => [index('usage_user_kind_time_idx').on(t.userId, t.kind, t.createdAt)],
+  (t) => [
+    index('usage_user_kind_time_idx').on(t.userId, t.kind, t.createdAt),
+    index('usage_organization_kind_time_idx').on(t.organizationId, t.kind, t.createdAt),
+    check('usage_ledger_owner_check', sql`${t.userId} is not null or ${t.organizationId} is not null`),
+  ],
 );
 
 // ---------------- Study planner ----------------
@@ -675,7 +762,9 @@ export const aiUsage = pgTable(
   {
     id: id(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
-    /** document_processing | exam_generation | practice_generation | grading | study_plan | flashcards | material_processing | unknown */
+    /** Set when the call was made for an organization (cost per customer). */
+    organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+    /** document_processing | exam_generation | practice_generation | grading | study_plan | flashcards | material_processing | bank_generation | bank_verification | unknown */
     feature: text('feature').notNull(),
     provider: text('provider').notNull(),
     model: text('model').notNull(),
@@ -691,7 +780,11 @@ export const aiUsage = pgTable(
     pricingVersion: text('pricing_version'),
     createdAt: createdAt(),
   },
-  (t) => [index('ai_usage_time_idx').on(t.createdAt), index('ai_usage_user_time_idx').on(t.userId, t.createdAt)],
+  (t) => [
+    index('ai_usage_time_idx').on(t.createdAt),
+    index('ai_usage_user_time_idx').on(t.userId, t.createdAt),
+    index('ai_usage_organization_time_idx').on(t.organizationId, t.createdAt),
+  ],
 );
 
 /**
@@ -712,4 +805,114 @@ export const adminAuditLog = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('admin_audit_time_idx').on(t.createdAt), index('admin_audit_actor_time_idx').on(t.actorUserId, t.createdAt)],
+);
+
+// ---------------- Question bank (organizations) ----------------
+
+/**
+ * A reusable question owned by an organization. Written as `draft` by the AI (or by hand), reviewed by a
+ * person, then approved / rejected / retired. Edits create a new version (see bank_item_revisions) and send
+ * the item back to draft. The composite foreign key keeps every item inside its own organization's courses.
+ */
+export const bankItems = pgTable(
+  'bank_items',
+  {
+    id: id(),
+    organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id').notNull(),
+    type: questionType('type').notNull(),
+    topic: text('topic').notNull(),
+    /** Optional unit label staff organize by ("Tema 12", "Module 3"). */
+    section: text('section'),
+    stem: text('stem').notNull(),
+    options: jsonb('options').$type<string[] | null>(),
+    correctAnswer: text('correct_answer').notNull(),
+    explanation: text('explanation').notNull().default(''),
+    difficulty: text('difficulty').$type<Difficulty>(),
+    status: text('status').$type<BankItemStatus>().notNull().default('draft'),
+    version: integer('version').notNull().default(1),
+    origin: text('origin').$type<'ai' | 'manual'>().notNull(),
+    /** Server-set review flags (see @study/shared REVIEW_FLAGS). */
+    reviewFlags: jsonb('review_flags').$type<ReviewFlag[]>().notNull().default([]),
+    /** Advisory verifier result (does the passage support the keyed answer?). Never approves anything. */
+    verification: jsonb('verification').$type<Verification>(),
+    /** Legal source metadata entered by staff (academy market). */
+    legalRef: jsonb('legal_ref').$type<LegalRef>(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewNote: text('review_note'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_items_id_organization_uq').on(t.id, t.organizationId),
+    index('bank_items_org_doc_status_idx').on(t.organizationId, t.documentId, t.status),
+    index('bank_items_org_topic_idx').on(t.organizationId, t.topic),
+    foreignKey({ name: 'bank_items_document_fk', columns: [t.documentId, t.organizationId], foreignColumns: [documents.id, documents.organizationId] }).onDelete('cascade'),
+    check('bank_items_status_check', sql`${t.status} in ('draft', 'approved', 'rejected', 'retired')`),
+    check('bank_items_origin_check', sql`${t.origin} in ('ai', 'manual')`),
+    check('bank_items_difficulty_check', sql`${t.difficulty} is null or ${t.difficulty} in ('easy', 'medium', 'hard')`),
+  ],
+);
+
+/**
+ * Where a bank item's supporting quote was found. The chunk id can disappear (a course is reprocessed);
+ * the quote, page/time range and chunk hash remain, so the reference can be checked later.
+ * `located` false = the quote matched the material only across passages: no page or offsets are claimed.
+ */
+export const questionSources = pgTable(
+  'question_sources',
+  {
+    id: id(),
+    organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    bankItemId: uuid('bank_item_id').notNull(),
+    documentId: uuid('document_id').notNull().references(() => documents.id, { onDelete: 'cascade' }),
+    materialId: uuid('material_id').references(() => courseMaterials.id, { onDelete: 'set null' }),
+    chunkId: uuid('chunk_id').references(() => documentChunks.id, { onDelete: 'set null' }),
+    chunkHash: text('chunk_hash').notNull(),
+    pageStart: integer('page_start'),
+    pageEnd: integer('page_end'),
+    startSeconds: integer('start_s'),
+    endSeconds: integer('end_s'),
+    quote: text('quote').notNull(),
+    quoteStart: integer('quote_start'),
+    quoteEnd: integer('quote_end'),
+    matchScore: real('match_score').notNull(),
+    located: boolean('located').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('question_sources_item_idx').on(t.bankItemId),
+    foreignKey({ name: 'question_sources_item_fk', columns: [t.bankItemId, t.organizationId], foreignColumns: [bankItems.id, bankItems.organizationId] }).onDelete('cascade'),
+  ],
+);
+
+/** Append-only snapshot of every version of a bank item (what an export delivered can always be reproduced). */
+export const bankItemRevisions = pgTable(
+  'bank_item_revisions',
+  {
+    bankItemId: uuid('bank_item_id').notNull().references(() => bankItems.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.bankItemId, t.version] })],
+);
+
+/** Who did what to a bank item (generated, created, edited, approved, rejected, retired, reopened). */
+export const bankItemEvents = pgTable(
+  'bank_item_events',
+  {
+    id: id(),
+    organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+    bankItemId: uuid('bank_item_id').notNull().references(() => bankItems.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    version: integer('version').notNull(),
+    note: text('note'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bank_item_events_org_time_idx').on(t.organizationId, t.createdAt), index('bank_item_events_item_idx').on(t.bankItemId)],
 );

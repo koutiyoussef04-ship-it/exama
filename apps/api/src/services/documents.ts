@@ -32,16 +32,22 @@ export const toDetail = (d: DocumentRow): DocumentDetail => ({
   sourceLanguage: d.sourceLanguage,
 });
 
+/** The student's own (personal) courses. Organization courses never appear here, even for the staff member who uploaded them. */
 export async function listDocuments(userId: string) {
-  const rows = await db.select().from(documents).where(eq(documents.userId, userId)).orderBy(desc(documents.createdAt));
+  const rows = await db
+    .select()
+    .from(documents)
+    .where(and(eq(documents.userId, userId), isNull(documents.organizationId)))
+    .orderBy(desc(documents.createdAt));
   return rows.map(toSummary);
 }
 
+/** A personal course of this student, or 404. Organization courses are reached only through services/org-documents.ts. */
 export async function getOwnedDocument(userId: string, id: string): Promise<DocumentRow> {
   const [doc] = await db
     .select()
     .from(documents)
-    .where(and(eq(documents.id, id), eq(documents.userId, userId)));
+    .where(and(eq(documents.id, id), eq(documents.userId, userId), isNull(documents.organizationId)));
   if (!doc) throw new HttpError(404, 'Document not found', 'not_found');
   return doc;
 }
@@ -56,12 +62,14 @@ type Tx = Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
 export async function createDocument(
   userId: string,
   file: { name: string; type: string; bytes: Uint8Array },
-  opts: { reserve?: (tx: Tx) => Promise<void>; aiLanguage?: AiLanguage } = {},
+  opts: { reserve?: (tx: Tx) => Promise<void>; aiLanguage?: AiLanguage; organizationId?: string } = {},
 ) {
   const format = await detectDocumentFormat(file.bytes);
 
   const id = crypto.randomUUID();
-  const fileKey = `${userId}/${id}.${format}`;
+  // Organization files live under the organization, never under the uploader: deleting a staff member's
+  // account removes `<userId>/` and must not touch them.
+  const fileKey = opts.organizationId ? `org/${opts.organizationId}/${id}.${format}` : `${userId}/${id}.${format}`;
   await storage.put(fileKey, file.bytes);
   let doc: DocumentRow;
   try {
@@ -72,6 +80,7 @@ export async function createDocument(
         .values({
           id,
           userId,
+          organizationId: opts.organizationId ?? null,
           title: file.name.replace(/\.(pdf|pptx)$/i, '') || 'Untitled',
           fileKey,
           mimeType: MIME_BY_FORMAT[format],
@@ -79,7 +88,8 @@ export async function createDocument(
           aiLanguage: opts.aiLanguage ?? 'en',
         })
         .returning();
-      await tx.insert(courseCreations).values({ userId, documentId: id });
+      // The Free plan's lifetime course count is personal only.
+      if (!opts.organizationId) await tx.insert(courseCreations).values({ userId, documentId: id });
       return row;
     });
   } catch (err) {
@@ -104,7 +114,7 @@ export async function processDocument(documentId: string) {
     const pages = await extractDocumentPages(await storage.get(doc.fileKey), format);
     const chunks = chunkPages(pages);
     if (chunks.length === 0) throw noTextError(format);
-    const analysis = await withAIUsage({ userId: doc.userId, feature: 'document_processing' }, () =>
+    const analysis = await withAIUsage({ userId: doc.userId, organizationId: doc.organizationId, feature: 'document_processing' }, () =>
       studyAI.analyzeDocument(chunks.map((c) => c.content).join('\n\n'), { language: doc.aiLanguage }),
     );
     const summaryLanguage = resolveOutputLanguage(doc.aiLanguage, analysis.sourceLanguage);

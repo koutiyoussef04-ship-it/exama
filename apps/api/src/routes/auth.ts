@@ -22,6 +22,7 @@ import { db } from '../db/client.js';
 import { userOnboarding, users } from '../db/schema.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { deleteAccount } from '../services/account.js';
+import { createOrganization, listMemberships } from '../services/organizations.js';
 import { assertEmailNotHeld } from '../services/email-hold.js';
 import { grantMarketingConsent } from '../services/marketing-consent.js';
 import { getVerificationState, requestVerification, resendVerification, sendVerificationAfterSignup, verifyEmail } from '../services/email-verification.js';
@@ -31,7 +32,7 @@ import { confirmPasswordReset, requestPasswordReset } from '../services/password
 const clientKey = (c: { req: { header: (n: string) => string | undefined } }) =>
   c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'local';
 
-const toUser = (u: typeof users.$inferSelect): User => ({ id: u.id, email: u.email, name: u.name });
+const toUser = (u: typeof users.$inferSelect, organizations: User['organizations'] = []): User => ({ id: u.id, email: u.email, name: u.name, accountType: u.accountType, organizations });
 
 export const authRoutes = new Hono<AuthEnv>()
   .post('/register', async (c) => {
@@ -52,23 +53,31 @@ export const authRoutes = new Hono<AuthEnv>()
     await assertEmailNotHeld(input.email);
     const passwordHash = await hashPassword(input.password);
     // The onboarding row is created with the account (same transaction): only new accounts are ever asked.
-    const user = await db.transaction(async (tx) => {
+    // An organization sign-up also creates the organization and its first admin membership here, so an
+    // organization account never exists without its organization (and vice versa).
+    const { user, organizations } = await db.transaction(async (tx) => {
       // New accounts are asked to confirm their email (see services/email-verification.ts).
       const [created] = await tx
         .insert(users)
-        .values({ email: input.email, name: input.name, passwordHash, emailVerificationRequired: true, ageRange: input.ageRange })
+        .values({ email: input.email, name: input.name, passwordHash, emailVerificationRequired: true, ageRange: input.ageRange, accountType: input.accountType })
         .returning();
+      if (input.accountType === 'organization') {
+        // Staff never see the student questionnaire.
+        await tx.insert(userOnboarding).values({ userId: created.id, status: 'skipped', finishedAt: new Date() }).onConflictDoNothing();
+        const org = await createOrganization(tx, created.id, { name: input.organizationName!, market: input.market! });
+        return { user: created, organizations: [{ id: org.id, name: org.name, market: org.market, role: 'admin' as const }] };
+      }
       await tx.insert(userOnboarding).values({ userId: created.id }).onConflictDoNothing();
       // Marketing consent: only when the client sent an explicit, valid `{ version, language }` (the box was ticked). Omitted, null or false
       // records nothing. Same transaction as the account: no account without its consent, no consent without its account. The time and
       // source are the server's.
       if (input.marketingConsent) await grantMarketingConsent(created.id, input.marketingConsent, 'signup', tx);
-      return created;
+      return { user: created, organizations: [] };
     });
-    void track('signup_completed', user.id, {});
+    void track('signup_completed', user.id, { account_type: user.accountType });
     // In the background: sign-up never waits for, or fails because of, the email.
     void sendVerificationAfterSignup(user, input.language ?? 'en');
-    return c.json<AuthResponse>({ token: await signToken(user.id), user: toUser(user) }, 201);
+    return c.json<AuthResponse>({ token: await signToken(user.id), user: toUser(user, organizations) }, 201);
   })
   .post('/login', async (c) => {
     const input = parseBody(loginSchema, await c.req.json());
@@ -77,7 +86,7 @@ export const authRoutes = new Hono<AuthEnv>()
       throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
     }
     void track('login_completed', user.id, {});
-    return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt), user: toUser(user) });
+    return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt), user: toUser(user, await listMemberships(user.id)) });
   })
   // Forgot password → a one-time code by email. Always 202: never reveals whether the email has an account.
   // `retryAfterSeconds`: how long until another code can be requested (15-minute cooldown per account).
@@ -113,7 +122,7 @@ export const authRoutes = new Hono<AuthEnv>()
   .get('/me', requireAuth, async (c) => {
     const [user] = await db.select().from(users).where(eq(users.id, c.var.userId));
     if (!user) throw new HttpError(401, 'Account no longer exists', 'account_deleted');
-    return c.json<User>(toUser(user));
+    return c.json<User>(toUser(user, await listMemberships(user.id)));
   })
   // Permanently deletes the account and all its data. Requires the current password.
   .delete('/me', requireAuth, async (c) => {

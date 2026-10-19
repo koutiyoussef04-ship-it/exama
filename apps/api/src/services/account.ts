@@ -1,8 +1,10 @@
 /**
  * Account deletion (App Store guideline 5.1.1(v)): removes the account and everything it owns.
  *
- * - users row → cascades to documents, document_chunks, exams, questions, answers,
- *   topic_mastery, subscriptions, usage_ledger and course_creations (all `on delete cascade`).
+ * - personal documents (→ document_chunks, materials, exams, questions, answers, plan) and personal usage_ledger
+ *   rows are deleted first; the users row then cascades to topic_mastery, subscriptions, course_creations, …
+ * - organization data is never touched: organization courses, materials, bank items and usage only lose the
+ *   link to the person (user_id → null); their files live under `org/<id>/`, not under the user folder.
  * - analytics_events keep their anonymous counts but lose the link to the person
  *   (user_id set to null; the random per-install id is also cleared for their events).
  * - uploaded PDFs and lecture recordings: running processing jobs are stopped first, then the user's
@@ -23,7 +25,7 @@ import { stripeBilling } from '../billing/index.js';
 import { cancelStripeBillingForAccountDeletion } from '../billing/stripe-service.js';
 import { db } from '../db/client.js';
 import type { DeleteAccountResult } from '@study/shared';
-import { adminAuditLog, analyticsEvents, users } from '../db/schema.js';
+import { adminAuditLog, analyticsEvents, documents, usageLedger, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { storage } from '../storage/index.js';
 import { holdDeletedEmail } from './email-hold.js';
@@ -60,7 +62,12 @@ export async function deleteAccount(userId: string, password: string): Promise<D
     }
     // The owner's audit trail keeps the access record, but no longer points at the deleted account.
     await tx.update(adminAuditLog).set({ targetUserId: null }).where(eq(adminAuditLog.targetUserId, userId));
-    await tx.delete(users).where(eq(users.id, userId)); // cascades to all user-owned rows
+    // Personal courses and usage are deleted explicitly (their user_id is "set null" on delete, so that an
+    // organization's courses survive a staff member's deletion; a personal row with no owner is refused by a
+    // check constraint, so forgetting this step fails loudly instead of leaving orphans).
+    await tx.delete(documents).where(and(eq(documents.userId, userId), isNull(documents.organizationId))); // cascades to materials, chunks, exams, plan
+    await tx.delete(usageLedger).where(and(eq(usageLedger.userId, userId), isNull(usageLedger.organizationId)));
+    await tx.delete(users).where(eq(users.id, userId)); // cascades to the remaining user-owned rows; organization rows keep their data
     return holdDeletedEmail(tx, user.email);
   });
 

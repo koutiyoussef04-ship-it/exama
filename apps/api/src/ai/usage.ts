@@ -5,9 +5,10 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-export const AI_FEATURES = ['document_processing', 'exam_generation', 'practice_generation', 'grading', 'study_plan', 'flashcards', 'material_processing', 'unknown'] as const;
+export const AI_FEATURES = ['document_processing', 'exam_generation', 'practice_generation', 'grading', 'study_plan', 'flashcards', 'material_processing', 'bank_generation', 'bank_verification', 'unknown'] as const;
 export type AIFeature = (typeof AI_FEATURES)[number];
-export type AIUsageContext = { userId: string | null; feature: AIFeature };
+/** `organizationId`: set when the call is made for an organization (its cost is then attributed to it). */
+export type AIUsageContext = { userId: string | null; feature: AIFeature; organizationId?: string | null };
 
 const store = new AsyncLocalStorage<AIUsageContext>();
 

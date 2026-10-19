@@ -11,6 +11,8 @@ import type {
   GenerateQuestionsInput,
   KnowledgeExtraction,
   KnowledgeExtractionInput,
+  QuestionToVerify,
+  QuestionVerification,
   ShortAnswerGrade,
   ShortAnswerToGrade,
   StudyAI,
@@ -127,7 +129,7 @@ export class MockStudyAI implements StudyAI {
       const topic = topics[i % topics.length] ?? 'General';
       const related = pool.filter((s) => s.toLowerCase().includes(topic.toLowerCase()));
       const fact = related[i % Math.max(related.length, 1)] ?? pool[i % Math.max(pool.length, 1)] ?? `${topic} is covered in the material.`;
-      if (i % 5 < 3 && pool.length >= 4) {
+      if ((input.mcqOnly || i % 5 < 3) && pool.length >= 4) {
         const distractors = pool.filter((s) => s !== fact).slice(i, i + 3);
         while (distractors.length < 3) distractors.push(`None of the material discusses ${topic} (${distractors.length}).`);
         const correct = clip(fact);
@@ -155,6 +157,18 @@ export class MockStudyAI implements StudyAI {
       }
     }
     return out;
+  }
+
+  /** Deterministic verifier: supported when the keyed answer's words are in the passage, otherwise unsupported. */
+  async verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]> {
+    return items.map((it) => {
+      const passage = new Set(words(it.passage));
+      const key = words(it.correctAnswer).filter((w) => !STOP.has(w));
+      const hit = key.filter((w) => passage.has(w)).length;
+      const ratio = key.length ? hit / key.length : 0;
+      const verdict = ratio >= 0.8 ? 'supported' : ratio >= 0.4 ? 'partial' : 'unsupported';
+      return { id: it.id, verdict, note: `${hit}/${key.length} answer words found in the passage.` };
+    });
   }
 
   async generateFlashcards(input: GenerateFlashcardsInput): Promise<GeneratedFlashcard[]> {
