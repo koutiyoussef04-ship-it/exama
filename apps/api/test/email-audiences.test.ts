@@ -44,8 +44,8 @@ test('counts per type of email, with the rules that decide them; only explicit c
   const confirmedAdult = await user({ confirmed: true, ageHours: 24 * 30, consent: true });
   const confirmedNoConsent = await user({ confirmed: true, ageHours: 24 * 30 });
   const confirmedMinor = await user({ confirmed: true, age: '13_17', ageHours: 24 * 30, consent: true });
-  const optedOut = await user({ confirmed: true, ageHours: 24 * 30, emailsOn: false, consent: true });
-  const ids = [legacyA, legacyB, askedOld, askedYoung, confirmedAdult, confirmedNoConsent, confirmedMinor, optedOut];
+  const studyOff = await user({ confirmed: true, ageHours: 24 * 30, emailsOn: false, consent: true });
+  const ids = [legacyA, legacyB, askedOld, askedYoung, confirmedAdult, confirmedNoConsent, confirmedMinor, studyOff];
   const before = { mails: outbox.length, sends: (await sql`select count(*)::int as n from email_campaign_sends where user_id = any(${ids}::uuid[])`)[0]!.n, tokens: (await sql`select count(*)::int as n from email_verification_tokens where user_id = any(${ids}::uuid[])`)[0]!.n, log: (await sql`select count(*)::int as n from marketing_consent_log where user_id = any(${ids}::uuid[])`)[0]!.n };
 
   const r = await emailAudiences({ userIds: ids, mx: async () => 'ok' });
@@ -60,11 +60,11 @@ test('counts per type of email, with the rules that decide them; only explicit c
   assert.deepEqual(r.dailyStudyEmail, { confirmedWithEmailsOn: 3, ofWhichWithAPlan: 0 }, 'the daily study-plan email is its own category: it does not depend on marketing consent');
 
   const m = r.reactivationMarketing;
-  assert.equal(m.eligible, 1, 'only the confirmed adult who consented, with the preference on, passes');
+  assert.equal(m.eligible, 2, 'the confirmed adults who consented pass, whatever their study-reminder switch says (a different category)');
   assert.equal(m.excluded.not_verified, 4, 'unconfirmed addresses are never marketing recipients, even with consent (askedYoung ticked the box)');
   assert.equal(m.excluded.no_marketing_consent, 1, 'a confirmed address that never said yes stays out');
   assert.equal(m.excluded.minor_or_unknown_age, 1);
-  assert.equal(m.excluded.opted_out, 1);
+  assert.equal((m.excluded as Record<string, number>).opted_out, undefined, 'there is no study-switch exclusion in the marketing audience any more');
 
   assert.deepEqual({ mails: outbox.length, sends: (await sql`select count(*)::int as n from email_campaign_sends where user_id = any(${ids}::uuid[])`)[0]!.n, tokens: (await sql`select count(*)::int as n from email_verification_tokens where user_id = any(${ids}::uuid[])`)[0]!.n, log: (await sql`select count(*)::int as n from marketing_consent_log where user_id = any(${ids}::uuid[])`)[0]!.n }, before, 'read-only');
   assert.equal((await sql`select count(*)::int as n from users where id = any(${ids}::uuid[]) and email_verified_at is not null`)[0]!.n, 4, 'nobody was confirmed by the report');

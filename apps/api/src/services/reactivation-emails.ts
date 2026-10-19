@@ -117,7 +117,7 @@ const COPY: Record<Lang, Copy> = {
     foot: {
       why: 'You’re receiving this email because you chose to get tips, news and offers from Exama.',
       stop: 'Unsubscribe',
-      stopTail: '(one click). Your daily study-plan email is a separate setting.',
+      stopTail: '(one click). Your study reminder emails are a separate setting.',
       sentBy: (s) => `Sent by ${s.name}, ${s.address}. Questions: ${s.supportEmail}.`,
     },
   },
@@ -195,7 +195,7 @@ const COPY: Record<Lang, Copy> = {
     foot: {
       why: 'Recibes este correo porque elegiste recibir consejos, novedades y ofertas de Exama.',
       stop: 'Darme de baja',
-      stopTail: '(un clic). El correo diario con tu plan de estudio es un ajuste aparte.',
+      stopTail: '(un clic). Tus correos de recordatorio de estudio son un ajuste aparte.',
       sentBy: (s) => `Enviado por ${s.name}, ${s.address}. Dudas: ${s.supportEmail}.`,
     },
   },
@@ -273,7 +273,7 @@ const COPY: Record<Lang, Copy> = {
     foot: {
       why: 'Vous recevez cet e-mail parce que vous avez choisi de recevoir des conseils, des nouveautés et des offres d’Exama.',
       stop: 'Me désabonner',
-      stopTail: '(un clic). L’e-mail quotidien avec votre plan de révision est un réglage distinct.',
+      stopTail: '(un clic). Vos e-mails de rappel de révision sont un réglage distinct.',
       sentBy: (s) => `Envoyé par ${s.name}, ${s.address}. Une question : ${s.supportEmail}.`,
     },
   },
@@ -351,7 +351,7 @@ const COPY: Record<Lang, Copy> = {
     foot: {
       why: 'تصلك هذه الرسالة لأنك اخترت تلقي النصائح والأخبار والعروض من Exama.',
       stop: 'إلغاء الاشتراك',
-      stopTail: '(بنقرة واحدة). رسالة خطة المذاكرة اليومية إعداد منفصل.',
+      stopTail: '(بنقرة واحدة). رسائل تذكير المذاكرة إعداد منفصل.',
       sentBy: (s) => `أُرسلت من ${s.name}، ${s.address}. للاستفسار: ${s.supportEmail}.`,
     },
   },

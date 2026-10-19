@@ -830,17 +830,17 @@ const en = {
   // in any language, only together with a new version. The daily study-plan email is a separate category and is not covered.
   marketing: {
     statement: 'Yes, Exama can email me tips, news about new features, offers, and invitations to come back and keep studying. I can unsubscribe at any time.',
-    hint: 'This is separate from your daily study-plan email, which you manage in Account.',
+    hint: 'This is separate from your study reminder emails, which you manage in Account.',
     accountTitle: 'Emails from Exama',
     accountLabel: 'Tips, news and offers',
     unsubscribeTitle: 'Stop tips, news and offers?',
-    unsubscribeBody: 'You won’t get marketing emails from Exama any more. Your daily study-plan email is a separate setting and isn’t changed.',
+    unsubscribeBody: 'You won’t get marketing emails from Exama any more. Your study reminder emails are a separate setting and aren’t changed.',
     unsubscribeConfirm: 'Stop these emails',
-    unsubscribeAlso: 'Stop my daily study-plan email too',
+    unsubscribeAlso: 'Stop my study reminder emails too',
     unsubscribeKeep: 'Keep them',
     unsubscribeDoneTitle: 'You’re unsubscribed',
     unsubscribeDoneBody: 'You won’t get tips, news or offers from Exama any more. You can turn them back on in Account → Emails from Exama.',
-    unsubscribeDoneAllBody: 'You won’t get tips, news, offers or your daily study-plan email any more. You can turn them back on in Account.',
+    unsubscribeDoneAllBody: 'You won’t get tips, news, offers or study reminder emails any more. You can turn them back on in Account.',
   },
   materials: {
     title: 'Course materials',

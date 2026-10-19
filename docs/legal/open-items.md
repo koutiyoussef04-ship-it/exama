@@ -221,6 +221,7 @@ all four languages. Disabled in production until `STUDY_REMINDER_EMAILS_ENABLED=
 | # | Decision | Notes |
 |---|---|---|
 | 1 | **Default on vs. opt-in** | on by default (opt-out). If counsel classes it as direct marketing, switch the default to off (`users.study_reminder_emails` default) and ask in the app instead — the code needs no other change |
+| 1a | **“Pick up where you left off” (no plan yet) — not the email described above** | The same switch also governs a second email (`study-reminders.ts`, `buildReturnEmail`): to Free, never-paid accounts with one ready course and **no study plan**, **every local day with no end and no inactivity check**, with a button back to the course and a pitch for study plans. It is server-initiated and promotes use of the product, so on the factors in `docs/email/email-classification.md` it looks like re-engagement, not a service message. The Privacy Policy sentence and the Account switch description (“Daily plan email … what your study plan has for that day”) describe only the plan email. **It has been live in production since 2026-10-18.** Options in `email-classification.md` (treat as marketing and require consent; rebuild as a real “continue your unfinished exam” reminder; pause this variant; or keep and correct the disclosure). Needs a decision |
 | 2 | **Legal basis** | see the §3 table; add it when the legal bases are written into the policy |
 | 3 | **Minors (13–17)** | same email for every age group; confirm the balancing test |
 
@@ -244,10 +245,10 @@ What it does (`docs/email/marketing-consent.md`): an optional checkbox, **untick
 | # | Decision | Notes |
 |---|---|---|
 | 1 | **Wording**, four languages (`apps/mobile/src/i18n/locales`, `marketing.statement` and `marketing.hint`, pinned to `MARKETING_CONSENT_VERSION`) | Check specificity (“tips, news about new features, offers, and invitations to come back”), that the hint line (the daily plan email is separate) may sit beside rather than inside the consent, and native-speaker quality in fr/ar/es |
-| 2 | **Privacy policy** | Add the marketing consent and its withdrawal, and say the daily study-plan email is separate. Suggested sentence in `marketing-consent.md`. Not applied: legal text |
+| 2 | **Privacy policy** | Add the marketing consent and its withdrawal, and say the study reminder emails are separate (and, per §7 row 1a, describe the no-plan reminder if it stays). Suggested sentence in `marketing-consent.md`. Not applied: legal text |
 | 3 | **Minors** | The box is shown to every age group; a 13–17 consent is recorded but the campaign never emails under-18s. GDPR Art. 8 (Spain 14, France 15, default 16): hide it for minors, or record it as inert, or require parental authorisation |
 | 4 | **Unconfirmed accounts** | A consent given at sign-up before the address is confirmed is recorded, but marketing also requires a confirmed address (a second step, like double opt-in) |
-| 5 | **Unsubscribe semantics** | A marketing email’s unsubscribe now stops marketing only (the daily plan email is separate; the page offers to stop it too). Before, the campaign link also switched off the daily plan email. No marketing email was ever sent, so nobody relied on the old behaviour |
+| 5 | **Unsubscribe semantics** | A marketing email’s unsubscribe now stops marketing only (the study reminder emails are separate; the page offers to stop them too). Before, the campaign link also switched off the study reminder emails. No marketing email was ever sent, so nobody relied on the old behaviour |
 | 6 | **Existing accounts** | No consent; they can opt in only through the Account switch (or a future one-time in-app card). Never by email |
 | 7 | **Consent log retention** | `marketing_consent_log` is kept with the account and deleted with it; decide whether proof of a withdrawal must outlive the account |
 

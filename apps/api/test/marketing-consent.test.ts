@@ -241,6 +241,22 @@ test('the unsubscribe link stops exactly the category it names: marketing, study
   assert.match(links.oneClickUrl!, /\/email\/unsubscribe\?token=.+&category=marketing$/);
 });
 
+test('account (transactional) emails follow neither setting: with marketing withdrawn and study reminders off, a password-reset code is still sent', async () => {
+  const u = await signUp(tick('en'));
+  const unsub = (category: string) => call(`/email/unsubscribe?token=${encodeURIComponent(unsubscribeToken(u.id))}&category=${category}`, { method: 'POST', body: 'List-Unsubscribe=One-Click', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  resetUnsubscribeRateLimit();
+  assert.equal((await unsub('all')).status, 200); // marketing withdrawn AND study reminders off
+  const state = (await sql<{ on: boolean; at: string | null }[]>`select study_reminder_emails as on, marketing_consent_at::text as at from users where id = ${u.id}`)[0]!;
+  assert.deepEqual({ ...state }, { on: false, at: null });
+
+  const before = outbox.length;
+  const reset = await call('/auth/password-reset/request', json('POST', { email: u.email, language: 'en' }));
+  assert.equal(reset.status, 202);
+  const sent = outbox.slice(before).filter((m) => m.to === u.email && /password reset code/i.test(m.subject)); // (the sign-up confirmation link may land in the same window)
+  assert.equal(sent.length, 1, 'the reset code is an account email: no preference or consent gates it');
+  assert.equal(sent[0]!.headers?.['List-Unsubscribe'], undefined, 'and it carries no marketing unsubscribe: there is nothing to unsubscribe from');
+});
+
 // ---------------------------------------------------------------- existing accounts and the campaign
 
 test('accounts that existed before consent was asked have none, can opt in only explicitly, and stay out of the campaign until they do', async () => {

@@ -7,7 +7,7 @@ Engineering position, written from the code and from Exama’s own legal registe
 1. **Account emails may go to unconfirmed addresses; marketing goes only to people who said yes.** An email that exists to run the account the person created (confirm the address, reset a password, a legal or security notice) is a different thing from an email that invites someone to use the product again.
 2. **Neither “unconfirmed” nor “confirmed” is consent.** Confirming an address proves the mailbox belongs to the person; it says nothing about agreeing to marketing. Exama’s register says plainly that marketing needs consent. Consent is now collected explicitly: an **optional, unticked checkbox at sign-up** and a switch in Account (`marketing-consent.md`), recorded only when the person says yes. Every account that existed before has **no** consent, and nothing infers one.
 3. **The way to reach the unconfirmed accounts is the confirmation reminder** (one email per account, ever, no marketing content). It is built; the number it can reach today is limited only by two conservative gates (accounts younger than 24 h, and accounts that predate verification, which need an explicit operator choice).
-4. **Marketing eligibility = explicit consent + confirmed address + every existing safety rule** (adult, Free, inactive, not suppressed or bounced, not unsubscribed…). The daily study-plan email is a **separate category** and is not covered by the consent.
+4. **Marketing eligibility = explicit consent + confirmed address + every existing safety rule** (adult, Free, inactive, not suppressed or bounced, not unsubscribed…). The study reminder emails are a **separate category**, not covered by the consent and not affected by it — and one of them, “Pick up where you left off”, needs its own classification review (`email-classification.md`).
 
 ## Types of email
 
@@ -18,7 +18,8 @@ Engineering position, written from the code and from Exama’s own legal registe
 | Password-reset code | the person | yes; **completing a reset also confirms the address** (they proved control of the mailbox) | yes | 15-minute cooldown per account |
 | **Confirmation reminder** (one-off) | operator CLI | yes — this is its purpose | yes: it is the same confirmation email, with a reminder sentence and no other content | `VERIFICATION_REMINDER_SEND`, `--limit`, approval code; one per account, ever; address vetting; bounce/complaint/suppression checks |
 | Web subscription confirmation | a subscription | not applicable (subscribers) | yes | webhook |
-| Daily study-plan email | the server | **no**: confirmed addresses only | yes, for people with a plan and no subscription | `STUDY_REMINDER_EMAILS_ENABLED`, preference on, plan, Free plan, local hour. *Counsel*: whether it is a service message or direct marketing is still open (`open-items.md` §7) |
+| Study reminder: “Today’s study plan” | the server | **no**: confirmed addresses only | yes, for people with a plan and no subscription | `STUDY_REMINDER_EMAILS_ENABLED`, preference on, plan, Free plan, local hour. *Counsel*: whether it is a service message or direct marketing is still open (`open-items.md` §7) |
+| Study reminder: “Pick up where you left off” (a course, no plan yet) | the server | **no**: confirmed addresses only | **no**: the policy describes only the plan email | same gates but **no plan**; daily, no end, no inactivity check, includes a feature pitch. Looks like re-engagement: **highest-priority legal review** (`email-classification.md`) |
 | Reactivation campaign | operator CLI | **never** | **no**: marketing is not in the policy yet (*counsel*: add it, `marketing-consent.md`) | `REACTIVATION_CAMPAIGN_SEND`, **explicit marketing consent**, confirmed adult, Free, inactive, approval code; consent is re-checked before every email |
 | Legal or security notice to all accounts (terms change, incident) | operator | yes, where the law requires telling account holders | n/a — not built | would be a one-off service message |
 
@@ -37,11 +38,11 @@ Exama’s apps and website are in Spanish, French and Arabic as well as English,
 
 ## Who can receive what, today
 
-| Group | Confirmation reminder | Daily study-plan email | Reactivation marketing |
+| Group | Confirmation reminder | Study reminder emails | Reactivation marketing |
 |---|---|---|---|
 | Unconfirmed, asked at sign-up | **yes** (after 24 h, vetted) | no | **no** |
 | Unconfirmed, predates verification (“legacy”) | **operator’s decision** (`--include-legacy`, vetted, small first batch) | no | **no** — and they have **no age group**, so they could never pass the adult-only rule even after confirming |
-| Confirmed adult | not applicable | yes if they have a plan on a Free plan (existing) | **only with explicit marketing consent** (ticked at sign-up or switched on in Account, not withdrawn), and only if Free, inactive 7 days, account 3+ days, no other Exama email in 7 days. Confirmed without consent: **no** |
+| Confirmed adult | not applicable | yes if Free and never paid with one course (a plan: “Today’s study plan”; no plan: “Pick up where you left off”) — on by default, own switch | **only with explicit marketing consent** (ticked at sign-up or switched on in Account, not withdrawn), and only if Free, inactive 7 days, account 3+ days, no other Exama email in 7 days. Confirmed without consent: **no** |
 | Under 18 / no age group | allowed (account message) | existing rules | **never** |
 | Bounced, complained, suppressed (ours or Resend’s) | **never** | **never** | **never** |
 

@@ -10,9 +10,10 @@
  *   - EXPLICIT MARKETING CONSENT (`users.marketing_consent_at`, set only by ticking the box at sign-up or turning the switch on in
  *     Account — services/marketing-consent.ts). Accounts that never said yes, accounts that existed before consent was asked,
  *     accounts that withdrew, and everyone who merely confirmed their address are out. Checked again just before each email;
- *   - a confirmed address, with study emails still on (`users.study_reminder_emails`; the unsubscribe link of
- *     every email, one click, switches it off), not on the suppression list (hard bounces and spam complaints,
- *     or added by an operator);
+ *   - a confirmed address, not on the suppression list (hard bounces and spam complaints, or added by an operator).
+ *     The study-reminder switch (`users.study_reminder_emails`) is a different category and plays NO part here: neither
+ *     switching it off excludes a person who said yes to marketing, nor leaving it on lets anyone in. The unsubscribe link of
+ *     every email, one click, withdraws the marketing consent (services/marketing-consent.ts);
  *   - an adult age group (18+): minors and accounts that never gave an age group are left out;
  *   - Free and never paid, from the server's own billing records (`billingEligibility`, fail closed): owners, anyone with
  *     access now (paid or trial), a started Stripe checkout and unreadable billing state are out. Former
@@ -62,7 +63,6 @@ const DAY_MS = 86_400_000;
 export type ExcludeReason =
   | 'not_verified'
   | 'no_marketing_consent'
-  | 'opted_out'
   | 'suppressed'
   | 'minor_or_unknown_age'
   | 'already_sent'
@@ -126,7 +126,6 @@ type UserRow = {
   /** Epoch milliseconds: the database driver here returns timestamps as text, so times are compared as numbers. */
   created_ms: number;
   age_range: string | null;
-  reminders_on: boolean;
   verified: boolean;
   consented: boolean;
   last_open_ms: number | null;
@@ -142,7 +141,7 @@ export async function selectAudience(opts: { step: Step; now?: Date; inactiveDay
   const inactiveDays = opts.inactiveDays ?? DEFAULT_INACTIVE_DAYS;
   const only = opts.userIds ?? null;
   const users = await pg<UserRow[]>`
-    select u.id, u.email, u.name, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range, u.study_reminder_emails as reminders_on,
+    select u.id, u.email, u.name, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range,
       (u.email_verified_at is not null) as verified,
       (u.marketing_consent_at is not null) as consented,
       (select extract(epoch from max(e.created_at)) * 1000 from analytics_events e where e.user_id = u.id and e.name = 'app_opened' and e.source = 'client')::float8 as last_open_ms,
@@ -199,7 +198,6 @@ export async function selectAudience(opts: { step: Step; now?: Date; inactiveDay
     if (!u.verified) { out('not_verified'); continue; }
     // Verified is not consent. Only an explicit yes (sign-up box or the Account switch) counts; a withdrawal clears it.
     if (!u.consented) { out('no_marketing_consent'); continue; }
-    if (!u.reminders_on) { out('opted_out'); continue; }
     if (u.suppressed) { out('suppressed'); continue; }
     if (!u.age_range || !ADULT_AGE_RANGES.has(u.age_range)) { out('minor_or_unknown_age'); continue; }
 
@@ -358,7 +356,7 @@ const pgIncrement = () => dsql`${emailCampaignSends.attempts} + 1`;
 /** Last look before an email: the person may have withdrawn consent, unsubscribed, subscribed or been suppressed since the audience was chosen. */
 async function stillOk(c: Candidate, includeLapsed: boolean): Promise<boolean> {
   const [row] = await pg<{ ok: boolean }[]>`
-    select (u.study_reminder_emails and u.email_verified_at is not null and u.marketing_consent_at is not null
+    select (u.email_verified_at is not null and u.marketing_consent_at is not null
       and not exists (select 1 from email_suppressions s where s.email = lower(u.email))) as ok
     from users u where u.id = ${c.userId}`;
   if (!row?.ok) return false;
@@ -526,7 +524,8 @@ export type ReportRow = {
 export async function campaignReport(windowDays = 14): Promise<ReportRow[]> {
   const rows = await pg<Record<string, string | number>[]>`
     with s as (
-      select e.step, e.segment, e.delivery_status, u.study_reminder_emails as reminders_on,
+      select e.step, e.segment, e.delivery_status,
+        (u.marketing_consent_at is null or exists (select 1 from marketing_consent_log l where l.user_id = e.user_id and l.action = 'withdrawn' and l.created_at > e.sent_at)) as unsubscribed,
         exists (select 1 from email_campaign_clicks k where k.send_id = e.id and not k.suspected_bot) as clicked,
         exists (select 1 from email_campaign_clicks k where k.send_id = e.id) as clicked_any,
         exists (select 1 from analytics_events a where a.user_id = e.user_id and a.name = 'app_opened' and a.source = 'client'
@@ -546,7 +545,7 @@ export async function campaignReport(windowDays = 14): Promise<ReportRow[]> {
       count(*) filter (where returned)::int as returned,
       count(*) filter (where plan_created)::int as plan_created,
       count(*) filter (where studied)::int as studied,
-      count(*) filter (where not reminders_on)::int as unsubscribed,
+      count(*) filter (where unsubscribed)::int as unsubscribed,
       count(*) filter (where subscribed)::int as subscribed
     from s group by step, segment order by step, segment`;
   return rows.map((r) => ({

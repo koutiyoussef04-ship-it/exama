@@ -460,6 +460,47 @@ test('preferences: read and switch, signed in only; turning back on resumes emai
   assert.equal((await call<EmailPreferences>('/email/preferences', { token: u.token })).body.sentToThisAccount, false);
 });
 
+test('study reminders and marketing consent are independent categories: neither is required for, or changed by, the other (both emails)', async () => {
+  const MARKETING = { consent: true, version: '2026-10-v1', language: 'en' };
+  const consentOf = async (u: U) => (await sql<{ at: string | null }[]>`select marketing_consent_at::text as at from users where id = ${u.id}`)[0]!.at;
+
+  // The plan email goes to an account that never gave marketing consent, and to one that gave it and then withdrew it.
+  const never = await newUser();
+  await withPlan(never);
+  const withdrew = await newUser();
+  await withPlan(withdrew);
+  assert.equal((await call('/email/preferences', send('PATCH', { marketing: MARKETING }, withdrew.token))).status, 200);
+  assert.equal((await call('/email/preferences', send('PATCH', { marketing: { consent: false } }, withdrew.token))).status, 200);
+  assert.deepEqual([await consentOf(never), await consentOf(withdrew)], [null, null]);
+  assert.equal((await run([never, withdrew])).sent, 2, 'study reminders do not need marketing consent');
+  assert.equal(mailsTo(never).length + mailsTo(withdrew).length, 2);
+
+  // So does the "no plan yet" email.
+  const nudged = await noPlanStudent();
+  assert.equal(await consentOf(nudged.u), null);
+  assert.equal((await run(nudged.u)).sent, 1);
+  assert.match(mailsTo(nudged.u)[0]!.subject, /^Pick up where you left off/);
+
+  // An account that said yes to marketing gets study reminders only while its own switch is on; the run never touches the consent.
+  const both = await newUser();
+  await withPlan(both);
+  assert.equal((await call('/email/preferences', send('PATCH', { marketing: MARKETING }, both.token))).status, 200);
+  const granted = await consentOf(both);
+  assert.ok(granted);
+  assert.equal((await call('/email/preferences', send('PATCH', { studyReminders: false }, both.token))).status, 200);
+  assert.equal((await run(both)).sent, 0, 'the study-reminder switch decides study reminders');
+  assert.equal(await consentOf(both), granted, 'switching study reminders off does not withdraw marketing consent');
+  assert.equal((await call('/email/preferences', send('PATCH', { studyReminders: true }, both.token))).status, 200);
+  assert.equal((await run(both)).sent, 1);
+  assert.equal(await consentOf(both), granted, 'a study reminder does not refresh, change or withdraw it either');
+
+  // The marketing unsubscribe link leaves the study switch alone; the study unsubscribe link leaves the consent alone.
+  const token = reminders.unsubscribeToken(both.id);
+  assert.equal((await call(`/email/unsubscribe?token=${encodeURIComponent(token)}&category=marketing`, { method: 'POST', body: 'List-Unsubscribe=One-Click', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })).status, 200);
+  assert.equal((await call<EmailPreferences>('/email/preferences', { token: both.token })).body.studyReminders, true);
+  assert.equal(await consentOf(both), null);
+});
+
 test('missing email configuration: the run logs why and sends nothing, without throwing', async () => {
   const u = await newUser();
   await withPlan(u);

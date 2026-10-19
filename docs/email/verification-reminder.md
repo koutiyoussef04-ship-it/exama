@@ -54,7 +54,7 @@ This is the engineering position, not legal advice; the open points need the leg
 
 Two things to know before sending:
 
-1. **Confirming has a side effect the email does not mention:** a confirmed account with a study plan and a Free plan becomes eligible for the existing daily study-plan email (already disclosed, one-click unsubscribe). Confirmation is not marketing consent; the campaign’s own conditions still apply afterwards, and an account that just got the reminder is held out of the campaign for 7 days (frequency cap).
+1. **Confirming has a side effect the email does not mention:** a confirmed account with a study plan and a Free plan becomes eligible for the existing study reminder emails (the plan email is disclosed; the no-plan “pick up” email is not — `email-classification.md`; one-click unsubscribe). Confirmation is not marketing consent; the campaign’s own conditions still apply afterwards, and an account that just got the reminder is held out of the campaign for 7 days (frequency cap).
 2. A reminder can still reach someone who mistyped their address at sign-up. That is the risk the original email already carries; it is why there is one reminder, no marketing content, and the bounce check.
 
 ## Commands

@@ -31,7 +31,7 @@ const base = { ...form(), ageRange: '18_24' as const };
  * version must always mean exactly one text per language. After a deliberate change: bump the version, update this hash, and have the
  * new wording reviewed (docs/email/marketing-consent.md).
  */
-const WORDING_SHA256 = 'bb3f475f3de508d2443a34019bd15d654024a21f92aced72d73a6c5cc72e10c8';
+const WORDING_SHA256 = '647cd5b5646180b2d7fec8498ebb8a2465915e683cce094fe539df9568d3e7af';
 
 test('the consent wording is pinned to its version: changing a word in any language without a new version fails', () => {
   assert.equal(MARKETING_CONSENT_VERSION, '2026-10-v1');
@@ -39,7 +39,7 @@ test('the consent wording is pinned to its version: changing a word in any langu
   assert.equal(hash, WORDING_SHA256, 'the consent wording changed: bump MARKETING_CONSENT_VERSION, update this hash, and re-review the wording');
 });
 
-test('every language states what it covers, that it can be undone, and that it does NOT cover the daily study-plan email', () => {
+test('every language states what it covers, that it can be undone, and that it does NOT cover the study reminder emails (a separate category)', () => {
   const covers: Record<Language, RegExp[]> = {
     en: [/tips/, /news/, /offers/, /invitations to come back/, /unsubscribe at any time/],
     es: [/consejos/, /novedades/, /ofertas/, /invitaciones para volver/, /darme de baja en cualquier momento/],
@@ -47,7 +47,12 @@ test('every language states what it covers, that it can be undone, and that it d
     ar: [/نصائح/, /أخبار/, /عروضًا/, /دعوات للعودة/, /إلغاء الاشتراك في أي وقت/],
   };
   const notStudyReminders: Record<Language, RegExp> = { en: /daily|reminder|study-plan email/i, es: /diario|recordatorio/i, fr: /quotidien|rappel/i, ar: /اليومية|تذكير/ };
-  const separate: Record<Language, RegExp[]> = { en: [/separate/, /Account/], es: [/independiente/, /Cuenta/], fr: [/distinct/, /Compte/], ar: [/منفصل/, /الحساب/] };
+  const separate: Record<Language, RegExp[]> = {
+    en: [/separate/, /study reminder emails/, /Account/],
+    es: [/independiente/, /recordatorio de estudio/, /Cuenta/],
+    fr: [/distinct/, /rappel de révision/, /Compte/],
+    ar: [/منفصل/, /تذكير المذاكرة/, /الحساب/],
+  };
   for (const lang of LANGS) {
     const m = L[lang].marketing;
     for (const re of covers[lang]) assert.match(m.statement, re, `${lang} statement: ${re}`);

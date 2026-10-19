@@ -43,6 +43,8 @@ for accounts that never get the email).
   (`<WEB_APP_URL>/plan/setup?id=<courseId>`). No tasks are made up. A course that isn't ready (processing or
   failed) is recorded as `skipped`.
 
+**Classification:** the two emails are not alike. The plan email delivers the student’s own plan; the no-plan email is a daily, open-ended nudge with a feature pitch and is **not** described in the privacy policy or in the Account switch text. See `docs/email/email-classification.md` and `docs/legal/open-items.md` §7 row 1a before relying on either as a service message. Marketing consent is independent of this switch (neither is needed for, or changed by, the other).
+
 Both: HTML and plain text, course titles and notes HTML-escaped, absolute links built from `WEB_APP_URL`
 (validated as an absolute origin, https in production), unsubscribe link and headers. **No offers, prices,
 trial or upgrade prompts.**
