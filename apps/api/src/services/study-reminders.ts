@@ -4,8 +4,8 @@
  * Who gets one (all checked on the server, every run; anything that can't be established → no email):
  *   - the feature is on (STUDY_REMINDER_EMAILS_ENABLED=true) and email can be sent (EMAIL_PROVIDER and a
  *     web app origin for the links); otherwise the run logs why once and does nothing;
- *   - a confirmed email address and reminders switched on (`users.study_reminder_emails`, off via Account
- *     or the unsubscribe link);
+ *   - a confirmed email address, not on the suppression list (`email_suppressions`), and reminders switched on
+ *     (`users.study_reminder_emails`, off via Account or the unsubscribe link);
  *   - exactly ONE course (`documents`, counted like the plan limit counts courses); none or several: no email;
  *   - the Free plan and NO billing history at all, from the server's own records (`billingEligibility`):
  *     no `subscriptions` row in any state (that row is the only record of paid plans and trials, from every
@@ -33,11 +33,11 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { StudyPlan, TaskActivity } from '@study/shared';
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, notExists, sql } from 'drizzle-orm';
 import { getEntitlement, isOwner } from '../billing/entitlements.js';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
-import { analyticsEvents, documents, stripeCustomers, studyPlans, studyReminderEmails, subscriptions, users } from '../db/schema.js';
+import { analyticsEvents, documents, emailSuppressions, stripeCustomers, studyPlans, studyReminderEmails, subscriptions, users } from '../db/schema.js';
 import { sendMail, type Mail } from '../lib/mailer.js';
 import { isValidTimeZone, localDate } from './planner/dates.js';
 import { getStudyPlan } from './study-plans.js';
@@ -551,7 +551,15 @@ export async function runStudyReminders(now = new Date(), opts: { userIds?: stri
       .innerJoin(courseCounts, and(eq(courseCounts.userId, users.id), eq(courseCounts.n, 1)))
       .innerJoin(documents, eq(documents.userId, users.id))
       .leftJoin(studyPlans, eq(studyPlans.documentId, documents.id))
-      .where(and(eq(users.studyReminderEmails, true), isNotNull(users.emailVerifiedAt), ...(opts.userIds ? [inArray(users.id, opts.userIds)] : [])));
+      .where(
+        and(
+          eq(users.studyReminderEmails, true),
+          isNotNull(users.emailVerifiedAt),
+          // The suppression list (hard bounce, spam complaint, operator block) is honoured here as in the campaign and the confirmation reminder.
+          notExists(db.select({ one: sql`1` }).from(emailSuppressions).where(eq(emailSuppressions.email, sql`lower(${users.email})`))),
+          ...(opts.userIds ? [inArray(users.id, opts.userIds)] : []),
+        ),
+      );
 
     for (const u of rows) {
       const { userId } = u;

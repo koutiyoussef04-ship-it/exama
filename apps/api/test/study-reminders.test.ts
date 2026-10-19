@@ -501,6 +501,19 @@ test('study reminders and marketing consent are independent categories: neither 
   assert.equal(await consentOf(both), null);
 });
 
+test('a suppressed address (bounce, complaint or operator block) gets no study reminder and nothing is claimed; lifting the block restores it, still once a day', async () => {
+  const u = await newUser();
+  await withPlan(u);
+  await sql`insert into email_suppressions (email, reason) values (${u.email.toLowerCase()}, 'manual')`;
+  assert.equal((await run(u)).sent, 0);
+  assert.equal(mailsTo(u).length, 0);
+  assert.equal((await rows(u)).length, 0, 'a suppressed account is not even claimed for the day');
+  await sql`delete from email_suppressions where email = ${u.email.toLowerCase()}`;
+  assert.equal((await run(u)).sent, 1);
+  assert.equal((await run(u)).sent, 0, 'one per local day');
+  assert.equal(mailsTo(u).length, 1);
+});
+
 test('missing email configuration: the run logs why and sends nothing, without throwing', async () => {
   const u = await newUser();
   await withPlan(u);

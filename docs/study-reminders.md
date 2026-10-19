@@ -20,6 +20,7 @@ All of these must hold, checked on the server at every run:
 | Condition | Source |
 |---|---|
 | confirmed email address | `users.email_verified_at` |
+| not on the suppression list | `email_suppressions` (hard bounce, spam complaint or operator block; the same list the campaign and the confirmation reminder use) |
 | reminders switched on | `users.study_reminder_emails` (default on; off from the email's unsubscribe link or the app) |
 | **exactly one course** — none or several: no email | `documents` (all of the account's courses, counted like the Free plan's course limit) |
 | **Free plan, never paid, not on a trial** | `billingEligibility()`: **no `subscriptions` row in any state** (active, trialing, cancelled or expired; Stripe, Apple, Google or mock), **no `stripe_customers` row**, not an owner account, and the entitlement is plain Free. Any error while checking → no email |
