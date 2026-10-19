@@ -37,8 +37,8 @@ import type {
   ResendVerificationResult,
   VerifyEmailResult,
 } from '@study/shared';
-import { MATERIAL_HEADERS } from '@study/shared';
-import type { AiLanguage, Language } from '@study/shared';
+import { MARKETING_CONSENT_VERSION, MATERIAL_HEADERS } from '@study/shared';
+import type { AiLanguage, Language, UnsubscribeCategory } from '@study/shared';
 import { File as FsFile, UploadType } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { apiUrlResult } from '@/config/app-config';
@@ -226,8 +226,14 @@ export const api = {
   // Daily study-plan emails (the server decides who gets them).
   getEmailPreferences: () => request<EmailPreferences>('/email/preferences'),
   updateEmailPreferences: (studyReminders: boolean) => request<EmailPreferences>('/email/preferences', { method: 'PATCH', body: JSON.stringify({ studyReminders }) }),
-  /** From the link in a reminder email: no session needed. */
-  unsubscribeStudyReminders: (token: string) => post<{ ok: true }>('/email/unsubscribe', { token }),
+  /**
+   * Account → Emails from Exama. An explicit yes carries the version and language of the wording shown; a no carries nothing else.
+   * Changes marketing consent only: the daily study-plan email has its own call above.
+   */
+  updateMarketingConsent: (on: boolean, language: Language) =>
+    request<EmailPreferences>('/email/preferences', { method: 'PATCH', body: JSON.stringify({ marketing: on ? { consent: true, version: MARKETING_CONSENT_VERSION, language } : { consent: false } }) }),
+  /** From the link in an email: no session needed. `category` says which emails stop (the API's default is the daily study-plan email). */
+  unsubscribeEmails: (token: string, category: UnsubscribeCategory) => post<{ ok: true }>('/email/unsubscribe', { token, category }),
   verifyEmail: (token: string) => post<VerifyEmailResult>('/auth/email-verification/verify', { token }),
   resendVerification: (language: Language | undefined) => post<ResendVerificationResult>('/auth/email-verification/resend', { language }),
   requestVerification: (email: string, language: Language | undefined) => post<{ retryAfterSeconds: number }>('/auth/email-verification/request', { email, language }),

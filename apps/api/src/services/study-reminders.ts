@@ -112,10 +112,11 @@ const apiBase = () => {
   const raw = config.API_PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL;
   return raw && URL.canParse(raw) && new URL(raw).protocol === 'https:' ? raw.replace(/\/+$/, '') : null;
 };
-export const unsubscribePageUrl = (token: string) => `${config.WEB_APP_URL}/unsubscribe#token=${token}`;
-export const oneClickUrl = (token: string) => {
+/** `category` (marketing-consent.ts): which emails the link stops. No category = the daily study-plan email, as for every link already sent. */
+export const unsubscribePageUrl = (token: string, category?: string) => `${config.WEB_APP_URL}/unsubscribe#token=${token}${category ? `&category=${category}` : ''}`;
+export const oneClickUrl = (token: string, category?: string) => {
   const base = apiBase();
-  return base ? `${base}/email/unsubscribe?token=${encodeURIComponent(token)}` : null;
+  return base ? `${base}/email/unsubscribe?token=${encodeURIComponent(token)}${category ? `&category=${category}` : ''}` : null;
 };
 
 /** One-click unsubscribe and the web page: turns reminders off. Unknown (e.g. deleted) accounts: nothing to do. */

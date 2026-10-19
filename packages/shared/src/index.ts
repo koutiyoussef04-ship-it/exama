@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { normalizeEmail } from './email';
 import { aiLanguageSchema, languageSchema } from './languages';
+import { marketingConsentSchema } from './marketing-consent';
 
 // ---------- Auth ----------
 
@@ -38,6 +39,11 @@ export const registerSchema = z.object({
    * and "under_13" with 403 age_requirement_not_met, before anything is created.)
    */
   ageRange: z.enum(AGE_RANGES),
+  /**
+   * Optional marketing-email consent (see marketing-consent.ts). Send it ONLY when the box is ticked. Absent, null or
+   * false = no consent recorded; the API records consent for nothing else than an explicit, known version.
+   */
+  marketingConsent: z.union([marketingConsentSchema, z.literal(false)]).nullish(),
 });
 export type RegisterInput = z.input<typeof registerSchema>;
 
@@ -211,5 +217,6 @@ export * from './materials';
 export * from './onboarding';
 export * from './email';
 export * from './email-verification';
+export * from './marketing-consent';
 export * from './flashcards';
 export * from './admin';

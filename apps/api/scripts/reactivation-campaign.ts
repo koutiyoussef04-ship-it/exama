@@ -57,6 +57,7 @@ if (value('step') && !['1', '2'].includes(value('step')!)) fail('--step must be 
 
 const REASON: Record<ExcludeReason, string> = {
   not_verified: 'email address not confirmed',
+  no_marketing_consent: 'no explicit marketing consent (never ticked it, existed before it was asked, or withdrew)',
   opted_out: 'study emails switched off / unsubscribed',
   suppressed: 'on the suppression list (bounce, complaint or manual)',
   minor_or_unknown_age: 'under 18 or no age group given',

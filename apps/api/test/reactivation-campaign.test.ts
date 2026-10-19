@@ -1,5 +1,5 @@
 /**
- * Reactivation campaign (services/reactivation-campaign.ts): who is eligible and in which audience, every
+ * Reactivation campaign (services/reactivation-campaign.ts): who is eligible (explicit marketing consent first) and in which audience, every
  * exclusion, send-once guarantees, batching and the daily cap, unsubscribe, click tracking, step 2, delivery
  * sync and suppression, the report, and the wording (all languages, escaped, no offers or prices).
  */
@@ -51,10 +51,14 @@ const send = (method: string, body: unknown, token?: string) => ({ method, body:
 
 let n = 0;
 type U = { id: string; token: string; email: string };
-/** An adult student, confirmed address, registered 30 days ago, never opened the app: eligible by default. */
-async function newUser(over: { email?: string } = {}): Promise<U> {
+/**
+ * An adult student, confirmed address, registered 30 days ago, never opened the app, who ticked the marketing box at sign-up
+ * (`consent: false`: signed up without ticking it): eligible by default.
+ */
+async function newUser(over: { email?: string; consent?: boolean } = {}): Promise<U> {
   const email = over.email ?? `campaign-${RUN}-${n++}@example.com`;
-  const r = await call<AuthResponse>('/auth/register', send('POST', { email, password: 'password123', name: 'Lina Study', ageRange: '18_24' }));
+  const consent = over.consent ?? true;
+  const r = await call<AuthResponse>('/auth/register', send('POST', { email, password: 'password123', name: 'Lina Study', ageRange: '18_24', language: 'en', ...(consent && { marketingConsent: { version: '2026-10-v1', language: 'en' } }) }));
   assert.equal(r.status, 201);
   await sql`update users set email_verified_at = now(), created_at = now() - interval '30 days' where id = ${r.body.user.id}`;
   return { id: r.body.user.id, token: r.body.token, email };
@@ -83,6 +87,8 @@ async function opened(u: U, props: { time_zone?: string; app_language?: string }
 }
 const audience = (users: U[], over: Partial<Parameters<typeof campaign.selectAudience>[0]> = {}) => campaign.selectAudience({ step: 1, userIds: users.map((u) => u.id), anyTime: true, ...over });
 const only = async (u: U, over?: Parameters<typeof audience>[1]) => (await audience([u], over)).eligible[0];
+/** Withdraw through the real service, the same code the Account switch and the unsubscribe link use. */
+const withdraw = async (u: U) => (await import('../src/services/marketing-consent.js')).withdrawMarketingConsent(u.id, 'account');
 const reasonOf = async (u: U, over?: Parameters<typeof audience>[1]) => {
   const a = await audience([u], over);
   assert.equal(a.eligible.length, 0, 'not eligible');
@@ -130,6 +136,19 @@ test('every exclusion, each on its own', async () => {
   const unverified = await newUser();
   await sql`update users set email_verified_at = null where id = ${unverified.id}`;
   assert.equal(await reasonOf(unverified), 'not_verified');
+
+  // Confirmed is not consent: an account that never ticked the box (or existed before it was asked) stays out, whatever else is true.
+  const noConsent = await newUser({ consent: false });
+  assert.equal(await reasonOf(noConsent), 'no_marketing_consent');
+  // Consent without a confirmed address is not enough either.
+  const consentedButUnconfirmed = await newUser();
+  await sql`update users set email_verified_at = null where id = ${consentedButUnconfirmed.id}`;
+  assert.equal(await reasonOf(consentedButUnconfirmed), 'not_verified');
+  // A withdrawal removes the person from every audience, now and later.
+  const withdrew = await newUser();
+  assert.ok(await only(withdrew));
+  await withdraw(withdrew);
+  assert.equal(await reasonOf(withdrew), 'no_marketing_consent');
 
   const optedOut = await newUser();
   await sql`update users set study_reminder_emails = false where id = ${optedOut.id}`;
@@ -311,31 +330,54 @@ test('batches pause between groups and the daily cap holds across runs', async (
   assert.match(full.stopped!, /^daily cap reached/);
 });
 
-test('last look before each email: someone who unsubscribed or subscribed since the audience was chosen is skipped', async () => {
+test('last look before each email: someone who withdrew consent, unsubscribed or subscribed since the audience was chosen is skipped', async () => {
   const unsub = await newUser();
   const joined = await newUser();
+  const withdrew = await newUser();
   const stays = await newUser();
-  const a = await audience([unsub, joined, stays]);
+  const a = await audience([unsub, joined, withdrew, stays]);
   const batch = campaign.nextBatch(a, 10);
-  assert.equal(batch.length, 3);
+  assert.equal(batch.length, 4);
   await sql`update users set study_reminder_emails = false where id = ${unsub.id}`;
   await mock(joined, 'student_monthly');
+  await withdraw(withdrew); // between the dry run and the send
   const r = await campaign.sendBatch({ step: 1, batch, limit: 10, maxPerDay: 1_000_000, gapMs: 0, pauseMs: 0 });
-  assert.deepEqual([r.sent, r.skipped], [1, 2]);
+  assert.deepEqual([r.sent, r.skipped], [1, 3]);
   assert.equal(campaignMails(stays).length, 1);
-  assert.equal(campaignMails(unsub).length + campaignMails(joined).length, 0);
+  assert.equal(campaignMails(unsub).length + campaignMails(joined).length + campaignMails(withdrew).length, 0);
 });
 
-test('the unsubscribe link of a campaign email works (one click, no sign-in) and keeps them out of step 2', async () => {
+test('the unsubscribe link of a campaign email works (one click, no sign-in): it withdraws marketing consent only and keeps them out of step 2', async () => {
   const u = await newUser();
   await sendNow([u]);
   const mail = campaignMails(u)[0]!;
   const oneClick = /<(https:\/\/api\.exama\.test\/email\/unsubscribe\?token=[^>]+)>/.exec(mail.headers!['List-Unsubscribe']!)![1]!;
+  assert.match(oneClick, /&category=marketing$/, 'a marketing email stops the marketing category, not the daily study-plan email');
+  assert.match(mail.headers!['List-Unsubscribe']!, /#token=[^>]+&category=marketing>/, 'and so does the web page link');
   const res = await call(oneClick.replace('https://api.exama.test', ''), { method: 'POST', body: 'List-Unsubscribe=One-Click', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
   assert.equal(res.status, 200);
-  assert.equal((await sql`select study_reminder_emails as on from users where id = ${u.id}`)[0]!.on, false);
+  const [row] = await sql<{ on: boolean; consent: string | null }[]>`select study_reminder_emails as on, marketing_consent_at::text as consent from users where id = ${u.id}`;
+  assert.deepEqual({ ...row }, { on: true, consent: null }, 'consent withdrawn; the separate daily study-plan email is untouched');
+  assert.deepEqual((await sql`select action, source from marketing_consent_log where user_id = ${u.id} order by created_at, action`).map((r) => `${r.action}/${r.source}`).sort(), ['granted/signup', 'withdrawn/unsubscribe_link']);
   await sql`update email_campaign_sends set sent_at = now() - interval '9 days' where user_id = ${u.id}`;
-  assert.equal(await reasonOf(u, { step: 2 }), 'opted_out');
+  assert.equal(await reasonOf(u, { step: 2 }), 'no_marketing_consent');
+  // The same one-click link twice is harmless: no second history row.
+  assert.equal((await call(oneClick.replace('https://api.exama.test', ''), { method: 'POST', body: 'List-Unsubscribe=One-Click', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })).status, 200);
+  assert.equal((await sql`select count(*)::int as n from marketing_consent_log where user_id = ${u.id} and action = 'withdrawn'`)[0]!.n, 1);
+});
+
+test('every campaign email links to the marketing unsubscribe only, and says why the person gets it', async () => {
+  const u = await newUser();
+  await sendNow([u]);
+  const mail = campaignMails(u)[0]!;
+  assert.match(mail.text, /you chose to get tips, news and offers from Exama/);
+  assert.match(mail.text, /Your daily study-plan email is a separate setting/);
+  assert.doesNotMatch(mail.text, /turns off Exama’s daily study emails/, 'the old coupling is gone and the wording no longer claims it');
+  assert.equal([...mail.html.matchAll(/unsubscribe#token=[^"]+&(?:amp;|#38;)category=marketing/g)].length, 1);
+  // The campaign module never builds its own unsubscribe links: only the marketing helper does.
+  const src = await readFile(new URL('../src/services/reactivation-campaign.ts', import.meta.url), 'utf8');
+  assert.match(src, /marketingUnsubscribeLinks\(c\.userId\)/);
+  assert.doesNotMatch(src, /unsubscribePageUrl\(|unsubscribeToken\(/);
 });
 
 test('click tracking: counted, redirected with the target and UTM tags; scanners and HEAD requests are not people', async () => {

@@ -7,6 +7,7 @@ import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, ListRow, Load
 import { AdminEntry } from '@/admin/AdminEntry';
 import { appVersion, isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
+import { MarketingSettingsCard } from '@/components/marketing-consent';
 import { ReminderSettingsCard } from '@/components/reminders';
 import { ManageBillingButton } from '@/components/web-billing';
 import { api } from '@/lib/api';
@@ -151,6 +152,7 @@ export default function Account() {
       </Card>
 
       <ReminderSettingsCard />
+      <MarketingSettingsCard />
 
       {/* Owners only (the server decides; see src/admin). */}
       <AdminEntry />

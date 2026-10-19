@@ -258,22 +258,29 @@ export function ListRow({ label, value, onPress, tone = 'default', last, accessi
   );
 }
 
-/** Accessible checkbox row. `tone`: danger (confirming something destructive) or primary (agreeing to terms). */
-export function CheckRow({ label, checked, onChange, tone = 'danger' }: { label: string; checked: boolean; onChange: (v: boolean) => void; tone?: 'danger' | 'primary' }) {
+/**
+ * Accessible checkbox row. `tone`: danger (confirming something destructive) or primary (agreeing to terms, or an optional consent).
+ * `hint`: a second, smaller line under the label (read by screen readers together with it); with a hint the box sits at the top of
+ * the row, next to the first line. The row is a plain flex row, so it mirrors by itself in right-to-left languages.
+ */
+export function CheckRow({ label, hint, checked, onChange, tone = 'danger' }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; tone?: 'danger' | 'primary' }) {
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       // react-native-web does not turn accessibilityState into ARIA attributes; screen readers on the web need this.
       aria-checked={checked}
-      accessibilityLabel={label}
+      accessibilityLabel={hint ? `${label} ${hint}` : label}
       onPress={() => onChange(!checked)}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: space(3), minHeight: 44 }}
+      style={{ flexDirection: 'row', alignItems: hint ? 'flex-start' : 'center', gap: space(3), minHeight: 44 }}
     >
       <View style={[styles.checkbox, checked && { backgroundColor: colors[tone], borderColor: colors[tone] }]}>
         {checked && <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>✓</Text>}
       </View>
-      <Text style={[styles.body, { flex: 1 }]}>{label}</Text>
+      <View style={{ flex: 1, gap: space(1) }}>
+        <Text style={styles.body}>{label}</Text>
+        {!!hint && <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 18 }}>{hint}</Text>}
+      </View>
     </Pressable>
   );
 }

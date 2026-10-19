@@ -37,11 +37,12 @@ try {
   console.log(`   Confirmed with the preference on: ${r.dailyStudyEmail.confirmedWithEmailsOn}, of which with a study plan: ${r.dailyStudyEmail.ofWhichWithAPlan} (it also needs a Free plan and the local send hour). Unconfirmed accounts never get it.`);
 
   const m = r.reactivationMarketing;
-  console.log(`\n3. REACTIVATION MARKETING — the "come back" campaign`);
-  console.log(`   Passes the campaign's technical rules: ${m.passesTechnicalRules}`);
-  console.log(`   Cleared by the legal register to receive marketing: NONE. Marketing needs consent (docs/legal/open-items.md §3: "none today"); no consent is recorded and the policy does not disclose marketing.`);
-  console.log(`   Excluded by the technical rules:\n      ${list(m.excluded)}`);
-  console.log(`   Accounts that predate verification have no age group, so they can never pass the campaign's adult-only rule.`);
+  console.log(`\n3. REACTIVATION MARKETING — the "come back" campaign (needs explicit marketing consent)`);
+  console.log(`   Accounts with explicit marketing consent on record: ${a.marketingConsent} (ticked at sign-up or turned on in Account; none for accounts that existed before it was asked)`);
+  console.log(`   Could be emailed (consented, confirmed and passing every other rule): ${m.eligible}`);
+  console.log(`   Left out:\n      ${list(m.excluded)}`);
+  console.log(`   Confirming an address is not consent. Accounts that predate verification have no age group, so they can never pass the adult-only rule.`);
+  console.log(`   Sending stays locked by REACTIVATION_CAMPAIGN_SEND, and the consent wording is still for counsel to review (docs/email/marketing-consent.md).`);
 
   console.log(`\n4. ON REQUEST — password reset code and "send me a new confirmation link": any address, only when its owner asks (already works for unconfirmed accounts).\n`);
 } finally {

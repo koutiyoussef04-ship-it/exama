@@ -448,7 +448,8 @@ test('preferences: read and switch, signed in only; turning back on resumes emai
   await withPlan(u);
   assert.equal((await call('/email/preferences')).status, 401);
   const p = await call<EmailPreferences>('/email/preferences', { token: u.token });
-  assert.deepEqual(p.body, { studyReminders: true, available: true, emailVerified: true, sentToThisAccount: true });
+  // `marketing` is the separate marketing-email consent: off for every account that has not said yes (see marketing-consent.test.ts).
+  assert.deepEqual(p.body, { studyReminders: true, marketing: false, marketingAvailable: true, available: true, emailVerified: true, sentToThisAccount: true });
   assert.equal((await call('/email/preferences', send('PATCH', { studyReminders: 'yes' }, u.token))).status, 400);
   await call('/email/preferences', send('PATCH', { studyReminders: false }, u.token));
   assert.equal((await reminders.runStudyReminders(at('09:00'), { userIds: [u.id] })).sent, 0);

@@ -9,8 +9,9 @@
  * account (study plan from an exam date, minutes per task, change the date, exams made from the student's
  * own material, graded with feedback). No prices, discounts, trial or Student/Pro feature mentions, no
  * invented urgency (the only deadline mentioned is the student's own exam date), no results or personal
- * data beyond first name and course title. Every email names the sender, says why the person gets it and
- * carries a one-click unsubscribe (RFC 8058 header plus a link).
+ * data beyond first name and course title. Every email names the sender, says why the person gets it (they chose marketing
+ * emails: services/marketing-consent.ts) and carries a one-click unsubscribe that stops the MARKETING category only — the daily
+ * study-plan email is a separate setting and says so (RFC 8058 header plus a link).
  */
 import type { Mail } from '../lib/mailer.js';
 
@@ -22,7 +23,7 @@ export const LANGS: Lang[] = ['en', 'es', 'fr', 'ar'];
 export const VARIANTS: Variant[] = ['exam_upcoming', 'exam_passed', 'course_ready', 'no_course'];
 export const segmentOf = (v: Variant): Segment => (v === 'exam_upcoming' || v === 'exam_passed' ? 'has_plan' : 'no_plan');
 /** Bump when any wording changes: the approval code of a send depends on it. */
-export const TEMPLATES_VERSION = '2026-10-v1';
+export const TEMPLATES_VERSION = '2026-10-v2';
 
 export type Sender = { name: string; address: string; supportEmail: string };
 type P = { name: string; course: string; days: number };
@@ -114,9 +115,9 @@ const COPY: Record<Lang, Copy> = {
       },
     },
     foot: {
-      why: 'You’re receiving this email because you have an Exama account.',
+      why: 'You’re receiving this email because you chose to get tips, news and offers from Exama.',
       stop: 'Unsubscribe',
-      stopTail: '(one click; it also turns off Exama’s daily study emails).',
+      stopTail: '(one click). Your daily study-plan email is a separate setting.',
       sentBy: (s) => `Sent by ${s.name}, ${s.address}. Questions: ${s.supportEmail}.`,
     },
   },
@@ -192,9 +193,9 @@ const COPY: Record<Lang, Copy> = {
       },
     },
     foot: {
-      why: 'Recibes este correo porque tienes una cuenta en Exama.',
+      why: 'Recibes este correo porque elegiste recibir consejos, novedades y ofertas de Exama.',
       stop: 'Darme de baja',
-      stopTail: '(un clic; también desactiva los correos diarios de estudio de Exama).',
+      stopTail: '(un clic). El correo diario con tu plan de estudio es un ajuste aparte.',
       sentBy: (s) => `Enviado por ${s.name}, ${s.address}. Dudas: ${s.supportEmail}.`,
     },
   },
@@ -270,9 +271,9 @@ const COPY: Record<Lang, Copy> = {
       },
     },
     foot: {
-      why: 'Vous recevez cet e-mail parce que vous avez un compte Exama.',
+      why: 'Vous recevez cet e-mail parce que vous avez choisi de recevoir des conseils, des nouveautés et des offres d’Exama.',
       stop: 'Me désabonner',
-      stopTail: '(un clic ; cela désactive aussi les e-mails quotidiens de révision d’Exama).',
+      stopTail: '(un clic). L’e-mail quotidien avec votre plan de révision est un réglage distinct.',
       sentBy: (s) => `Envoyé par ${s.name}, ${s.address}. Une question : ${s.supportEmail}.`,
     },
   },
@@ -348,9 +349,9 @@ const COPY: Record<Lang, Copy> = {
       },
     },
     foot: {
-      why: 'تصلك هذه الرسالة لأن لديك حسابًا في Exama.',
+      why: 'تصلك هذه الرسالة لأنك اخترت تلقي النصائح والأخبار والعروض من Exama.',
       stop: 'إلغاء الاشتراك',
-      stopTail: '(بنقرة واحدة؛ وهذا يوقف أيضًا رسائل المذاكرة اليومية من Exama).',
+      stopTail: '(بنقرة واحدة). رسالة خطة المذاكرة اليومية إعداد منفصل.',
       sentBy: (s) => `أُرسلت من ${s.name}، ${s.address}. للاستفسار: ${s.supportEmail}.`,
     },
   },

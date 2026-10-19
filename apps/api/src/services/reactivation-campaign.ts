@@ -7,6 +7,9 @@
  * It reuses the study-reminder system's account rules, billing check, signed unsubscribe links and Resend mailer.
  *
  * Who is emailed (every rule is checked from the database, on every run; anything unclear → no email):
+ *   - EXPLICIT MARKETING CONSENT (`users.marketing_consent_at`, set only by ticking the box at sign-up or turning the switch on in
+ *     Account — services/marketing-consent.ts). Accounts that never said yes, accounts that existed before consent was asked,
+ *     accounts that withdrew, and everyone who merely confirmed their address are out. Checked again just before each email;
  *   - a confirmed address, with study emails still on (`users.study_reminder_emails`; the unsubscribe link of
  *     every email, one click, switches it off), not on the suppression list (hard bounces and spam complaints,
  *     or added by an operator);
@@ -36,7 +39,8 @@ import { emailCampaignClicks, emailCampaignSends, emailSuppressions } from '../d
 import { RateLimiter } from '../lib/rate-limit.js';
 import { sendMail } from '../lib/mailer.js';
 import { diffDays, isValidTimeZone, localDate } from './planner/dates.js';
-import { billingEligibility, localHour, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './study-reminders.js';
+import { marketingUnsubscribeLinks } from './marketing-consent.js';
+import { billingEligibility, localHour, oneClickUrl } from './study-reminders.js';
 import { TEMPLATES_VERSION, buildCampaignEmail, type Lang, type Segment, type Sender, type Step, type Variant } from './reactivation-emails.js';
 
 export const CAMPAIGN = 'reactivation-2026-10';
@@ -57,6 +61,7 @@ const DAY_MS = 86_400_000;
 
 export type ExcludeReason =
   | 'not_verified'
+  | 'no_marketing_consent'
   | 'opted_out'
   | 'suppressed'
   | 'minor_or_unknown_age'
@@ -123,6 +128,7 @@ type UserRow = {
   age_range: string | null;
   reminders_on: boolean;
   verified: boolean;
+  consented: boolean;
   last_open_ms: number | null;
   suppressed: boolean;
   last_other_ms: number | null;
@@ -138,6 +144,7 @@ export async function selectAudience(opts: { step: Step; now?: Date; inactiveDay
   const users = await pg<UserRow[]>`
     select u.id, u.email, u.name, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range, u.study_reminder_emails as reminders_on,
       (u.email_verified_at is not null) as verified,
+      (u.marketing_consent_at is not null) as consented,
       (select extract(epoch from max(e.created_at)) * 1000 from analytics_events e where e.user_id = u.id and e.name = 'app_opened' and e.source = 'client')::float8 as last_open_ms,
       exists (select 1 from email_suppressions s where s.email = lower(u.email)) as suppressed,
       (extract(epoch from greatest(
@@ -190,6 +197,8 @@ export async function selectAudience(opts: { step: Step; now?: Date; inactiveDay
   const eligible: Candidate[] = [];
   for (const u of users) {
     if (!u.verified) { out('not_verified'); continue; }
+    // Verified is not consent. Only an explicit yes (sign-up box or the Account switch) counts; a withdrawal clears it.
+    if (!u.consented) { out('no_marketing_consent'); continue; }
     if (!u.reminders_on) { out('opted_out'); continue; }
     if (u.suppressed) { out('suppressed'); continue; }
     if (!u.age_range || !ADULT_AGE_RANGES.has(u.age_range)) { out('minor_or_unknown_age'); continue; }
@@ -346,10 +355,10 @@ async function claim(c: Candidate, step: Step, batchId: string): Promise<string 
 }
 const pgIncrement = () => dsql`${emailCampaignSends.attempts} + 1`;
 
-/** Last look before an email: the person may have unsubscribed, subscribed or been suppressed since the audience was chosen. */
+/** Last look before an email: the person may have withdrawn consent, unsubscribed, subscribed or been suppressed since the audience was chosen. */
 async function stillOk(c: Candidate, includeLapsed: boolean): Promise<boolean> {
   const [row] = await pg<{ ok: boolean }[]>`
-    select (u.study_reminder_emails and u.email_verified_at is not null
+    select (u.study_reminder_emails and u.email_verified_at is not null and u.marketing_consent_at is not null
       and not exists (select 1 from email_suppressions s where s.email = lower(u.email))) as ok
     from users u where u.id = ${c.userId}`;
   if (!row?.ok) return false;
@@ -395,7 +404,8 @@ export async function sendBatch(opts: {
     if (!(await stillOk(c, !!opts.includeLapsed))) { report.skipped++; continue; }
     const sendId = await claim(c, opts.step, batchId);
     if (!sendId) { report.skipped++; continue; }
-    const token = unsubscribeToken(c.userId);
+    // Marketing links only (stop the marketing category): never the daily study-plan email's links.
+    const unsub = marketingUnsubscribeLinks(c.userId);
     const mail = buildCampaignEmail({
       to: c.email,
       name: c.name,
@@ -405,8 +415,8 @@ export async function sendBatch(opts: {
       course: c.course,
       daysUntilExam: c.daysUntilExam,
       ctaUrl: `${base}/email/click/${sendId}`,
-      unsubscribeUrl: unsubscribePageUrl(token),
-      oneClickUrl: oneClickUrl(token),
+      unsubscribeUrl: unsub.pageUrl,
+      oneClickUrl: unsub.oneClickUrl,
       sender,
       idempotencyKey: `${CAMPAIGN}/${opts.step}/${c.userId}`,
       tags: [

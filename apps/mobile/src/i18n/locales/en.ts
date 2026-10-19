@@ -825,6 +825,23 @@ const en = {
     unsubscribeInvalidBody: 'Open the link from the email again, or turn the emails off in Account → Study reminders.',
     unsubscribeHome: 'Go to Exama',
   },
+  // Optional marketing-email consent (sign-up checkbox, Account switch, marketing unsubscribe page). `statement` + `hint` are the consent
+  // wording: they are pinned to MARKETING_CONSENT_VERSION in packages/shared (test/marketing-consent.test.ts). Change either text,
+  // in any language, only together with a new version. The daily study-plan email is a separate category and is not covered.
+  marketing: {
+    statement: 'Yes, Exama can email me tips, news about new features, offers, and invitations to come back and keep studying. I can unsubscribe at any time.',
+    hint: 'This is separate from your daily study-plan email, which you manage in Account.',
+    accountTitle: 'Emails from Exama',
+    accountLabel: 'Tips, news and offers',
+    unsubscribeTitle: 'Stop tips, news and offers?',
+    unsubscribeBody: 'You won’t get marketing emails from Exama any more. Your daily study-plan email is a separate setting and isn’t changed.',
+    unsubscribeConfirm: 'Stop these emails',
+    unsubscribeAlso: 'Stop my daily study-plan email too',
+    unsubscribeKeep: 'Keep them',
+    unsubscribeDoneTitle: 'You’re unsubscribed',
+    unsubscribeDoneBody: 'You won’t get tips, news or offers from Exama any more. You can turn them back on in Account → Emails from Exama.',
+    unsubscribeDoneAllBody: 'You won’t get tips, news, offers or your daily study-plan email any more. You can turn them back on in Account.',
+  },
   materials: {
     title: 'Course materials',
     intro: 'Give Exama your lecture recordings, videos and more PDFs or PowerPoints. It learns from all of them and adds what they teach to this course — your exams, practice and study plan use it too.',

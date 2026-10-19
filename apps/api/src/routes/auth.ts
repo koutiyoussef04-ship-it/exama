@@ -23,6 +23,7 @@ import { userOnboarding, users } from '../db/schema.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { deleteAccount } from '../services/account.js';
 import { assertEmailNotHeld } from '../services/email-hold.js';
+import { grantMarketingConsent } from '../services/marketing-consent.js';
 import { getVerificationState, requestVerification, resendVerification, sendVerificationAfterSignup, verifyEmail } from '../services/email-verification.js';
 import { confirmPasswordReset, requestPasswordReset } from '../services/password-reset.js';
 
@@ -58,6 +59,10 @@ export const authRoutes = new Hono<AuthEnv>()
         .values({ email: input.email, name: input.name, passwordHash, emailVerificationRequired: true, ageRange: input.ageRange })
         .returning();
       await tx.insert(userOnboarding).values({ userId: created.id }).onConflictDoNothing();
+      // Marketing consent: only when the client sent an explicit, valid `{ version, language }` (the box was ticked). Omitted, null or false
+      // records nothing. Same transaction as the account: no account without its consent, no consent without its account. The time and
+      // source are the server's.
+      if (input.marketingConsent) await grantMarketingConsent(created.id, input.marketingConsent, 'signup', tx);
       return created;
     });
     void track('signup_completed', user.id, {});

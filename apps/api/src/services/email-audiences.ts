@@ -6,10 +6,9 @@
  *   daily study    — the daily study-plan email the server already sends (services/study-reminders.ts): confirmed addresses only.
  *   reactivation   — the "come back" campaign (services/reactivation-campaign.ts). Marketing.
  *
- * It never sends, stores or changes anything. "Eligible" for the reactivation campaign means: passes the campaign's
- * technical rules. It does NOT mean cleared to receive marketing: Exama's legal register says marketing needs consent, no
- * consent is recorded anywhere, and the privacy policy does not disclose marketing (docs/legal/open-items.md §3,
- * docs/email/who-we-can-email.md). `legallyCleared` says so in the data, so no caller can mistake one for the other.
+ * It never sends, stores or changes anything. Marketing needs explicit consent (docs/email/marketing-consent.md): an account is
+ * eligible for the reactivation campaign only if it ticked the box at sign-up or turned the switch on in Account, has not
+ * withdrawn, AND passes every other rule. Confirming an address is not consent, and neither is being an existing account.
  */
 import { sql as pg } from '../db/client.js';
 import { selectAudience, type ExcludeReason } from './reactivation-campaign.js';
@@ -18,7 +17,7 @@ import type { MailServer } from './address-vetting.js';
 
 export type EmailAudiences = {
   now: Date;
-  accounts: { total: number; confirmed: number; unconfirmed: number; /** unconfirmed AND never asked at sign-up */ legacyUnconfirmed: number };
+  accounts: { total: number; confirmed: number; unconfirmed: number; /** unconfirmed AND never asked at sign-up */ legacyUnconfirmed: number; /** explicit marketing consent on record (confirmed or not) */ marketingConsent: number };
   /** The reminder to confirm: one per account, ever. Counts ignore the daytime send window (it only delays a send by hours). */
   accountReminder: {
     now: number;
@@ -33,11 +32,9 @@ export type EmailAudiences = {
   /** The existing daily study-plan email: needs a confirmed address and the preference on; also a plan, a Free plan and the local hour. */
   dailyStudyEmail: { confirmedWithEmailsOn: number; ofWhichWithAPlan: number };
   reactivationMarketing: {
-    /** Passes the campaign's technical rules (confirmed adult, Free, inactive, not recently emailed…). */
-    passesTechnicalRules: number;
+    /** Consented, confirmed and passing every other rule (adult, Free, inactive, not recently emailed, not suppressed…): who the campaign could email. */
+    eligible: number;
     excluded: Partial<Record<ExcludeReason, number>>;
-    /** Always false today: no marketing consent is recorded and the privacy policy does not disclose marketing. */
-    legallyCleared: false;
   };
 };
 
@@ -47,9 +44,10 @@ export async function emailAudiences(opts: { now?: Date; history?: DeliveryHisto
   const common = { history: opts.history ?? null, mx: opts.mx, userIds: opts.userIds, anyTime: true };
   const tomorrow = new Date(now.getTime() + 24 * 3_600_000);
 
-  const [counts] = await pg<{ total: number; confirmed: number; legacy: number }[]>`
+  const [counts] = await pg<{ total: number; confirmed: number; legacy: number; consent: number }[]>`
     select count(*)::int as total, count(*) filter (where email_verified_at is not null)::int as confirmed,
-      count(*) filter (where email_verified_at is null and not email_verification_required)::int as legacy
+      count(*) filter (where email_verified_at is null and not email_verification_required)::int as legacy,
+      count(*) filter (where marketing_consent_at is not null)::int as consent
     from users where (${only}::uuid[] is null or id = any(${only}::uuid[]))`;
   const [study] = await pg<{ on: number; plan: number }[]>`
     select count(*) filter (where u.study_reminder_emails)::int as on,
@@ -65,9 +63,9 @@ export async function emailAudiences(opts: { now?: Date; history?: DeliveryHisto
   ]);
   return {
     now,
-    accounts: { total: counts!.total, confirmed: counts!.confirmed, unconfirmed: counts!.total - counts!.confirmed, legacyUnconfirmed: counts!.legacy },
+    accounts: { total: counts!.total, confirmed: counts!.confirmed, unconfirmed: counts!.total - counts!.confirmed, legacyUnconfirmed: counts!.legacy, marketingConsent: counts!.consent },
     accountReminder: { now: now0.eligible.length, within24h: in24.eligible.length, withLegacyNow: legacy0.eligible.length, withLegacyWithin24h: legacy24.eligible.length, heldNow: now0.excluded },
     dailyStudyEmail: { confirmedWithEmailsOn: study!.on, ofWhichWithAPlan: study!.plan },
-    reactivationMarketing: { passesTechnicalRules: marketing.eligible.length, excluded: marketing.excluded, legallyCleared: false },
+    reactivationMarketing: { eligible: marketing.eligible.length, excluded: marketing.excluded },
   };
 }

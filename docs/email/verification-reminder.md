@@ -48,7 +48,7 @@ This is the engineering position, not legal advice; the open points need the leg
 |---|---|---|
 | Unconfirmed, asked at sign-up | **Yes** (default): a service message about the account they created, to the address they gave, no marketing content, once. The privacy policy discloses the confirmation email | **No**, never: an unconfirmed address is not proven to belong to the person |
 | Unconfirmed, predates verification | **Operator’s decision** (`--include-legacy`): same message, but they were never asked before. Reasonable for recent sign-ups; leave out if in doubt | **No** until they confirm, and then still **no**: they have no age group |
-| Confirmed adult | not applicable | **Not cleared**: Exama’s register says marketing needs consent and none is recorded (`who-we-can-email.md`). The campaign’s technical rules still apply on top |
+| Confirmed adult | not applicable | **Only with explicit marketing consent** (optional checkbox at sign-up or the Account switch, `marketing-consent.md`): confirming an address is not consent. The campaign’s technical rules still apply on top |
 | Under 18, or no age group | allowed (account message) | **never** |
 | Bounced, complained, suppressed | **never** | **never** |
 

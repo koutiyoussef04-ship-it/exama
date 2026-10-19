@@ -1,4 +1,4 @@
-import type { AgeRange, BillingEnvironment, FlashcardResult, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
+import type { AgeRange, BillingEnvironment, FlashcardResult, MarketingConsentSource, MaterialFormat, MaterialKnowledge, OnboardingAnswers, PlanId, PreparedLevel, StudyMinutes, TopicInsight } from '@study/shared';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -40,8 +40,28 @@ export const users = pgTable('users', {
   ageRange: text('age_range').$type<AgeRange>(),
   /** Daily study-plan reminder emails (services/study-reminders.ts). On by default; off via Account or the unsubscribe link. */
   studyReminderEmails: boolean('study_reminder_emails').notNull().default(true),
+  /**
+   * Explicit, optional consent to marketing email (tips, news, offers, invitations to come back) — a different category from
+   * the daily study-plan email above. NULL = no consent: the state of every account that never ticked the box, of every account
+   * created before this existed, and of everyone who withdrew. Set only by services/marketing-consent.ts, from an explicit
+   * request carrying a known wording version; never inferred from verification, activity or account creation. The four columns
+   * are all NULL or all set (check below); the history, including withdrawals, is in `marketing_consent_log`.
+   */
+  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
+  /** Version of the wording shown when the consent was given (MARKETING_CONSENT_VERSION). */
+  marketingConsentVersion: text('marketing_consent_version'),
+  /** Language of the wording shown (en, es, fr, ar): with the version, identifies the exact text. */
+  marketingConsentLanguage: text('marketing_consent_language'),
+  /** Where it was given: `signup` or `account`. Set by the server. */
+  marketingConsentSource: text('marketing_consent_source').$type<MarketingConsentSource>(),
 }, (t) => [
   check('users_age_range_check', sql`${t.ageRange} is null or ${t.ageRange} in ('13_17', '18_24', '25_34', '35_plus')`),
+  // All four consent columns are NULL (no consent) or all set with valid values: a half-written or invented consent can't exist.
+  check(
+    'users_marketing_consent_check',
+    sql`(${t.marketingConsentAt} is null and ${t.marketingConsentVersion} is null and ${t.marketingConsentLanguage} is null and ${t.marketingConsentSource} is null)
+      or (${t.marketingConsentAt} is not null and ${t.marketingConsentVersion} is not null and ${t.marketingConsentLanguage} in ('en', 'es', 'fr', 'ar') and ${t.marketingConsentSource} in ('signup', 'account'))`,
+  ),
   // Signups over time (admin dashboard).
   index('users_created_idx').on(t.createdAt),
 ]);
@@ -127,6 +147,31 @@ export const emailSuppressions = pgTable('email_suppressions', {
   reason: text('reason').$type<'bounced' | 'complained' | 'manual'>().notNull(),
   createdAt: createdAt(),
 });
+
+/**
+ * History of marketing-email consent (append only): one row each time consent is granted or withdrawn, with when (server time),
+ * which wording version and language, and through what (`signup`, `account` or `unsubscribe_link`). It exists so a consent can be
+ * demonstrated and a withdrawal can be shown to have been honoured; the current state is on `users.marketing_consent_*`.
+ * No address, no name and no email content. Deleted with the account (cascade).
+ */
+export const marketingConsentLog = pgTable(
+  'marketing_consent_log',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    action: text('action').$type<'granted' | 'withdrawn'>().notNull(),
+    /** Wording version and language of the consent that was granted, or that was withdrawn. */
+    version: text('version'),
+    language: text('language'),
+    source: text('source').$type<MarketingConsentSource | 'unsubscribe_link'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('marketing_consent_log_user_idx').on(t.userId, t.createdAt),
+    check('marketing_consent_log_action_check', sql`${t.action} in ('granted', 'withdrawn')`),
+    check('marketing_consent_log_source_check', sql`${t.source} in ('signup', 'account', 'unsubscribe_link')`),
+  ],
+);
 
 /**
  * Re-registration hold after account deletion (services/email-hold.ts). One row per recently deleted

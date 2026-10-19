@@ -4,10 +4,10 @@ Engineering position, written from the code and from Exama’s own legal registe
 
 ## The short version
 
-1. **Account emails may go to unconfirmed addresses; marketing may not go to anyone yet.** An email that exists to run the account the person created (confirm the address, reset a password, a legal or security notice) is a different thing from an email that invites someone to use the product again.
-2. **Neither “unconfirmed” nor “confirmed” is consent.** Confirming an address proves the mailbox belongs to the person; it says nothing about agreeing to marketing. Exama’s register says it plainly: *Marketing — none today … any future marketing needs consent*. No consent is recorded anywhere, and the privacy policy does not disclose marketing. So **nobody is cleared for the reactivation campaign today**, confirmed or not.
-3. **The way to reach the unconfirmed accounts is the confirmation reminder** (one email per account, ever, no marketing content). It is built; today it can reach nobody only because of two conservative gates: three accounts are younger than 24 h (their sign-up link is still valid) and ten accounts were never asked (held out until an operator includes them).
-4. **The way to ever market to people is to collect consent in the app** (below), not to email them to ask: asking for marketing consent by email is itself marketing.
+1. **Account emails may go to unconfirmed addresses; marketing goes only to people who said yes.** An email that exists to run the account the person created (confirm the address, reset a password, a legal or security notice) is a different thing from an email that invites someone to use the product again.
+2. **Neither “unconfirmed” nor “confirmed” is consent.** Confirming an address proves the mailbox belongs to the person; it says nothing about agreeing to marketing. Exama’s register says plainly that marketing needs consent. Consent is now collected explicitly: an **optional, unticked checkbox at sign-up** and a switch in Account (`marketing-consent.md`), recorded only when the person says yes. Every account that existed before has **no** consent, and nothing infers one.
+3. **The way to reach the unconfirmed accounts is the confirmation reminder** (one email per account, ever, no marketing content). It is built; the number it can reach today is limited only by two conservative gates (accounts younger than 24 h, and accounts that predate verification, which need an explicit operator choice).
+4. **Marketing eligibility = explicit consent + confirmed address + every existing safety rule** (adult, Free, inactive, not suppressed or bounced, not unsubscribed…). The daily study-plan email is a **separate category** and is not covered by the consent.
 
 ## Types of email
 
@@ -19,7 +19,7 @@ Engineering position, written from the code and from Exama’s own legal registe
 | **Confirmation reminder** (one-off) | operator CLI | yes — this is its purpose | yes: it is the same confirmation email, with a reminder sentence and no other content | `VERIFICATION_REMINDER_SEND`, `--limit`, approval code; one per account, ever; address vetting; bounce/complaint/suppression checks |
 | Web subscription confirmation | a subscription | not applicable (subscribers) | yes | webhook |
 | Daily study-plan email | the server | **no**: confirmed addresses only | yes, for people with a plan and no subscription | `STUDY_REMINDER_EMAILS_ENABLED`, preference on, plan, Free plan, local hour. *Counsel*: whether it is a service message or direct marketing is still open (`open-items.md` §7) |
-| Reactivation campaign | operator CLI | **never** | **no**: marketing is not disclosed | `REACTIVATION_CAMPAIGN_SEND`, confirmed adult, Free, inactive, approval code. **Not cleared: needs consent** |
+| Reactivation campaign | operator CLI | **never** | **no**: marketing is not in the policy yet (*counsel*: add it, `marketing-consent.md`) | `REACTIVATION_CAMPAIGN_SEND`, **explicit marketing consent**, confirmed adult, Free, inactive, approval code; consent is re-checked before every email |
 | Legal or security notice to all accounts (terms change, incident) | operator | yes, where the law requires telling account holders | n/a — not built | would be a one-off service message |
 
 ## What the law says in general (counsel to confirm for Exama’s markets)
@@ -41,7 +41,7 @@ Exama’s apps and website are in Spanish, French and Arabic as well as English,
 |---|---|---|---|
 | Unconfirmed, asked at sign-up | **yes** (after 24 h, vetted) | no | **no** |
 | Unconfirmed, predates verification (“legacy”) | **operator’s decision** (`--include-legacy`, vetted, small first batch) | no | **no** — and they have **no age group**, so they could never pass the adult-only rule even after confirming |
-| Confirmed adult | not applicable | yes if they have a plan on a Free plan (existing) | **not cleared** (no consent). Technically eligible only if Free, inactive 7 days, account 3+ days, no other Exama email in 7 days |
+| Confirmed adult | not applicable | yes if they have a plan on a Free plan (existing) | **only with explicit marketing consent** (ticked at sign-up or switched on in Account, not withdrawn), and only if Free, inactive 7 days, account 3+ days, no other Exama email in 7 days. Confirmed without consent: **no** |
 | Under 18 / no age group | allowed (account message) | existing rules | **never** |
 | Bounced, complained, suppressed (ours or Resend’s) | **never** | **never** | **never** |
 
@@ -58,5 +58,5 @@ Exama’s apps and website are in Spanish, French and Arabic as well as English,
 
 1. **Wait for the three recent accounts** (reminder becomes available 24 h after each sign-up; no change needed). Run `email:audiences`, then `check-resend`, then the reminder `dry-run`.
 2. **Decide on `--include-legacy`.** Run `inspect-legacy` first to see which addresses look real. This is the only step that reaches the ten older accounts; verification stays mandatory and is only ever completed by the owner of the mailbox.
-3. **Marketing: collect consent in the app, do not email for it.** Smallest compliant design: a nullable `users.marketing_consent_at` (+ the wording version) set only by an unticked opt-in in Account (and optionally at sign-up), withdrawn by the existing one-click unsubscribe; the campaign then requires it in addition to its current rules; privacy policy and register updated. That turns “nobody cleared” into “everyone who said yes”, which is the only audience that is both legal and worth emailing. It needs a migration, the app screens in four languages and counsel’s wording; it is not built.
+3. **Marketing: consent collected in the app, never by email — built** (`marketing-consent.md`): an optional, unticked checkbox at sign-up and an Account switch, stored as `users.marketing_consent_*` (server time, wording version and language, source) with an append-only history, withdrawable by the link in every marketing email. The campaign now requires it. Existing accounts have none and can opt in only through the Account switch (an optional one-time in-app card is described but not built). **Still to do before any send: counsel’s review of the wording and the privacy-policy sentence.**
 4. **Legacy accounts and the age group:** to ever market to them they would first need an in-app age prompt (none exists), then consent.

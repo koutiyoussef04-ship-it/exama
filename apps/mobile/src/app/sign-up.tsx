@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Text, TextInput, View } from 'react-native';
 import { SIGNUP_AGE_ANSWERS, type SignupAgeAnswer } from '@study/shared';
 import { Chips } from '@/components/planner';
-import { Body, Button, Card, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
+import { Body, Button, Card, CheckRow, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
 import { AGE_BLOCK_KEY, ageBlockActive, ageBlockValue, isBelowMinimumAge, MINIMUM_SIGNUP_AGE } from '@/lib/age-gate';
 import { ApiError } from '@/lib/api';
 import { canSubmitSignup, MIN_PASSWORD_LENGTH, passwordsMatch, showPasswordMismatch, signupRequest } from '@/lib/signup-form';
@@ -25,6 +25,8 @@ export default function SignUp() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [mismatch, setMismatch] = useState(false);
   const [ageRange, setAgeRange] = useState<SignupAgeAnswer | null>(null);
+  // Optional marketing-email consent: unticked by default, never required, separate from the terms below the button.
+  const [marketing, setMarketing] = useState(false);
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.
   const [blocked, setBlocked] = useState<boolean | null>(null);
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function SignUp() {
     setPassword('');
     setConfirmPassword('');
     setAgeRange(null);
+    setMarketing(false);
     setBlocked(true);
     void kv.set(AGE_BLOCK_KEY, ageBlockValue());
   };
@@ -58,8 +61,8 @@ export default function SignUp() {
     setLoading(true);
     setError(null);
     try {
-      // The app language is used for the verification email.
-      await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage }));
+      // The app language is used for the verification email, and is the language of the consent wording the person saw.
+      await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage, marketing }));
     } catch (e) {
       if (e instanceof ApiError && e.code === 'age_requirement_not_met') decline();
       else setError(e);
@@ -161,6 +164,8 @@ export default function SignUp() {
           <Chips options={SIGNUP_AGE_ANSWERS.map((value) => ({ value, label: t(`auth.age.${value}`) }))} value={ageRange as SignupAgeAnswer} onChange={setAgeRange} />
           <Body muted style={{ fontSize: 13 }}>{t('auth.ageHint')}</Body>
         </View>
+        {/* Optional and unticked: ticking it is the only thing that records marketing consent; signing up works the same without it. */}
+        <CheckRow tone="primary" checked={marketing} onChange={setMarketing} label={t('marketing.statement')} hint={t('marketing.hint')} />
         <ErrorText error={error} />
         <Button title={t('auth.createAccount')} onPress={submit} loading={loading} disabled={!canSubmit} />
         <Body muted style={{ fontSize: 13, textAlign: 'center' }}>

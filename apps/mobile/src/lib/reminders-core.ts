@@ -40,3 +40,13 @@ export function unsubscribeToken(hash: string | null | undefined, param?: string
   const token = raw.trim();
   return TOKEN.test(token) ? token : '';
 }
+
+/**
+ * Which emails an unsubscribe link stops, from `/unsubscribe#token=…&category=marketing` (or a `category` route parameter).
+ * Only "marketing" is recognised; anything else is the older link of the daily study-plan email.
+ */
+export function unsubscribeCategory(hash: string | null | undefined, param?: string | string[] | null): 'marketing' | 'study_reminders' {
+  const fromHash = hash ? new URLSearchParams(hash.replace(/^#/, '')).get('category') : null;
+  const raw = fromHash ?? (Array.isArray(param) ? param[0] : param) ?? null;
+  return raw === 'marketing' ? 'marketing' : 'study_reminders';
+}
