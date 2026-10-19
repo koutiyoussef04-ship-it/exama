@@ -68,8 +68,34 @@ From the exama-api Shell on Render (the database only accepts connections from i
 | `send --limit 5 --approval CODE [--include-legacy]` | sends that batch; needs `VERIFICATION_REMINDER_SEND=true` |
 | `sync` | reads each reminder’s status back from Resend; every address Resend recorded a bounce or complaint for (any Exama email, including the sign-up email) goes on the suppression list |
 | `report` | sent, delivered, bounced, complaints, confirmed after the reminder, still unconfirmed |
+| `check-resend` | **read-only diagnosis** of the delivery-log lookup: one request without a key (is Resend reachable?) and one with the production key, attempt by attempt, with a plain verdict. Sends nothing |
+| `inspect-legacy [--list]` | **read-only** description of the accounts that were never asked to confirm: registration days, age group, whether anyone signed in again, address domains and checks (role address, disposable domain, mailbox twice, domain without a mail server), Resend bounces. Addresses are masked; nothing is changed or included |
 
-Suggested order: `dry-run` (read the numbers) → `sync` (puts earlier bounces on the suppression list) → `dry-run` again → `send --limit 5` for the first batch → next day `sync`, `report` → continue only if nothing bounced.
+Suggested order: `check-resend` (must say the key can read the log) → `dry-run` (read the numbers) → `sync` (puts earlier bounces on the suppression list) → `dry-run` again → `send --limit 5` for the first batch → next day `sync`, `report` → continue only if nothing bounced. `inspect-legacy` any time, to decide on `--include-legacy`.
+
+## Reading Resend’s delivery log (and what to do when it fails)
+
+A send refuses unless the log was read completely, so a failure here is safe but blocks the run. The dry run prints the kind of failure, the HTTP status and Resend’s error name (never a response body, an address or the key), the attempts and the time. Run `check-resend` to see which of these it is:
+
+| Kind | Meaning | Fix |
+|---|---|---|
+| `permission` with `restricted_api_key` (HTTP 401/403) | the production key may only **send**; reading needs **Full access** (Resend’s documentation: `restricted_api_key` “requires a key with Full access for non-send actions”) | in Resend → API Keys create a Full access key and set it as `RESEND_API_KEY` on exama-api |
+| `http` 400 `validation_error` | Resend says the key is invalid (mistyped, revoked, not a Resend key) | check `RESEND_API_KEY` |
+| `timeout` | Resend (or the route to it) did not answer within 30 s on every attempt | run again; if it persists the log is not reachable from that machine |
+| `network` | no connection at all (the check without a key fails too) | DNS / outbound network of the machine |
+| `rate_limit` | Resend’s 10 requests a second for the whole team, or a quota | wait a minute |
+| `server` | Resend answered 5xx on every attempt | try later |
+
+How the lookup behaves (it is a read, so retrying is safe): 100 emails a page, up to 40 pages (4000 emails; the free plan sends at most 3000 a month); each request times out after 30 s; timeouts, network errors, 5xx and rate limits are retried up to 3 times with exponential backoff, waiting for `Retry-After` on a 429; a quota error, a refused key or an unreadable answer is **not** retried; the cursor must move forward or the log is reported incomplete; the whole lookup has a 120 s budget. **Nothing is cached**: a stale “no bounce” is exactly what this check must not trust, and a failed lookup never falls back to an old one. Resend’s own limits: 10 requests a second shared with everything Exama sends.
+
+## The accounts that predate verification (“legacy”)
+
+Facts, from the code, git history and the production request log:
+
+- **How they were made.** `POST /auth/register` is the only code path that creates an account, so they are ordinary sign-ups from the app or website. They are “legacy” because they registered **before the 17 Oct 2026 release** (commit `509ecae`: email verification, the age question and migrations 0012–0016 shipped together; the verification endpoints are first seen in the production log on 17 Oct 11:57 UTC and the first verification email on 17 Oct). `email_verification_required` is only set to true at sign-up, so they were never asked.
+- **They have no age group.** The age question shipped in the same release and there is no route that lets an existing account set it. So even after confirming, a legacy account can **never** join the reactivation campaign (`minor_or_unknown_age`). Reaching them with the campaign would first need an in-app age prompt. A confirmation would only make them eligible for the existing daily study-plan email (accounts with a plan).
+- **Whether the addresses are real and current** cannot be proven without their owners: only opening a confirmation link proves that. `inspect-legacy` gathers the available evidence (signed in again, a delivered earlier email, a domain that can receive mail, no role/disposable/duplicate flags); it makes an address likely, not certain.
+- Hard bounces and complaints go on the suppression list (`sync`), and `--include-legacy` stays an explicit operator decision.
 
 ## What a send needs (it never sends by itself)
 

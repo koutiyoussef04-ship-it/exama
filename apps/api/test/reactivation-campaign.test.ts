@@ -299,9 +299,12 @@ test('batches pause between groups and the daily cap holds across runs', async (
   assert.equal(r.sent, 5);
   assert.deepEqual(sleeps, [7, 99, 7, 99], 'a pause after every second email, a short gap otherwise, nothing after the last');
 
-  const [{ n: sentToday }] = await sql<{ n: number }[]>`select count(*)::int as n from email_campaign_sends where status = 'sent' and sent_at > now() - interval '24 hours'`;
+  // The cap counts every campaign email of the last 24 h, and other test files write to the same table at the same time:
+  // build everything first and read the count right before sending, so the window for someone else's row is milliseconds.
   const next = [await newUser(), await newUser()];
-  const capped = await campaign.sendBatch({ step: 1, batch: campaign.nextBatch(await audience(next), 5), limit: 5, maxPerDay: sentToday + 1, gapMs: 0, pauseMs: 0 });
+  const nextBatch = campaign.nextBatch(await audience(next), 5);
+  const [{ n: sentToday }] = await sql<{ n: number }[]>`select count(*)::int as n from email_campaign_sends where status = 'sent' and sent_at > now() - interval '24 hours'`;
+  const capped = await campaign.sendBatch({ step: 1, batch: nextBatch, limit: 5, maxPerDay: sentToday + 1, gapMs: 0, pauseMs: 0 });
   assert.equal(capped.sent, 1, 'only what is left under the cap');
   const full = await campaign.sendBatch({ step: 1, batch: campaign.nextBatch(await audience(next), 5), limit: 5, maxPerDay: sentToday + 1, gapMs: 0, pauseMs: 0 });
   assert.equal(full.sent, 0);

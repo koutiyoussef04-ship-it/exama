@@ -7,6 +7,8 @@
  *   VERIFICATION_REMINDER_SEND=true npm run campaign:verification-reminder -- send --limit 5 --approval <code from the dry run>
  *   npm run campaign:verification-reminder -- sync                                     read delivery status back from Resend; bounces and complaints are suppressed
  *   npm run campaign:verification-reminder -- report
+ *   npm run campaign:verification-reminder -- check-resend                             why can't the delivery log be read? (two GETs, sends nothing)
+ *   npm run campaign:verification-reminder -- inspect-legacy [--list]                  accounts never asked to confirm: when made, ever active, address looks real? (read-only)
  *
  * On Render (the production database only accepts connections from inside Render): open the exama-api Shell and
  * run the same commands with `npm run campaign:verification-reminder:prod -w @study/api -- …`.
@@ -23,7 +25,11 @@ import {
   DEFAULT_MAX_PER_DAY,
   REMINDER_CAMPAIGN,
   RESEND_DAILY_LIMIT,
+  ResendLogError,
+  diagnoseResend,
+  explainDiagnosis,
   fetchDeliveryHistory,
+  inspectLegacy,
   nextReminderBatch,
   reminderApprovalCode,
   reminderPreflight,
@@ -70,9 +76,14 @@ async function loadHistory(): Promise<{ history: DeliveryHistory | null; problem
   if (config.EMAIL_PROVIDER !== 'resend') return { history: null, problem: null };
   try {
     const history = await fetchDeliveryHistory();
-    return { history, problem: history.complete ? null : 'Resend’s log is longer than the pages read: older bounces were not checked' };
+    return { history, problem: history.complete ? null : 'Resend’s log is longer than the pages read (or a page could not be followed): older bounces were not checked' };
   } catch (err) {
-    return { history: null, problem: `could not read Resend’s delivery log (${err instanceof Error ? err.message : 'error'})` };
+    if (err instanceof ResendLogError) {
+      const d = err.detail;
+      const hint = err.kind === 'permission' ? ' — the API key is send-only; run `check-resend`' : ' — run `check-resend` for the details';
+      return { history: null, problem: `could not read Resend’s delivery log: ${err.kind}${d.status ? ` (HTTP ${d.status}${d.name ? ` ${d.name}` : ''})` : ''}, ${err.message}; ${d.attempts} attempt${d.attempts === 1 ? '' : 's'}, ${(d.elapsedMs / 1000).toFixed(1)} s${hint}` };
+    }
+    return { history: null, problem: `could not read Resend’s delivery log (${err instanceof Error ? `${err.name}: ${err.message}` : 'error'})` };
   }
 }
 
@@ -185,6 +196,39 @@ async function main() {
       const r = await syncReminders();
       return console.log(`Checked ${r.checked} reminders, updated ${r.updated}; read ${r.historyEmails} emails from Resend's log; newly suppressed ${r.suppressed}${r.stopped ? ` — stopped: ${r.stopped}` : ''}`);
     }
+    case 'check-resend': {
+      if (config.EMAIL_PROVIDER !== 'resend' || !config.RESEND_API_KEY) return console.log('EMAIL_PROVIDER is not resend (or RESEND_API_KEY is missing): there is no delivery log to read here.');
+      const d = await diagnoseResend();
+      console.log(`\nResend delivery log — read-only check (sends nothing)\n`);
+      console.log(`  1. api.resend.com without a key:  ${d.network.ok ? 'answered 401 (the API is reachable)' : d.network.error ?? `HTTP ${d.network.status}`}  [${d.network.ms} ms]`);
+      console.log(`  2. delivery log with the key:     ${d.key.ok ? `readable (${d.key.emailsOnFirstPage} emails on the first page)` : `FAILED — ${d.key.kind ?? 'error'}${d.key.status ? ` HTTP ${d.key.status}${d.key.name ? ` ${d.key.name}` : ''}` : ''}`}  [${d.key.ms} ms]`);
+      for (const a of d.key.attempts) console.log(`       attempt ${a.attempt}: ${a.outcome}${a.status ? ` HTTP ${a.status}` : ''}${a.name ? ` ${a.name}` : ''} after ${a.ms} ms`);
+      console.log(`\n  ${explainDiagnosis(d)}\n`);
+      if (!d.key.ok) process.exitCode = 2;
+      return;
+    }
+    case 'inspect-legacy': {
+      const { history, problem } = await loadHistory();
+      const r = await inspectLegacy({ history });
+      console.log(`\nAccounts never asked to confirm their email (they predate verification) — read-only, nothing is changed or included\n`);
+      console.log(`Accounts                      ${r.total}`);
+      console.log(`Registered (UTC day)          ${r.byDay.map((d) => `${d.day} ×${d.n}`).join(' · ') || '–'}`);
+      console.log(`Age group                     given ${r.ageGroup.given} · none ${r.ageGroup.none}   (only confirmed adults with a group can ever join the marketing campaign)`);
+      console.log(`Signed in again after sign-up ${r.activity.loggedInAfterSignup} · opened the app signed in ${r.activity.openedAppSignedIn} · active in the last 7 days ${r.activity.activeLast7Days} · never active ${r.activity.neverActive}`);
+      console.log(`Made a course ${r.activity.withCourse} · made a study plan ${r.activity.withPlan}`);
+      console.log(`Address domains               ${r.domains.top.map((d) => `${d.domain} ${d.n}`).join(' · ') || '–'}${r.domains.otherDomains ? ` · other: ${r.domains.otherAccounts} account${r.domains.otherAccounts === 1 ? '' : 's'} on ${r.domains.otherDomains} domain${r.domains.otherDomains === 1 ? '' : 's'}` : ''}`);
+      const h = r.hygiene;
+      console.log(`Address checks                invalid syntax ${h.invalidSyntax} · role address (info@, test@…) ${h.roleAccount} · disposable domain ${h.disposable} · same mailbox twice ${h.sharedMailbox} · domain has no mail server ${h.noMailServer} · DNS inconclusive ${h.lookupInconclusive}`);
+      console.log(`Suppressed                    ${r.suppressed}`);
+      console.log(`Resend log                    ${r.delivery ? `${r.delivery.addressesEmailed} of these addresses were emailed before (password reset, sign-up link…); ${r.delivery.bounced} bounced or complained` : problem ? `not read: ${problem}` : 'not available with this email provider'}`);
+      console.log(`\nReading this: an address is only PROVEN current when its owner opens a confirmation link; the signals above (signed in again, a delivered email, a mail-serving domain, no flags) make it likely, not certain.`);
+      if (flag('list')) {
+        console.log('\nOne line per account (addresses masked):');
+        for (const x of r.rows) console.log(`  ${x.masked.padEnd(26)} ${x.day}  ${x.domain.padEnd(14)} ${x.signedIn ? 'signed in again' : 'never signed in again'}${x.lastActiveDaysAgo === null ? '' : ` · last active ${x.lastActiveDaysAgo} d ago`}${x.courses ? ` · ${x.courses} course${x.courses === 1 ? '' : 's'}` : ''}${x.plans ? ` · ${x.plans} plan${x.plans === 1 ? '' : 's'}` : ''}${x.flags.length ? `  [${x.flags.join(', ')}]` : ''}`);
+      }
+      console.log('');
+      return;
+    }
     case 'report': {
       const r = await reminderReport();
       if (!r.sent) return console.log('\nNothing sent yet.\n');
@@ -194,7 +238,7 @@ async function main() {
       return;
     }
     default:
-      fail(`Unknown command "${command}". Use dry-run, preview, send, sync or report.`);
+      fail(`Unknown command "${command}". Use dry-run, preview, send, sync, report, check-resend or inspect-legacy.`);
   }
 }
 

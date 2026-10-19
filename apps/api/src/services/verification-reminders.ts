@@ -38,7 +38,8 @@ import { db, sql as pg } from '../db/client.js';
 import { emailCampaignSends } from '../db/schema.js';
 import { sendVerificationReminder, verificationAvailable } from './email-verification.js';
 import { isValidTimeZone } from './planner/dates.js';
-import { suppress, syncDelivery } from './reactivation-campaign.js';
+import { resolve4, resolve6, resolveMx } from 'node:dns/promises';
+import { maskEmail, suppress, syncDelivery } from './reactivation-campaign.js';
 import { deviceSignals, localHour } from './study-reminders.js';
 
 export const REMINDER_CAMPAIGN = 'verification-reminder-2026-10';
@@ -110,8 +111,44 @@ export type DeliveryHistory = {
   /** lowercased address → how Exama's earlier emails to it ended. `bad`: the first bounce, complaint or suppression Resend recorded. */
   byAddress: Map<string, { emails: number; bad: 'bounced' | 'complained' | 'suppressed' | null }>;
   emails: number;
-  /** false when the log was longer than `maxPages` pages: addresses further back are unknown. */
+  /** false when the log was longer than `maxPages` pages, or a page could not be followed: addresses further back are unknown. */
   complete: boolean;
+};
+
+/**
+ * Why the Resend log could not be read. `permission`: the key may only send (Resend answers 401/403 `restricted_api_key`:
+ * reading needs a Full access key). `timeout` and `network` are a slow or unreachable Resend (or this machine's network);
+ * `rate_limit` is Resend's 10 requests/second (or a quota); `deadline` is the whole lookup exceeding its budget.
+ * Never carries a response body, an address or the key: only the status, Resend's error name and the timings.
+ */
+export type ResendLogFailure = 'permission' | 'timeout' | 'network' | 'rate_limit' | 'server' | 'http' | 'shape' | 'deadline';
+export class ResendLogError extends Error {
+  constructor(
+    readonly kind: ResendLogFailure,
+    message: string,
+    readonly detail: { status?: number; name?: string; attempts: number; elapsedMs: number },
+  ) {
+    super(message);
+    this.name = 'ResendLogError';
+  }
+}
+
+export type LogAttempt = { attempt: number; outcome: 'ok' | 'timeout' | 'network' | 'http'; status?: number; name?: string; ms: number };
+export type HistoryOptions = {
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  /** Clock (ms), for the overall deadline; tests move it with `sleep`. */
+  now?: () => number;
+  /** Pages of 100 emails to read before saying the log is incomplete (default 40 = 4000 emails; the free plan sends at most 3000 a month). */
+  maxPages?: number;
+  /** Per request (default 30 s). A slow answer is retried; it never hangs the run. */
+  requestTimeoutMs?: number;
+  /** Tries per page for timeouts, network errors, 5xx and rate limits (default 3). Reading is idempotent, so retrying is safe. */
+  attempts?: number;
+  /** Budget for the whole lookup, retries and waits included (default 120 s). */
+  deadlineMs?: number;
+  /** Called after every request (diagnostics). */
+  onAttempt?: (info: LogAttempt) => void;
 };
 
 const BAD = new Set(['bounced', 'complained', 'suppressed']);
@@ -119,27 +156,94 @@ const addressOf = (to: unknown) => {
   const raw = typeof to === 'string' ? to : '';
   return (/<([^>]+)>/.exec(raw)?.[1] ?? raw).trim().toLowerCase();
 };
+const QUOTA_ERRORS = new Set(['daily_quota_exceeded', 'monthly_quota_exceeded']);
+const isAbort = (e: unknown) => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+/** The body as JSON; `undefined` when it is not JSON. A timeout while reading the body is rethrown (it is a timeout, not a bad answer). */
+const readJson = (res: Response): Promise<unknown> =>
+  res.json().catch((e: unknown) => {
+    if (isAbort(e)) throw e;
+    return undefined;
+  });
+
+/** One GET with a per-request timeout and bounded retries (timeouts, network errors, 5xx, rate limits). Honours Retry-After. */
+async function getWithRetries(url: string, o: Required<Pick<HistoryOptions, 'requestTimeoutMs' | 'attempts' | 'deadlineMs'>> & HistoryOptions, f: typeof fetch, sleep: (ms: number) => Promise<void>, now: () => number, started: number): Promise<unknown> {
+  let last: ResendLogError | null = null;
+  for (let attempt = 1; attempt <= o.attempts; attempt++) {
+    const elapsed = () => now() - started;
+    const remaining = o.deadlineMs - elapsed();
+    if (remaining <= 0) throw new ResendLogError('deadline', `Reading Resend’s log took longer than ${Math.round(o.deadlineMs / 1000)} s${last ? ` (last problem: ${last.message})` : ''}`, { attempts: attempt - 1, elapsedMs: elapsed(), status: last?.detail.status, name: last?.detail.name });
+    const t0 = now();
+    let wait = Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.floor(Math.random() * 250);
+    try {
+      const res = await f(url, { headers: { Authorization: `Bearer ${config.RESEND_API_KEY}` }, signal: AbortSignal.timeout(Math.min(o.requestTimeoutMs, remaining)) });
+      const status = res.status;
+      if (res.ok) {
+        const body = await readJson(res);
+        o.onAttempt?.({ attempt, outcome: 'ok', status, ms: now() - t0 });
+        if (body === undefined) throw new ResendLogError('shape', 'Unexpected Resend answer (not JSON)', { status, attempts: attempt, elapsedMs: elapsed() });
+        return body;
+      }
+      const name = ((await readJson(res)) as { name?: unknown } | null | undefined)?.name;
+      const errName = typeof name === 'string' ? name.slice(0, 60) : undefined;
+      o.onAttempt?.({ attempt, outcome: 'http', status, name: errName, ms: now() - t0 });
+      const detail = { status, name: errName, attempts: attempt, elapsedMs: elapsed() };
+      if (status === 401 || status === 403) {
+        if (errName && QUOTA_ERRORS.has(errName)) throw new ResendLogError('rate_limit', `Resend refused: ${errName}`, detail);
+        throw new ResendLogError('permission', errName === 'restricted_api_key' ? `Resend refused the key (${status} restricted_api_key): reading the log needs a Full access API key` : `Resend refused the key (${status}${errName ? ` ${errName}` : ''})`, detail);
+      }
+      if (status === 429) {
+        if (errName && QUOTA_ERRORS.has(errName)) throw new ResendLogError('rate_limit', `Resend responded 429 ${errName}`, detail);
+        const retryAfter = Number(res.headers.get('retry-after'));
+        if (Number.isFinite(retryAfter) && retryAfter > 0) wait = Math.min(retryAfter, 15) * 1000;
+        last = new ResendLogError('rate_limit', 'Resend responded 429 (rate limit)', detail);
+      } else if (status >= 500) {
+        last = new ResendLogError('server', `Resend responded ${status}${errName ? ` ${errName}` : ''}`, detail);
+      } else {
+        throw new ResendLogError('http', `Resend responded ${status}${errName ? ` ${errName}` : ''}`, detail);
+      }
+    } catch (err) {
+      if (err instanceof ResendLogError) {
+        throw err; // permanent (wrong key, bad request, quota, unreadable answer): retrying cannot help
+      } else {
+        const timedOut = isAbort(err);
+        const cause = (err as { cause?: { code?: unknown } } | null)?.cause?.code;
+        o.onAttempt?.({ attempt, outcome: timedOut ? 'timeout' : 'network', ms: now() - t0 });
+        last = new ResendLogError(
+          timedOut ? 'timeout' : 'network',
+          timedOut ? `Resend did not answer within ${Math.round(o.requestTimeoutMs / 1000)} s` : `could not reach Resend${typeof cause === 'string' ? ` (${cause})` : ''}`,
+          { attempts: attempt, elapsedMs: elapsed() },
+        );
+      }
+    }
+    if (attempt < o.attempts) await sleep(wait);
+  }
+  throw new ResendLogError(last!.kind, `${last!.message} (${o.attempts} attempts)`, { ...last!.detail, attempts: o.attempts, elapsedMs: now() - started });
+}
 
 /**
- * Every email Exama recently sent (Resend `GET /emails`, newest first) with its last delivery event. The sign-up
- * verification emails don't store a Resend id, so this is how a hard bounce of the sign-up email is known: sending
- * again to an address that bounced only adds a second bounce (Resend warns above about 4–5%, and this account sends
- * very few emails). Throws on any HTTP or shape problem: callers must not send without it.
+ * Every email Exama recently sent (Resend `GET /emails`, 100 a page, newest first) with its last delivery event. The sign-up
+ * verification emails don't store a Resend id, so this is how a hard bounce of the sign-up email is known: sending again to an
+ * address that bounced only adds a second bounce (Resend warns above about 4–5%, and this account sends very few emails).
+ *
+ * Reliable, not lenient: each request has its own timeout and is retried a few times with backoff (it is a read), the cursor
+ * must move forward, the whole lookup has a deadline, and ANY remaining problem throws a `ResendLogError` with its kind.
+ * Callers must not send without it. Results are never cached: a stale "no bounce" is exactly what this check must not trust.
  */
-export async function fetchDeliveryHistory(opts: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void>; maxPages?: number } = {}): Promise<DeliveryHistory> {
+export async function fetchDeliveryHistory(opts: HistoryOptions = {}): Promise<DeliveryHistory> {
   if (config.EMAIL_PROVIDER !== 'resend' || !config.RESEND_API_KEY) throw new Error('EMAIL_PROVIDER is not resend');
   const f = opts.fetchImpl ?? fetch;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const maxPages = opts.maxPages ?? 20;
+  const now = opts.now ?? Date.now;
+  const o = { ...opts, requestTimeoutMs: opts.requestTimeoutMs ?? 30_000, attempts: Math.max(1, opts.attempts ?? 3), deadlineMs: opts.deadlineMs ?? 120_000 };
+  const maxPages = opts.maxPages ?? 40;
+  const started = now();
   const out: DeliveryHistory = { byAddress: new Map(), emails: 0, complete: true };
   let after: string | null = null;
   for (let page = 0; ; page++) {
     if (page >= maxPages) return { ...out, complete: false };
     const url: string = `https://api.resend.com/emails?limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
-    const res = await f(url, { headers: { Authorization: `Bearer ${config.RESEND_API_KEY}` }, signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) throw new Error(`Resend responded ${res.status}`);
-    const body = (await res.json().catch(() => null)) as { data?: unknown; has_more?: unknown } | null;
-    if (!body || !Array.isArray(body.data)) throw new Error('Unexpected Resend answer (no data list)');
+    const body = (await getWithRetries(url, o, f, sleep, now, started)) as { data?: unknown; has_more?: unknown } | null;
+    if (!body || !Array.isArray(body.data)) throw new ResendLogError('shape', 'Unexpected Resend answer (no data list)', { attempts: 1, elapsedMs: now() - started });
     for (const item of body.data as { id?: unknown; to?: unknown; last_event?: unknown }[]) {
       out.emails++;
       const last = typeof item.last_event === 'string' ? item.last_event : null;
@@ -152,10 +256,12 @@ export async function fetchDeliveryHistory(opts: { fetchImpl?: typeof fetch; sle
         out.byAddress.set(address, entry);
       }
     }
+    if (body.has_more !== true) return out;
     const lastId: unknown = (body.data[body.data.length - 1] as { id?: unknown } | undefined)?.id;
-    if (body.has_more !== true || typeof lastId !== 'string') return out;
+    // A page that says "more" but gives no new cursor would loop forever: stop, and say the log is incomplete.
+    if (typeof lastId !== 'string' || lastId === after) return { ...out, complete: false };
     after = lastId;
-    await sleep(150); // Resend allows 10 requests a second
+    await sleep(150); // Resend allows 10 requests a second, shared with everything else Exama sends
   }
 }
 
@@ -353,6 +459,196 @@ export async function sendReminderBatch(opts: {
     }
     if (i < todo.length - 1) await sleep((i + 1) % size === 0 ? (opts.pauseMs ?? 60_000) : (opts.gapMs ?? 1_100));
   }
+  return report;
+}
+
+// ---------------------------------------------------------------- diagnostics (read-only)
+
+export type ResendDiagnosis = {
+  /** An unauthenticated request: Resend answers 401 within milliseconds when the network path works. */
+  network: { ok: boolean; status?: number; ms: number; error?: string };
+  /** The same read the dry run needs, with the production key, traced attempt by attempt. */
+  key: { ok: boolean; kind?: ResendLogFailure; message?: string; status?: number; name?: string; emailsOnFirstPage?: number; attempts: LogAttempt[]; ms: number };
+};
+
+/**
+ * Why can't the delivery log be read? Sends nothing and changes nothing: two GETs (one without a key, one with it)
+ * and a verdict. Never prints the key or a response body.
+ */
+export async function diagnoseResend(opts: HistoryOptions = {}): Promise<ResendDiagnosis> {
+  const f = opts.fetchImpl ?? fetch;
+  const now = opts.now ?? Date.now;
+  const t0 = now();
+  const network: ResendDiagnosis['network'] = { ok: false, ms: 0 };
+  try {
+    const res = await f('https://api.resend.com/emails?limit=1', { signal: AbortSignal.timeout(opts.requestTimeoutMs ?? 30_000) });
+    network.status = res.status;
+    network.ok = res.status === 401; // no key: 401 missing_api_key means the API answered
+  } catch (err) {
+    network.error = isAbort(err) ? 'timeout' : `network error${typeof (err as { cause?: { code?: unknown } })?.cause?.code === 'string' ? ` (${(err as { cause: { code: string } }).cause.code})` : ''}`;
+  }
+  network.ms = now() - t0;
+
+  const attempts: LogAttempt[] = [];
+  const t1 = now();
+  try {
+    const h = await fetchDeliveryHistory({ ...opts, maxPages: 1, onAttempt: (a) => attempts.push(a) });
+    return { network, key: { ok: true, emailsOnFirstPage: h.emails, attempts, ms: now() - t1 } };
+  } catch (err) {
+    if (err instanceof ResendLogError) return { network, key: { ok: false, kind: err.kind, message: err.message, status: err.detail.status, name: err.detail.name, attempts, ms: now() - t1 } };
+    return { network, key: { ok: false, message: err instanceof Error ? err.message : 'error', attempts, ms: now() - t1 } };
+  }
+}
+
+/** Plain-language verdict for `diagnoseResend`. */
+export function explainDiagnosis(d: ResendDiagnosis): string {
+  if (d.key.ok) return 'The key can read the delivery log: nothing to fix here.';
+  if (!d.network.ok) return `This machine could not get a normal answer from api.resend.com even without a key (${d.network.error ?? `HTTP ${d.network.status}`}): a network or DNS problem on this side, not the key.`;
+  switch (d.key.kind) {
+    case 'permission':
+      return d.key.name === 'restricted_api_key'
+        ? 'The API key is send-only (Resend answered restricted_api_key). Create a key with Full access in Resend → API Keys and set it as RESEND_API_KEY; sending-only keys cannot read the log.'
+        : `Resend refused the API key (${d.key.status}${d.key.name ? ` ${d.key.name}` : ''}): it is missing, revoked or not allowed to read. Check RESEND_API_KEY.`;
+    case 'timeout':
+      return 'The API is reachable, but the delivery-log request did not answer in time on every attempt: Resend was slow. Run this again; if it keeps happening, the timeout is the problem, not the key.';
+    case 'rate_limit':
+      return 'Resend is rate-limiting (10 requests a second for the whole team) or the quota is used up: wait a minute and retry.';
+    case 'server':
+      return 'Resend answered with a server error on every attempt: try again later.';
+    default:
+      if (d.key.kind === 'http' && d.key.status === 400 && d.key.name === 'validation_error') return 'Resend says the API key is invalid (HTTP 400 validation_error): RESEND_API_KEY is mistyped, revoked or not a Resend key.';
+      return `The delivery log could not be read (${d.key.message ?? 'unknown problem'}).`;
+  }
+}
+
+// ---------------------------------------------------------------- legacy accounts (read-only)
+
+const MAJOR_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.fr', 'yahoo.es', 'outlook.com', 'outlook.fr', 'outlook.es', 'hotmail.com', 'hotmail.fr', 'hotmail.es', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'gmx.net', 'yandex.com', 'mail.com', 'orange.fr', 'free.fr', 'wanadoo.fr', 'laposte.net', 'sfr.fr']);
+const DISPOSABLE_DOMAINS = new Set(['mailinator.com', 'guerrillamail.com', 'guerrillamail.net', '10minutemail.com', 'tempmail.com', 'temp-mail.org', 'yopmail.com', 'trashmail.com', 'sharklasers.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com', 'fakeinbox.com', 'mailnesia.com', 'mohmal.com']);
+const ROLE_LOCALPARTS = new Set(['admin', 'administrator', 'info', 'support', 'contact', 'hello', 'noreply', 'no-reply', 'donotreply', 'test', 'tester', 'example', 'sales', 'office', 'postmaster', 'abuse', 'webmaster', 'root', 'mail', 'help']);
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export type LegacyRow = { masked: string; day: string; domain: string; flags: string[]; signedIn: boolean; lastActiveDaysAgo: number | null; courses: number; plans: number };
+export type LegacyReport = {
+  total: number;
+  /** UTC day → accounts registered that day. */
+  byDay: { day: string; n: number }[];
+  ageGroup: { given: number; none: number };
+  activity: { loggedInAfterSignup: number; openedAppSignedIn: number; activeLast7Days: number; neverActive: number; withCourse: number; withPlan: number };
+  domains: { top: { domain: string; n: number }[]; otherDomains: number; otherAccounts: number };
+  hygiene: { invalidSyntax: number; roleAccount: number; disposable: number; sharedMailbox: number; noMailServer: number; lookupInconclusive: number };
+  suppressed: number;
+  /** Earlier Exama emails to these addresses, from Resend's log (null: log not read). */
+  delivery: { addressesEmailed: number; bounced: number } | null;
+  rows: LegacyRow[];
+};
+
+/** An address with only its first character, its domain's first character and its extension; anything that doesn't look like an address, only its first character. */
+const mask = (email: string) => {
+  const m = maskEmail(email);
+  return m === email ? `${email.slice(0, 1)}***` : m;
+};
+
+const mailboxKey = (email: string) => {
+  const [local = '', domain = ''] = email.toLowerCase().split('@');
+  const base = local.split('+')[0]!;
+  return `${domain === 'googlemail.com' ? 'gmail.com' : domain}|${domain === 'gmail.com' || domain === 'googlemail.com' ? base.replace(/\./g, '') : base}`;
+};
+
+/**
+ * Accounts that were never asked to confirm (they predate verification), looked at without touching them: when and how they were
+ * made (registration day), whether anyone ever came back, and whether the address looks real and current. Aggregated, with
+ * addresses masked: safe to paste. Reads the database, optionally Resend's log (passed in) and DNS (domain names only). It
+ * sends nothing, changes nothing, and does not include anyone in anything.
+ */
+export async function inspectLegacy(opts: { now?: Date; history?: DeliveryHistory | null; mx?: (domain: string) => Promise<'ok' | 'none' | 'unknown'>; userIds?: string[] } = {}): Promise<LegacyReport> {
+  const now = opts.now ?? new Date();
+  const only = opts.userIds ?? null;
+  // "No mail server" only when there is neither an MX record nor an address record (RFC 5321: a domain with just an A/AAAA record
+  // accepts mail), so a resolver that can't answer MX queries doesn't turn real domains into false alarms. Any other DNS error is "unknown".
+  const notFound = (err: unknown) => ['ENOTFOUND', 'ENODATA'].includes((err as { code?: string }).code ?? '');
+  const mx =
+    opts.mx ??
+    (async (domain: string): Promise<'ok' | 'none' | 'unknown'> => {
+      for (const lookup of [resolveMx, resolve4, resolve6] as const) {
+        try {
+          if ((await lookup(domain)).length) return 'ok';
+        } catch (err) {
+          if (!notFound(err)) return 'unknown';
+        }
+      }
+      return 'none';
+    });
+  type R = { id: string; email: string; created_ms: number; age_range: string | null; suppressed: boolean; logged_in: boolean; opened: boolean; last_ms: number | null; courses: number; plans: number };
+  const rows = await pg<R[]>`
+    select u.id, u.email, (extract(epoch from u.created_at) * 1000)::float8 as created_ms, u.age_range,
+      exists (select 1 from email_suppressions s where s.email = lower(u.email)) as suppressed,
+      exists (select 1 from analytics_events a where a.user_id = u.id and a.name = 'login_completed') as logged_in,
+      exists (select 1 from analytics_events a where a.user_id = u.id and a.name = 'app_opened' and a.source = 'client') as opened,
+      (select extract(epoch from max(a.created_at)) * 1000 from analytics_events a where a.user_id = u.id and a.source = 'client')::float8 as last_ms,
+      (select count(*) from documents d where d.user_id = u.id)::int as courses,
+      (select count(*) from study_plans p where p.user_id = u.id)::int as plans
+    from users u where u.email_verified_at is null and not u.email_verification_required and (${only}::uuid[] is null or u.id = any(${only}::uuid[])) order by u.created_at`;
+
+  const byDay = new Map<string, number>();
+  const domainCount = new Map<string, number>();
+  const mailboxes = new Map<string, number>();
+  const verdict = new Map<string, 'ok' | 'none' | 'unknown'>();
+  for (const r of rows) {
+    const domain = r.email.split('@')[1]?.toLowerCase() ?? '';
+    domainCount.set(domain, (domainCount.get(domain) ?? 0) + 1);
+    mailboxes.set(mailboxKey(r.email), (mailboxes.get(mailboxKey(r.email)) ?? 0) + 1);
+  }
+  for (const domain of domainCount.keys()) if (domain && !MAJOR_DOMAINS.has(domain)) verdict.set(domain, await mx(domain));
+
+  const report: LegacyReport = {
+    total: rows.length,
+    byDay: [],
+    ageGroup: { given: 0, none: 0 },
+    activity: { loggedInAfterSignup: 0, openedAppSignedIn: 0, activeLast7Days: 0, neverActive: 0, withCourse: 0, withPlan: 0 },
+    domains: { top: [], otherDomains: 0, otherAccounts: 0 },
+    hygiene: { invalidSyntax: 0, roleAccount: 0, disposable: 0, sharedMailbox: 0, noMailServer: 0, lookupInconclusive: 0 },
+    suppressed: 0,
+    delivery: opts.history ? { addressesEmailed: 0, bounced: 0 } : null,
+    rows: [],
+  };
+  for (const r of rows) {
+    const [local = '', domain = ''] = r.email.toLowerCase().split('@');
+    const day = new Date(r.created_ms).toISOString().slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    if (r.age_range) report.ageGroup.given++; else report.ageGroup.none++;
+    if (r.logged_in) report.activity.loggedInAfterSignup++;
+    if (r.opened) report.activity.openedAppSignedIn++;
+    const lastDays = r.last_ms === null ? null : Math.floor((now.getTime() - r.last_ms) / 86_400_000);
+    if (lastDays !== null && lastDays < 7) report.activity.activeLast7Days++;
+    if (r.last_ms === null && !r.logged_in) report.activity.neverActive++;
+    if (r.courses) report.activity.withCourse++;
+    if (r.plans) report.activity.withPlan++;
+    if (r.suppressed) report.suppressed++;
+    const flags: string[] = [];
+    if (!EMAIL_SHAPE.test(r.email)) flags.push('invalid_syntax');
+    if (ROLE_LOCALPARTS.has(local.split('+')[0]!)) flags.push('role_account');
+    if (DISPOSABLE_DOMAINS.has(domain)) flags.push('disposable_domain');
+    if ((mailboxes.get(mailboxKey(r.email)) ?? 0) > 1) flags.push('shared_mailbox');
+    const v = verdict.get(domain);
+    if (v === 'none') flags.push('no_mail_server');
+    if (v === 'unknown') flags.push('dns_inconclusive');
+    const seen = opts.history?.byAddress.get(r.email.toLowerCase());
+    if (seen && report.delivery) {
+      report.delivery.addressesEmailed++;
+      if (seen.bad) { report.delivery.bounced++; flags.push(`resend_${seen.bad}`); }
+    }
+    if (r.suppressed) flags.push('suppressed');
+    for (const [flag, key] of [['invalid_syntax', 'invalidSyntax'], ['role_account', 'roleAccount'], ['disposable_domain', 'disposable'], ['shared_mailbox', 'sharedMailbox'], ['no_mail_server', 'noMailServer'], ['dns_inconclusive', 'lookupInconclusive']] as const)
+      if (flags.includes(flag)) report.hygiene[key]++;
+    report.rows.push({ masked: mask(r.email), day, domain: MAJOR_DOMAINS.has(domain) ? domain : '(other)', flags, signedIn: r.logged_in, lastActiveDaysAgo: lastDays, courses: r.courses, plans: r.plans });
+  }
+  report.byDay = [...byDay].map(([day, n]) => ({ day, n })).sort((a, b) => a.day.localeCompare(b.day));
+  const major = [...domainCount].filter(([d]) => MAJOR_DOMAINS.has(d)).sort((a, b) => b[1] - a[1]);
+  report.domains.top = major.map(([domain, n]) => ({ domain, n }));
+  const other = [...domainCount].filter(([d]) => !MAJOR_DOMAINS.has(d));
+  report.domains.otherDomains = other.length;
+  report.domains.otherAccounts = other.reduce((n, [, c]) => n + c, 0);
   return report;
 }
 

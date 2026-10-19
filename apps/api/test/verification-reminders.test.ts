@@ -375,6 +375,179 @@ test('sync reads reminder delivery back and suppresses bounced addresses of real
 
 // ---------------------------------------------------------------- nothing sends by itself
 
+// ---------------------------------------------------------------- reading the log reliably
+
+const page = (ids: string[], more = false, event = 'delivered') => ({ object: 'list', has_more: more, data: ids.map((id) => ({ id, to: [`${id}@example.com`], last_event: event })) });
+const reply = (status: number, body: unknown = {}, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
+const timeoutError = () => new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+/** A fetch that answers with the given steps in order (an Error step is thrown); the last step repeats. */
+const script = (steps: (Response | Error | (() => Response))[], calls: { url: string; auth: boolean }[] = []) => {
+  let i = 0;
+  return (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), auth: !!(init?.headers as Record<string, string> | undefined)?.Authorization });
+    const step = steps[Math.min(i++, steps.length - 1)]!;
+    if (step instanceof Error) throw step;
+    return typeof step === 'function' ? step() : step.clone();
+  }) as typeof fetch;
+};
+const sleeps = () => {
+  const waits: number[] = [];
+  return { waits, sleep: async (ms: number) => void waits.push(ms) };
+};
+
+test('a slow Resend is retried with backoff: timeout, timeout, then the log is read; every attempt is reported', async () => {
+  const { waits, sleep } = sleeps();
+  const trace: string[] = [];
+  const h = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([timeoutError(), timeoutError(), reply(200, page(['a']))]), sleep, onAttempt: (a) => trace.push(a.outcome) }));
+  assert.equal(h.emails, 1);
+  assert.deepEqual(trace, ['timeout', 'timeout', 'ok']);
+  assert.ok(waits[0]! >= 1000 && waits[1]! >= 2000, `exponential backoff, got ${waits.join(',')}`);
+});
+
+test('the per-request timeout really cuts a request that never answers, and the failure says "timeout", with attempts and time', async () => {
+  const neverAnswers = ((_url: string | URL | Request, init?: RequestInit) => new Promise((_res, rej) => init?.signal?.addEventListener('abort', () => rej(init.signal!.reason)))) as typeof fetch;
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: neverAnswers, sleep: async () => {}, requestTimeoutMs: 25, attempts: 2 })).catch((e) => e);
+  assert.ok(err instanceof rem.ResendLogError);
+  assert.equal(err.kind, 'timeout');
+  assert.equal(err.detail.attempts, 2);
+  assert.match(err.message, /did not answer within/);
+});
+
+test('a timeout while reading the body is a timeout (retried), not an "unexpected answer"', async () => {
+  const slowBody = () => ({ ok: true, status: 200, headers: new Headers(), json: () => Promise.reject(timeoutError()), clone() { return this; } }) as unknown as Response;
+  const h = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([slowBody, reply(200, page(['a']))]), sleep: async () => {} }));
+  assert.equal(h.emails, 1);
+});
+
+test('a key that may only send is reported as such at once (no retries): restricted_api_key means a Full access key is needed', async () => {
+  const calls: { url: string; auth: boolean }[] = [];
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(403, { name: 'restricted_api_key', message: 'This API key is restricted to only send emails' })], calls), sleep: async () => {} })).catch((e) => e);
+  assert.equal(err.kind, 'permission');
+  assert.equal(err.detail.status, 403);
+  assert.equal(err.detail.name, 'restricted_api_key');
+  assert.match(err.message, /Full access/);
+  assert.equal(calls.length, 1, 'not retried');
+  assert.doesNotMatch(err.message, /restricted to only send/, 'the response text is never carried along');
+});
+
+test('rate limits wait for Retry-After and retry; an exhausted quota is not retried', async () => {
+  const { waits, sleep } = sleeps();
+  const h = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(429, { name: 'rate_limit_exceeded' }, { 'retry-after': '2' }), reply(200, page(['a']))]), sleep }));
+  assert.equal(h.emails, 1);
+  assert.equal(waits[0], 2000);
+  const calls: { url: string; auth: boolean }[] = [];
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(429, { name: 'daily_quota_exceeded' })], calls), sleep: async () => {} })).catch((e) => e);
+  assert.equal(err.kind, 'rate_limit');
+  assert.equal(calls.length, 1);
+});
+
+test('server errors are retried; if they persist the failure is "server" after the configured attempts', async () => {
+  const ok = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(503, { name: 'service_unavailable' }), reply(200, page(['a']))]), sleep: async () => {} }));
+  assert.equal(ok.emails, 1);
+  const calls: { url: string; auth: boolean }[] = [];
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(500, { name: 'application_error' })], calls), sleep: async () => {} })).catch((e) => e);
+  assert.equal(err.kind, 'server');
+  assert.equal(calls.length, 3);
+  assert.equal(err.detail.attempts, 3);
+});
+
+test('the whole lookup has a deadline, retries and waits included', async () => {
+  let clock = 0;
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([timeoutError()]), sleep: async (ms) => void (clock += ms), now: () => clock, attempts: 10, deadlineMs: 2500 })).catch((e) => e);
+  assert.equal(err.kind, 'deadline');
+  assert.ok(err.detail.attempts < 10);
+});
+
+test('an answer that is not JSON is a "shape" problem and is not retried; a cursor that does not advance ends the lookup as incomplete', async () => {
+  const calls: { url: string; auth: boolean }[] = [];
+  const err = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([new Response('<html>', { status: 200 })], calls), sleep: async () => {} })).catch((e) => e);
+  assert.equal(err.kind, 'shape');
+  assert.equal(calls.length, 1);
+  const stuck = await withResend(() => rem.fetchDeliveryHistory({ fetchImpl: script([reply(200, page(['x'], true))]), sleep: async () => {} }));
+  assert.equal(stuck.complete, false);
+});
+
+test('check-resend: separates "the network is fine but the key may only send" from "Resend is slow" from "this machine can’t reach Resend"', async () => {
+  const noKey = reply(401, { name: 'missing_api_key' });
+  const send = (steps: Parameters<typeof script>[0]) => {
+    let call = 0;
+    const inner = script(steps);
+    return (async (url: string | URL | Request, init?: RequestInit) => (init?.headers ? inner(url, init) : (call++, noKey.clone()))) as typeof fetch;
+  };
+  const restricted = await withResend(() => rem.diagnoseResend({ fetchImpl: send([reply(403, { name: 'restricted_api_key' })]), sleep: async () => {} }));
+  assert.equal(restricted.network.ok, true);
+  assert.equal(restricted.key.kind, 'permission');
+  assert.match(rem.explainDiagnosis(restricted), /send-only|Full access/);
+
+  const invalid = await withResend(() => rem.diagnoseResend({ fetchImpl: send([reply(400, { name: 'validation_error', message: 'API key is invalid' })]), sleep: async () => {} }));
+  assert.equal(invalid.key.kind, 'http');
+  assert.match(rem.explainDiagnosis(invalid), /API key is invalid/);
+  const refused = await withResend(() => rem.diagnoseResend({ fetchImpl: send([reply(401, { name: 'invalid_access' })]), sleep: async () => {} }));
+  assert.equal(refused.key.kind, 'permission');
+  assert.doesNotMatch(rem.explainDiagnosis(refused), /send-only/, 'only restricted_api_key means "send-only"');
+
+  const slow = await withResend(() => rem.diagnoseResend({ fetchImpl: send([timeoutError()]), sleep: async () => {} }));
+  assert.equal(slow.key.kind, 'timeout');
+  assert.equal(slow.key.attempts.filter((a) => a.outcome === 'timeout').length, 3);
+  assert.match(rem.explainDiagnosis(slow), /slow/);
+
+  const unreachable = await withResend(() => rem.diagnoseResend({ fetchImpl: script([timeoutError()]), sleep: async () => {} }));
+  assert.equal(unreachable.network.ok, false);
+  assert.match(rem.explainDiagnosis(unreachable), /network|DNS/);
+
+  const fine = await withResend(() => rem.diagnoseResend({ fetchImpl: send([reply(200, page(['a', 'b']))]), sleep: async () => {} }));
+  assert.equal(fine.key.ok, true);
+  assert.equal(fine.key.emailsOnFirstPage, 2);
+  assert.match(rem.explainDiagnosis(fine), /nothing to fix/);
+});
+
+// ---------------------------------------------------------------- legacy accounts (read-only inspection)
+
+async function legacy(email: string, over: { ageRange?: string | null; daysAgo?: number } = {}): Promise<U> {
+  const [u] = await sql<{ id: string }[]>`
+    insert into users (email, password_hash, name, created_at, email_verification_required, age_range)
+    values (${email}, 'x', 'Old', now() - make_interval(days => ${over.daysAgo ?? 4}), false, ${over.ageRange ?? null}) returning id`;
+  return { id: u!.id, email };
+}
+
+test('inspect-legacy describes accounts that were never asked to confirm, without changing or including anyone', async () => {
+  const tag = `${RUN}-${n++}`;
+  const a = await legacy(`Dot.Ted${tag}+x@gmail.com`);
+  const b = await legacy(`dotted${tag}@gmail.com`); // the same mailbox as `a` once dots and +tags are ignored (gmail)
+  const role = await legacy(`info+${tag}@example.com`);
+  const role2 = await legacy(`info+${tag}@nomail.test`);
+  const disposable = await legacy(`kid${tag}@mailinator.com`, { ageRange: '18_24' });
+  const bad = await legacy(`not-an-address-${tag}`);
+  const activeUser = await legacy(`active${tag}@yahoo.com`, { daysAgo: 6 });
+  await sql`insert into analytics_events (name, source, user_id, anonymous_id, properties) values ('login_completed', 'server', ${activeUser.id}, null, '{}'::jsonb), ('app_opened', 'client', ${activeUser.id}, ${`anon-${tag}`}, '{}'::jsonb)`;
+  const confirmed = await legacy(`confirmed${tag}@gmail.com`);
+  await sql`update users set email_verified_at = now() where id = ${confirmed.id}`;
+  const asked = await newUnconfirmed(); // asked at sign-up: not a legacy account
+  const ids = [a, b, role, role2, disposable, bad, activeUser, confirmed, asked].map((u) => u.id);
+  const history = { byAddress: new Map([[role.email.toLowerCase(), { emails: 1, bad: 'bounced' as const }], [activeUser.email.toLowerCase(), { emails: 2, bad: null }]]), emails: 3, complete: true };
+
+  const before = { users: (await sql`select count(*)::int as n from users where id = any(${ids}::uuid[])`)[0]!.n, mails: outbox.length, sends: (await sql`select count(*)::int as n from email_campaign_sends where user_id = any(${ids}::uuid[])`)[0]!.n };
+  const r = await rem.inspectLegacy({ userIds: ids, history, mx: async (d) => (d === 'nomail.test' ? 'none' : d === 'example.com' ? 'unknown' : 'ok') });
+
+  assert.equal(r.total, 7, 'confirmed and asked-at-sign-up accounts are not part of it');
+  assert.deepEqual(r.ageGroup, { given: 1, none: 6 });
+  assert.equal(r.activity.loggedInAfterSignup, 1);
+  assert.equal(r.activity.openedAppSignedIn, 1);
+  assert.equal(r.activity.activeLast7Days, 1);
+  assert.equal(r.activity.neverActive, 6);
+  assert.deepEqual(r.hygiene, { invalidSyntax: 1, roleAccount: 2, disposable: 1, sharedMailbox: 2, noMailServer: 1, lookupInconclusive: 1 });
+  assert.deepEqual(r.delivery, { addressesEmailed: 2, bounced: 1 });
+  assert.equal(r.byDay.reduce((s, d) => s + d.n, 0), 7);
+  assert.deepEqual(r.domains.top.map((d) => d.domain).sort(), ['gmail.com', 'yahoo.com']);
+  assert.ok(r.rows.every((x) => !/@/.test(x.masked) || x.masked.includes('*')), 'addresses are masked');
+  assert.ok(!JSON.stringify(r).includes(tag), 'no address (or part of one) leaks into the report');
+  assert.ok(r.rows.find((x) => x.flags.includes('resend_bounced')), 'the Resend bounce is flagged');
+
+  assert.deepEqual({ users: (await sql`select count(*)::int as n from users where id = any(${ids}::uuid[])`)[0]!.n, mails: outbox.length, sends: (await sql`select count(*)::int as n from email_campaign_sends where user_id = any(${ids}::uuid[])`)[0]!.n }, before, 'nothing written, nothing sent');
+  assert.equal(await verifiedAt(a), null);
+  assert.equal(await reasonOf(a), 'legacy_not_asked', 'and they are still not included in the reminder');
+});
+
 test('the server never imports the reminder tool: deploying and running the API cannot send one', async () => {
   const walk = async (dir: string): Promise<string[]> => {
     const out: string[] = [];
