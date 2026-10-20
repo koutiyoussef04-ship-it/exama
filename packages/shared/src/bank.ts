@@ -69,11 +69,20 @@ export type UpdateBankItemInput = z.input<typeof updateBankItemSchema>;
 
 export const reviewNoteSchema = z.object({ note: z.string().trim().max(1000).optional() });
 
+export const ATTENTION_FILTERS = ['flagged', 'clean'] as const;
+export type AttentionFilter = (typeof ATTENTION_FILTERS)[number];
+
 export const listBankItemsSchema = z.object({
   documentId: z.uuid().optional(),
   status: z.enum(BANK_ITEM_STATUSES).optional(),
   topic: z.string().trim().min(1).max(200).optional(),
   section: z.string().trim().min(1).max(120).optional(),
+  /** Free-text search in the question text, options, explanation and topic (case-insensitive substring). */
+  q: z.string().trim().min(1).max(200).optional(),
+  /** `flagged`: items with review flags or a non-supported verdict; `clean`: none of those. */
+  attention: z.enum(ATTENTION_FILTERS).optional(),
+  /** Newest first by default; `oldest` for a review queue that works through drafts in arrival order. */
+  sort: z.enum(['newest', 'oldest']).default('newest'),
   limit: z.coerce.number().int().min(1).max(200).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -162,7 +171,20 @@ export type BankItem = {
   sources: QuestionSource[];
 };
 
-export type BankItemDetail = BankItem & { events: BankItemEvent[] };
+/** The passage a source quote was located in, for the review screen. Null when the chunk is gone or its text changed. */
+export type SourcePassage = {
+  sourceId: string;
+  text: string;
+  /** Offsets of the quote inside `text` (null when only an approximate match is known). */
+  quoteStart: number | null;
+  quoteEnd: number | null;
+  pageStart: number | null;
+  pageEnd: number | null;
+  startSeconds: number | null;
+  endSeconds: number | null;
+};
+
+export type BankItemDetail = BankItem & { events: BankItemEvent[]; passages: SourcePassage[] };
 
 export type BankItemList = { items: BankItem[]; total: number };
 

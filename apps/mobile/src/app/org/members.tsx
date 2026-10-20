@@ -8,9 +8,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Text, View } from 'react-native';
-import { OrgGate, OrgNav, type OrgContext } from '@/components/org/org-nav';
+import { CellText, DataTable, FilterSelect, OrgGate, SmallButton, useIsWide, WorkspaceShell, type Column, type OrgContext } from '@/components/org/workspace';
 import { Chips } from '@/components/planner';
-import { Badge, Body, Button, Card, colors, EmptyState, ErrorState, ErrorText, Field, Loading, Screen, SectionLabel, space, TextButton } from '@/components/ui';
+import { Badge, Body, Card, colors, EmptyState, ErrorState, ErrorText, Field, SectionLabel, space } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/billing';
@@ -26,11 +26,13 @@ function Members(ctx: OrgContext) {
   const { org } = ctx;
   const { user } = useAuth();
   const qc = useQueryClient();
+  const wide = useIsWide();
   const key = ['org', org.id, 'members'];
   const admin = canAdmin(org.role);
 
   const members = useQuery({ queryKey: key, queryFn: () => api.orgMembers(org.id), retry: false });
 
+  const [adding, setAdding] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<OrganizationRole>('reviewer');
   const [added, setAdded] = useState(false);
@@ -60,19 +62,45 @@ function Members(ctx: OrgContext) {
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const busy = add.isPending || changeRole.isPending || remove.isPending;
+  const roleOptions = ORGANIZATION_ROLES.map((r) => ({ value: r, label: roleLabel(r) }));
+  const name = (m: OrganizationMember) => (m.userId === user?.id ? `${m.name} (${t('org.members.you')})` : m.name);
+
+  const columns: Column<OrganizationMember>[] = [
+    {
+      key: 'member',
+      title: t('org.ws.columns.member'),
+      flex: 3,
+      render: (m) => (
+        <View style={{ gap: 2 }}>
+          <CellText bold lines={1}>
+            {name(m)}
+          </CellText>
+          <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={1}>
+            {m.email}
+          </Text>
+        </View>
+      ),
+    },
+    {
+      key: 'role',
+      title: t('org.ws.columns.role'),
+      width: 190,
+      render: (m) => (admin ? <FilterSelect label={t('org.ws.columns.role')} value={m.role} options={roleOptions} onChange={(next) => !busy && next !== m.role && changeRole.mutate({ userId: m.userId, role: next })} /> : <Badge label={roleLabel(m.role)} tone={m.role === 'admin' ? 'primary' : 'neutral'} />),
+    },
+    { key: 'joined', title: t('org.ws.columns.joined'), width: 110, render: (m) => <CellText muted lines={1}>{formatDate(m.joinedAt)}</CellText> },
+    ...(admin ? [{ key: 'actions', title: '', width: 110, align: 'right' as const, render: (m: OrganizationMember) => <SmallButton title={t('org.members.remove')} variant="ghost" onPress={() => askRemove(m)} disabled={busy} /> }] : []),
+  ];
 
   return (
-    <Screen onRefresh={() => members.refetch()} refreshing={members.isRefetching}>
-      <OrgNav {...ctx} active="members" />
-      <Body muted style={{ fontSize: 14 }}>{t('org.members.intro')}</Body>
-
-      {members.isLoading && <Loading />}
+    <WorkspaceShell {...ctx} active="members" title={t('org.ws.members.title')} subtitle={t('org.members.intro')} actions={admin ? <SmallButton title={t('org.members.add')} icon="plus" variant="primary" onPress={() => setAdding((v) => !v)} /> : undefined} onRefresh={() => members.refetch()} refreshing={members.isRefetching} maxWidth={1040}>
       {members.error && !members.data && (isForbidden(members.error) ? <EmptyState title={t('org.members.adminsOnly')} /> : <ErrorState error={members.error} onRetry={() => members.refetch()} />)}
 
-      {members.data && admin && (
-        <Card style={{ gap: space(4) }}>
-          <SectionLabel>{t('org.members.add')}</SectionLabel>
-          <Body muted style={{ fontSize: 13 }}>{t('org.members.addHint')}</Body>
+      {adding && admin && (
+        <Card style={{ gap: space(4), maxWidth: wide ? 640 : undefined }}>
+          <View style={{ gap: space(1) }}>
+            <SectionLabel>{t('org.members.add')}</SectionLabel>
+            <Body muted style={{ fontSize: 13 }}>{t('org.members.addHint')}</Body>
+          </View>
           <Field
             label={t('org.members.email')}
             value={email}
@@ -88,45 +116,50 @@ function Members(ctx: OrgContext) {
           />
           <View style={{ gap: space(2) }}>
             <SectionLabel>{t('org.members.role')}</SectionLabel>
-            <Chips options={ORGANIZATION_ROLES.map((r) => ({ value: r, label: roleLabel(r) }))} value={role} onChange={setRole} />
+            <Chips options={roleOptions} value={role} onChange={setRole} />
             <Body muted style={{ fontSize: 13 }}>{t(`org.members.roleHints.${role}`)}</Body>
           </View>
-          <Button title={t('org.members.addButton')} onPress={() => add.mutate()} loading={add.isPending} disabled={!emailOk || busy} />
-          {added && <Body style={{ color: colors.success, fontSize: 14, textAlign: 'center' }}>{t('org.members.added')}</Body>}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
+            <SmallButton title={t('org.members.addButton')} variant="primary" onPress={() => add.mutate()} loading={add.isPending} disabled={!emailOk || busy} />
+            <SmallButton title={t('common.cancel')} variant="ghost" onPress={() => setAdding(false)} disabled={busy} />
+            {added && <Body style={{ color: colors.success, fontSize: 13 }}>{t('org.members.added')}</Body>}
+          </View>
           <ErrorText error={add.error} />
         </Card>
       )}
 
       {members.data && (
-        <Card style={{ gap: 0 }}>
-          <SectionLabel>{t('org.members.count', { count: members.data.length })}</SectionLabel>
-          {members.data.map((m, i) => {
-            const me = m.userId === user?.id;
-            return (
-              <View key={m.userId} style={{ gap: space(2), paddingVertical: space(3), borderBottomWidth: i === members.data.length - 1 ? 0 : 1, borderBottomColor: colors.border }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: '500' }} numberOfLines={1}>
-                      {me ? `${m.name} (${t('org.members.you')})` : m.name}
-                    </Text>
-                    <Text style={{ color: colors.muted, fontSize: 13 }} numberOfLines={1}>
-                      {m.email} · {t('org.members.joined', { date: formatDate(m.joinedAt) })}
-                    </Text>
-                  </View>
-                  <Badge label={roleLabel(m.role)} tone={m.role === 'admin' ? 'primary' : 'neutral'} />
+        <DataTable
+          columns={columns}
+          rows={members.data}
+          keyOf={(m) => m.userId}
+          loading={members.isLoading}
+          emptyTitle={t('org.members.count', { count: 0 })}
+          caption={<Text style={{ color: colors.muted, fontSize: 13 }}>{t('org.members.count', { count: members.data.length })}</Text>}
+          renderCard={(m) => (
+            <View style={{ gap: space(2) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <CellText bold lines={1}>
+                    {name(m)}
+                  </CellText>
+                  <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={1}>
+                    {m.email} · {t('org.members.joined', { date: formatDate(m.joinedAt) })}
+                  </Text>
                 </View>
-                {admin && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2), flexWrap: 'wrap' }}>
-                    <Chips options={ORGANIZATION_ROLES.map((r) => ({ value: r, label: roleLabel(r) }))} value={m.role} onChange={(next) => !busy && next !== m.role && changeRole.mutate({ userId: m.userId, role: next })} />
-                    <TextButton title={t('org.members.remove')} tone="danger" onPress={() => askRemove(m)} disabled={busy} />
-                  </View>
-                )}
+                {!admin && <Badge label={roleLabel(m.role)} tone={m.role === 'admin' ? 'primary' : 'neutral'} />}
               </View>
-            );
-          })}
-          <ErrorText error={changeRole.error ?? remove.error} />
-        </Card>
+              {admin && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2), flexWrap: 'wrap' }}>
+                  <Chips options={roleOptions} value={m.role} onChange={(next) => !busy && next !== m.role && changeRole.mutate({ userId: m.userId, role: next })} />
+                  <SmallButton title={t('org.members.remove')} variant="ghost" onPress={() => askRemove(m)} disabled={busy} />
+                </View>
+              )}
+            </View>
+          )}
+        />
       )}
-    </Screen>
+      <ErrorText error={changeRole.error ?? remove.error} />
+    </WorkspaceShell>
   );
 }
