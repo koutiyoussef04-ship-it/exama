@@ -143,7 +143,7 @@ export type TrackEventsInput = z.infer<typeof trackEventsSchema>;
 
 /** Events recorded by the API itself (authoritative; cannot be sent by clients). */
 export type ServerEvents = {
-  signup_completed: Record<string, never>;
+  signup_completed: { account_type: 'student' | 'organization' };
   login_completed: Record<string, never>;
   /** A reset code was emailed to an existing account (never recorded for unknown emails). */
   password_reset_requested: Record<string, never>;

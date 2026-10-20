@@ -11,6 +11,8 @@ import type {
   KnowledgeExtraction,
   KnowledgeExtractionInput,
   LLMProvider,
+  QuestionToVerify,
+  QuestionVerification,
   ShortAnswerGrade,
   ShortAnswerToGrade,
   StudyAI,
@@ -80,6 +82,11 @@ const flashcardsSchema = z.object({
 const gradesSchema = z.object({
   grades: z.array(z.object({ id: z.string(), score: z.number().min(0).max(1), feedback: z.string().min(1) })),
 });
+
+const verdictsSchema = z.object({
+  verdicts: z.array(z.object({ id: z.string(), verdict: z.enum(['supported', 'partial', 'unsupported']), note: z.string().default('') })),
+});
+const VERDICT_REPLY_TOKENS = 120;
 
 const topicPlanSchema = z.object({
   topics: z.array(z.object({ topic: z.string().min(1), importance: z.number(), focus: z.string() })).min(1),
@@ -222,8 +229,12 @@ ${followUp}${avoid}${partNote('exam', part, parts, own.length < allTopics.length
 Requirements:
 - Every question must be answerable from the material alone. Do not ask about anything the material does not state.
 - "topic": one of exactly these names, copied exactly (never translated): ${own.map((t) => JSON.stringify(t)).join(', ')}.
-- About 60% "mcq": exactly 4 distinct options, exactly one correct; "correctAnswer" must be copied character-for-character from "options". Wrong options must be plausible but clearly wrong according to the material.
-- About 40% "short_answer": answerable in 1-3 sentences; "correctAnswer" is a model answer based only on the material; "options" is null.
+${
+        input.mcqOnly
+          ? `- Every question is "mcq": exactly 4 distinct options, exactly one correct; "correctAnswer" must be copied character-for-character from "options". Wrong options must be plausible but clearly wrong according to the material. No "all/none of the above".`
+          : `- About 60% "mcq": exactly 4 distinct options, exactly one correct; "correctAnswer" must be copied character-for-character from "options". Wrong options must be plausible but clearly wrong according to the material.
+- About 40% "short_answer": answerable in 1-3 sentences; "correctAnswer" is a model answer based only on the material; "options" is null.`
+      }
 - "explanation": 1-2 sentences explaining the answer using the material.
 - "sourceQuote": a VERBATIM excerpt (10-40 words) copied exactly from the material that supports the correct answer, in the material's original language. Copy it exactly and never translate it — it will be checked against the material.
 - ${languageRule(input.language, '"prompt", "options", "correctAnswer" and "explanation"')} Only "topic" and "sourceQuote" stay exactly as specified above.
@@ -362,6 +373,38 @@ ${excerpts.join('\n\n---\n\n')}
 </material>`;
       return (await this.json(prompt, flashcardsSchema, replyBudget(count, FLASHCARD_REPLY_TOKENS))).cards;
     });
+  }
+
+  async verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]> {
+    if (items.length === 0) return [];
+    const blocks = items
+      .map(
+        (it) => `<item id="${it.id}">
+<passage>${it.passage}</passage>
+Question: ${it.prompt}
+${it.options ? `Options: ${it.options.map((o, i) => `(${i + 1}) ${o}`).join(' ')}` : ''}
+Keyed answer: ${it.correctAnswer}
+Explanation: ${it.explanation}
+</item>`,
+      )
+      .join('\n\n');
+    const prompt = `Check exam questions written from a training document against the ONE passage each was based on.
+
+For each item decide, using ONLY the passage (no outside knowledge):
+- "supported": the passage states what the keyed answer says, and for multiple choice exactly one option is supported.
+- "partial": the passage supports the keyed answer only partly, or the explanation adds a claim the passage does not make.
+- "unsupported": the passage does not state the keyed answer, contradicts it, or supports another option too.
+- "note": one sentence for a human reviewer saying why, quoting the passage where useful.
+
+Return JSON: {"verdicts": [{"id","verdict","note"}]} with exactly one entry for each item id.
+
+${blocks}`;
+    const ids = new Set(items.map((i) => i.id));
+    const { verdicts } = await this.json(prompt, verdictsSchema, replyBudget(items.length, VERDICT_REPLY_TOKENS), ({ verdicts }) => {
+      const got = new Set(verdicts.map((v) => v.id));
+      if ([...ids].some((id) => !got.has(id))) throw new Error('verdicts do not match the item ids');
+    });
+    return verdicts.filter((v) => ids.has(v.id)).map((v) => ({ id: v.id, verdict: v.verdict, note: v.note.slice(0, 500) }));
   }
 
   /** Calls the model, extracts JSON, validates it; retries once on unusable output. */

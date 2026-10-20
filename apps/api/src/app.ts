@@ -16,6 +16,7 @@ import { examRoutes } from './routes/exams.js';
 import { materialRoutes } from './routes/materials.js';
 import { flashcardDocumentRoutes, flashcardRoutes } from './routes/flashcards.js';
 import { onboardingRoutes } from './routes/onboarding.js';
+import { orgRoutes } from './routes/orgs.js';
 import { requireVerifiedEmail } from './services/email-verification.js';
 import { studyPlanRoutes } from './routes/study-plans.js';
 
@@ -41,6 +42,10 @@ export const app = new Hono()
   .route('/events', eventRoutes)
   .route('/onboarding', onboardingRoutes)
   .route('/billing', billingRoutes)
+  // Organization workspace (B2B): membership + role checked on every route (routes/orgs.ts). Same email rule as courses.
+  .use('/orgs', requireVerifiedEmail)
+  .use('/orgs/*', requireVerifiedEmail)
+  .route('/orgs', orgRoutes)
   // Owner-only dashboard (server-side owner check on every route; see routes/admin.ts).
   .route('/admin', adminRoutes);
 

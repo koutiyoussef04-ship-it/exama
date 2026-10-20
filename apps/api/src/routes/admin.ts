@@ -1,5 +1,6 @@
 /**
- * GET /admin/* — the owner-only dashboard API. Read-only.
+ * GET /admin/* — the owner-only dashboard API. Read-only, except the organization settings (limits,
+ * suspension), which only the owner can change: organizations are billed manually for now.
  *
  * Authorization is on the server, for every route: a valid session (requireAuth) AND an owner account
  * from server configuration (OWNER_USER_IDS / OWNER_EMAILS, the same check as owner access). Anyone else
@@ -15,6 +16,9 @@ import { adminAuditLog } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { RateLimiter } from '../lib/rate-limit.js';
 import { aiReport, analyticsReport, billingReport, customerDetail, customers, health, overview, parseCustomersQuery, resolveRange } from '../admin/service.js';
+import { listOrganizationsForOwner, updateOrganizationForOwner } from '../admin/organizations.js';
+import { adminUpdateOrganizationSchema } from '@study/shared';
+import { parseBody } from '../lib/errors.js';
 
 type AdminEnv = AuthEnv & { Variables: { auditTarget?: string } };
 
@@ -76,4 +80,10 @@ export const adminRoutes = new Hono<AdminEnv>()
   .get('/ai', async (c) => c.json(await aiReport(resolveRange(c.req.query()))))
   .get('/billing', async (c) => c.json(await billingReport(resolveRange(c.req.query()))))
   .get('/analytics', async (c) => c.json(await analyticsReport(resolveRange(c.req.query()))))
-  .get('/health', async (c) => c.json(await health()));
+  .get('/health', async (c) => c.json(await health()))
+  // Organizations (B2B customers): list with usage; limits and status are set here, by hand, per pilot.
+  .get('/organizations', async (c) => c.json(await listOrganizationsForOwner()))
+  .patch('/organizations/:id', async (c) => {
+    const input = parseBody(adminUpdateOrganizationSchema, await c.req.json().catch(() => ({})));
+    return c.json(await updateOrganizationForOwner(c.req.param('id'), input));
+  });

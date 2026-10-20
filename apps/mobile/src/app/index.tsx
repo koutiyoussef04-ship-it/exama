@@ -65,6 +65,8 @@ export default function Courses() {
     pending.consume();
     router.push(to);
   }, [gate, mustVerify, pending]);
+  // Organization accounts live in the workspace; the server set the account type, the app only follows it.
+  if (user?.accountType === 'organization') return <Redirect href="/org" />;
   if (gate === 'loading') return <Loading />;
   if (gate === 'ask') return <Redirect href="/onboarding" />;
   // Onboarding first; then, only if the server has paused courses for an unconfirmed email, the verification page.

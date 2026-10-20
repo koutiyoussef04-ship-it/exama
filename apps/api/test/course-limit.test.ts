@@ -179,7 +179,12 @@ test('existing accounts: the migration counts the courses that exist; account de
   await sql`delete from course_creations where user_id = ${u.id}`;
   refusedFree(await upload(u.token)); // the existing course still counts (never below what exists)
   // The migration's backfill (0017) records it; running it again changes nothing.
-  const backfill = (await readFile(new URL('../drizzle/0017_course_creations.sql', import.meta.url), 'utf8')).split('--> statement-breakpoint').pop()!;
+  // The migration predates organizations: replay it over personal courses only (organization courses have no
+  // course_creations row and, once their uploader is deleted, no user_id).
+  const backfill = (await readFile(new URL('../drizzle/0017_course_creations.sql', import.meta.url), 'utf8'))
+    .split('--> statement-breakpoint')
+    .pop()!
+    .replace('FROM "documents"', 'FROM "documents" WHERE "user_id" IS NOT NULL AND "organization_id" IS NULL');
   await sql.unsafe(backfill);
   await sql.unsafe(backfill);
   assert.deepEqual(await counts(u.id), { created: 1, existing: 1, uploads: 1 });

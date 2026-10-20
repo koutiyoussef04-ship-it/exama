@@ -36,6 +36,23 @@ import type {
   FlashcardResult,
   ResendVerificationResult,
   VerifyEmailResult,
+  AddMemberInput,
+  BankItem,
+  BankItemDetail,
+  BankItemList,
+  CreateBankItemInput,
+  CreateOrganizationInput,
+  ExportFormat,
+  GenerateBankItemsInput,
+  GenerateBankItemsResult,
+  Organization,
+  OrganizationMember,
+  OrganizationMembershipSummary,
+  OrganizationOverview,
+  TopicCount,
+  UpdateBankItemInput,
+  UpdateMemberInput,
+  UpdateOrganizationInput,
 } from '@study/shared';
 import { MARKETING_CONSENT_VERSION, MATERIAL_HEADERS } from '@study/shared';
 import type { AiLanguage, Language, UnsubscribeCategory } from '@study/shared';
@@ -287,4 +304,49 @@ export const api = {
   deleteMaterial: (documentId: string, materialId: string) => request<void>(`/documents/${documentId}/materials/${materialId}`, { method: 'DELETE' }),
   getExam: (id: string) => request<Exam>(`/exams/${id}`),
   submitExam: (id: string, input: SubmitExamInput) => post<Exam>(`/exams/${id}/submit`, input),
+
+  // ---- Organizations (B2B workspace). The server checks membership and role on every call; 404 for outsiders.
+  listOrganizations: () => request<OrganizationMembershipSummary[]>('/orgs'),
+  createOrganization: (input: CreateOrganizationInput) => post<OrganizationMembershipSummary>('/orgs', input),
+  orgOverview: (orgId: string) => request<OrganizationOverview>(`/orgs/${orgId}`),
+  updateOrganization: (orgId: string, input: UpdateOrganizationInput) => request<Organization>(`/orgs/${orgId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  orgMembers: (orgId: string) => request<OrganizationMember[]>(`/orgs/${orgId}/members`),
+  orgAddMember: (orgId: string, input: AddMemberInput) => post<OrganizationMember[]>(`/orgs/${orgId}/members`, input),
+  orgUpdateMember: (orgId: string, userId: string, input: UpdateMemberInput) =>
+    request<OrganizationMember[]>(`/orgs/${orgId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  orgRemoveMember: (orgId: string, userId: string) => request<OrganizationMember[]>(`/orgs/${orgId}/members/${userId}`, { method: 'DELETE' }),
+  orgCourses: (orgId: string) => request<DocumentSummary[]>(`/orgs/${orgId}/courses`),
+  orgCourse: (orgId: string, id: string) => request<DocumentDetail>(`/orgs/${orgId}/courses/${id}`),
+  orgUploadCourse: (orgId: string, file: PickedFile, language: AiLanguage) => {
+    const form = new FormData();
+    if (Platform.OS === 'web' && file.file) form.append('file', file.file);
+    else form.append('file', new FsFile(file.uri) as unknown as Blob);
+    form.append('title', file.name);
+    form.append('language', language);
+    return request<DocumentDetail>(`/orgs/${orgId}/courses`, { method: 'POST', body: form });
+  },
+  orgReprocessCourse: (orgId: string, id: string) => post<DocumentDetail>(`/orgs/${orgId}/courses/${id}/reprocess`),
+  orgDeleteCourse: (orgId: string, id: string) => request<void>(`/orgs/${orgId}/courses/${id}`, { method: 'DELETE' }),
+  orgGenerate: (orgId: string, courseId: string, input: GenerateBankItemsInput) => post<GenerateBankItemsResult>(`/orgs/${orgId}/courses/${courseId}/generate`, input),
+  orgItems: (orgId: string, query: Record<string, string | number | undefined> = {}) => request<BankItemList>(`/orgs/${orgId}/items${adminQuery(query)}`),
+  orgItem: (orgId: string, id: string) => request<BankItemDetail>(`/orgs/${orgId}/items/${id}`),
+  orgCreateItem: (orgId: string, input: CreateBankItemInput) => post<BankItem>(`/orgs/${orgId}/items`, input),
+  orgUpdateItem: (orgId: string, id: string, input: UpdateBankItemInput) => request<BankItemDetail>(`/orgs/${orgId}/items/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  orgReviewItem: (orgId: string, id: string, action: 'approve' | 'reject' | 'retire' | 'reopen', note?: string) =>
+    post<BankItemDetail>(`/orgs/${orgId}/items/${id}/${action}`, { note }),
+  orgDeleteItem: (orgId: string, id: string) => request<void>(`/orgs/${orgId}/items/${id}`, { method: 'DELETE' }),
+  orgTopics: (orgId: string, documentId?: string) => request<TopicCount[]>(`/orgs/${orgId}/topics${adminQuery({ documentId })}`),
+  /** The export file as text (the caller saves or shares it). */
+  orgExport: async (orgId: string, format: ExportFormat, query: { documentId?: string; topic?: string } = {}): Promise<{ text: string; filename: string; count: number }> => {
+    if (!API_URL) throw new ApiError(0, API_CONFIG_ERROR ?? 'API not configured', 'app_misconfigured');
+    const res = await fetch(`${API_URL}/orgs/${orgId}/export${adminQuery({ format, ...query })}`, { headers: headersFor() });
+    if (res.status === 401 && authToken) onUnauthorized?.();
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.code, data);
+    }
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `exama-questions.${format === 'csv' ? 'csv' : 'txt'}`;
+    return { text: await res.text(), filename, count: Number(res.headers.get('x-exama-export-count') ?? 0) };
+  },
 };

@@ -22,6 +22,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { PASSWORD_RESET_CODE_LENGTH, type AuthResponse, type Language } from '@study/shared';
+import { listMemberships } from './organizations.js';
 import { track } from '../analytics/index.js';
 import { hashPassword, signToken } from '../auth/auth.js';
 import { config } from '../config.js';
@@ -194,5 +195,5 @@ export async function confirmPasswordReset(email: string, code: string, password
   });
   if (!claimed) throw invalidCode();
   void track('password_reset_completed', user.id, {});
-  return { token: await signToken(user.id, changedAt), user: { id: user.id, email: user.email, name: user.name } };
+  return { token: await signToken(user.id, changedAt), user: { id: user.id, email: user.email, name: user.name, accountType: user.accountType, organizations: await listMemberships(user.id) } };
 }

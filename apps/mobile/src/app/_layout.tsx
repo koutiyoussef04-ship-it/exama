@@ -58,6 +58,16 @@ function RootNavigator() {
         <Stack.Screen name="materials/[id]" options={{ title: t('nav.material') }} />
         <Stack.Screen name="flashcards/[id]" options={{ title: t('nav.flashcards') }} />
         <Stack.Screen name="add-material" options={{ title: t('nav.addMaterial'), presentation: 'modal' }} />
+        {/* Organization workspace (B2B). Membership and roles are checked by the server on every request. */}
+        <Stack.Screen name="org/index" options={{ title: t('nav.orgWorkspace') }} />
+        <Stack.Screen name="org/new" options={{ title: t('nav.orgNew') }} />
+        <Stack.Screen name="org/courses" options={{ title: t('nav.orgCourses') }} />
+        <Stack.Screen name="org/courses/[id]" options={{ title: t('nav.orgCourse') }} />
+        <Stack.Screen name="org/review" options={{ title: t('nav.orgReview') }} />
+        <Stack.Screen name="org/items/[id]" options={{ title: t('nav.orgItem') }} />
+        <Stack.Screen name="org/bank" options={{ title: t('nav.orgBank') }} />
+        <Stack.Screen name="org/export" options={{ title: t('nav.orgExport') }} />
+        <Stack.Screen name="org/members" options={{ title: t('nav.orgMembers') }} />
       </Stack.Protected>
       {/* Available signed in or out (linked from sign-up and the paywall). */}
       <Stack.Screen name="language" options={{ title: t('nav.language') }} />

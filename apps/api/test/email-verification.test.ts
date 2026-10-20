@@ -89,7 +89,7 @@ test('sign-up emails a verification link right away (in the app language) and th
   assert.ok(ttlH > 23.9 && ttlH <= 24, `expires in 24 h (${ttlH})`);
   // The sign-up response itself is unchanged.
   const login = await call<AuthResponse>('/auth/login', json('POST', { email: u.email, password: PASSWORD }));
-  assert.deepEqual(Object.keys(login.body.user).sort(), ['email', 'id', 'name']);
+  assert.deepEqual(Object.keys(login.body.user).sort(), ['accountType', 'email', 'id', 'name', 'organizations']); // account type + memberships (organizations) are the only additions; never the age group
 });
 
 test('a valid link verifies the email once; reusing it is rejected', async () => {

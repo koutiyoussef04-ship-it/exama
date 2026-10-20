@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { normalizeEmail } from './email';
 import { aiLanguageSchema, languageSchema } from './languages';
 import { marketingConsentSchema } from './marketing-consent';
+import { ACCOUNT_TYPES, ORGANIZATION_MARKETS, organizationNameSchema, type AccountType, type OrganizationMembershipSummary } from './organizations';
 
 // ---------- Auth ----------
 
@@ -44,6 +45,18 @@ export const registerSchema = z.object({
    * false = no consent recorded; the API records consent for nothing else than an explicit, known version.
    */
   marketingConsent: z.union([marketingConsentSchema, z.literal(false)]).nullish(),
+  /**
+   * student (default, what older apps create) or organization. An organization sign-up also names the
+   * organization and its market; the server creates it and makes the account its first admin.
+   */
+  accountType: z.enum(ACCOUNT_TYPES).default('student'),
+  organizationName: organizationNameSchema.optional(),
+  market: z.enum(ORGANIZATION_MARKETS).optional(),
+}).superRefine((v, ctx) => {
+  if (v.accountType === 'organization') {
+    if (!v.organizationName) ctx.addIssue({ code: 'custom', path: ['organizationName'], message: 'Organization name is required' });
+    if (!v.market) ctx.addIssue({ code: 'custom', path: ['market'], message: 'Choose the kind of organization' });
+  }
 });
 export type RegisterInput = z.input<typeof registerSchema>;
 
@@ -53,7 +66,15 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.input<typeof loginSchema>;
 
-export type User = { id: string; email: string; name: string };
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  /** Decides which experience the app opens (student app or organization workspace). Set by the server. */
+  accountType: AccountType;
+  /** Organizations this account belongs to (authorization comes from these memberships, not from accountType). */
+  organizations: OrganizationMembershipSummary[];
+};
 export type AuthResponse = { token: string; user: User };
 
 /**
@@ -220,3 +241,5 @@ export * from './email-verification';
 export * from './marketing-consent';
 export * from './flashcards';
 export * from './admin';
+export * from './organizations';
+export * from './bank';

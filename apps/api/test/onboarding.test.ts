@@ -94,7 +94,7 @@ test('answers save to the account and load back unchanged, across sign-ins', asy
   assert.equal(login.status, 200);
   assert.deepEqual((await state(login.body.token)).body, saved.body);
   // The sign-in/register responses themselves are unchanged (no onboarding data leaks into User).
-  assert.deepEqual(Object.keys(login.body.user).sort(), ['email', 'id', 'name']);
+  assert.deepEqual(Object.keys(login.body.user).sort(), ['accountType', 'email', 'id', 'name', 'organizations']); // account type + memberships (organizations) are the only additions; never the age group
 });
 
 test('repeated and concurrent submissions are safe: one row, same result, one completion event', async () => {

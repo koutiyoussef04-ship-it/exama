@@ -6,7 +6,7 @@
  * Usage is reserved in the ledger *before* any AI work, inside a per-user lock, so parallel
  * requests can't both slip under a limit. A failed AI generation releases its reservation.
  */
-import { and, count, eq, gte, inArray, sql, sum } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNull, sql, sum } from 'drizzle-orm';
 import type { AccessPlan, Entitlement, Features, LectureAllowance, Limits, Tier, Usage } from '@study/shared';
 import { normalizePlanId, planById } from '@study/shared';
 import { config } from '../config.js';
@@ -40,19 +40,20 @@ const nextMonthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYea
  */
 async function getUsage(userId: string, since: Date, exec: Exec, mediaSince: Date = since, coursesEver = false): Promise<Usage> {
   const [[courses], [created], ledger, media] = await Promise.all([
-    exec.select({ n: count() }).from(documents).where(eq(documents.userId, userId)),
+    // Personal only: a staff member's work for an organization never counts against their own plan.
+    exec.select({ n: count() }).from(documents).where(and(eq(documents.userId, userId), isNull(documents.organizationId))),
     coursesEver ? exec.select({ n: count() }).from(courseCreations).where(eq(courseCreations.userId, userId)) : [{ n: 0 }],
     exec
       .select({ kind: usageLedger.kind, total: sum(usageLedger.amount) })
       .from(usageLedger)
-      .where(and(eq(usageLedger.userId, userId), gte(usageLedger.createdAt, since)))
+      .where(and(eq(usageLedger.userId, userId), isNull(usageLedger.organizationId), gte(usageLedger.createdAt, since)))
       .groupBy(usageLedger.kind),
     +mediaSince === +since
       ? null
       : exec
           .select({ kind: usageLedger.kind, total: sum(usageLedger.amount) })
           .from(usageLedger)
-          .where(and(eq(usageLedger.userId, userId), gte(usageLedger.createdAt, mediaSince), inArray(usageLedger.kind, ['media_upload', 'media_minutes'])))
+          .where(and(eq(usageLedger.userId, userId), isNull(usageLedger.organizationId), gte(usageLedger.createdAt, mediaSince), inArray(usageLedger.kind, ['media_upload', 'media_minutes'])))
           .groupBy(usageLedger.kind),
   ]);
   const used = (k: UsageKind, rows = ledger) => Number(rows.find((r) => r.kind === k)?.total ?? 0);

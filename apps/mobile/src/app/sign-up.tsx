@@ -1,8 +1,9 @@
 import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Text, TextInput, View } from 'react-native';
-import { SIGNUP_AGE_ANSWERS, type SignupAgeAnswer } from '@study/shared';
+import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
+import { ORGANIZATION_MARKETS, SIGNUP_AGE_ANSWERS, type AccountType, type OrganizationMarket, type SignupAgeAnswer } from '@study/shared';
+import { AccountTypeChoice } from '@/components/account-type-choice';
 import { Chips } from '@/components/planner';
 import { Body, Button, Card, CheckRow, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
 import { AGE_BLOCK_KEY, ageBlockActive, ageBlockValue, isBelowMinimumAge, MINIMUM_SIGNUP_AGE } from '@/lib/age-gate';
@@ -27,6 +28,10 @@ export default function SignUp() {
   const [ageRange, setAgeRange] = useState<SignupAgeAnswer | null>(null);
   // Optional marketing-email consent: unticked by default, never required, separate from the terms below the button.
   const [marketing, setMarketing] = useState(false);
+  // First step: "How will you use Exama?" — student (the study app) or organization (the workspace).
+  const [accountType, setAccountType] = useState<AccountType | null>(null);
+  const [organizationName, setOrganizationName] = useState('');
+  const [market, setMarket] = useState<OrganizationMarket | null>(null);
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.
   const [blocked, setBlocked] = useState<boolean | null>(null);
   useEffect(() => {
@@ -37,7 +42,7 @@ export default function SignUp() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
-  const form = { name, email, password, confirmPassword, ageRange };
+  const form = { name, email, password, confirmPassword, ageRange, accountType, organizationName, market };
   const canSubmit = canSubmitSignup(form) && !loading;
   const showMismatch = mismatch || showPasswordMismatch(form);
 
@@ -49,6 +54,8 @@ export default function SignUp() {
     setConfirmPassword('');
     setAgeRange(null);
     setMarketing(false);
+    setOrganizationName('');
+    setMarket(null);
     setBlocked(true);
     void kv.set(AGE_BLOCK_KEY, ageBlockValue());
   };
@@ -88,11 +95,38 @@ export default function SignUp() {
   }
 
   const link = { color: colors.primary, fontWeight: '600' as const, fontSize: 14 };
+  if (!accountType) {
+    return (
+      <Screen>
+        <AccountTypeChoice onChoose={setAccountType} />
+        <Link href="/sign-in" replace style={{ color: colors.primary, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: space(3) }}>
+          {t('auth.haveAccount')}
+        </Link>
+      </Screen>
+    );
+  }
+  const isOrganization = accountType === 'organization';
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <Screen>
-        <Body muted>{t('auth.signUpIntro')}</Body>
-        {pending.intent && <Body style={{ fontWeight: '600' }}>{t('auth.continueToPlans')}</Body>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space(3) }}>
+          <Body style={{ fontWeight: '600', flex: 1 }}>{isOrganization ? t('auth.accountType.organizationChosen') : t('auth.accountType.studentChosen')}</Body>
+          <Pressable onPress={() => setAccountType(null)} hitSlop={12} accessibilityRole="button">
+            <Text style={link}>{t('auth.accountType.change')}</Text>
+          </Pressable>
+        </View>
+        <Body muted>{isOrganization ? t('auth.signUpIntroOrganization') : t('auth.signUpIntro')}</Body>
+        {pending.intent && !isOrganization && <Body style={{ fontWeight: '600' }}>{t('auth.continueToPlans')}</Body>}
+        {isOrganization && (
+          <View style={{ gap: space(3) }}>
+            <Field label={t('auth.organizationName')} placeholder={t('auth.organizationNamePlaceholder')} value={organizationName} onChangeText={setOrganizationName} autoCapitalize="words" returnKeyType="next" />
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">
+              {t('auth.marketQuestion')}
+            </Text>
+            <Chips options={ORGANIZATION_MARKETS.map((value) => ({ value, label: t(`auth.market.${value}`) }))} value={market as OrganizationMarket} onChange={setMarket} />
+            <Body muted style={{ fontSize: 13 }}>{t('auth.marketHint')}</Body>
+          </View>
+        )}
         <Field
           label={t('auth.firstName')}
           value={name}

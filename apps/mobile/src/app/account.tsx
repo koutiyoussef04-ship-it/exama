@@ -154,6 +154,16 @@ export default function Account() {
       <ReminderSettingsCard />
       <MarketingSettingsCard />
 
+      {/* Members of an organization (students added by an admin, or organization accounts): the workspace. */}
+      {!!user?.organizations?.length && (
+        <Card style={{ gap: 0 }}>
+          <SectionLabel>{t('account.organizations')}</SectionLabel>
+          {user.organizations.map((o, i) => (
+            <ListRow key={o.id} label={o.name} value={t(`org.roles.${o.role}`)} onPress={() => router.push({ pathname: '/org', params: { orgId: o.id } })} last={i === user.organizations.length - 1} />
+          ))}
+        </Card>
+      )}
+
       {/* Owners only (the server decides; see src/admin). */}
       <AdminEntry />
 
