@@ -4,12 +4,12 @@
  */
 import { EXPORT_FORMATS, type ExportFormat } from '@study/shared';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, TextInput, View } from 'react-native';
-import { OrgGate, OrgNav, type OrgContext } from '@/components/org/org-nav';
-import { Chips } from '@/components/planner';
-import { Body, Button, Card, colors, ErrorText, Screen, SectionLabel, space, TextButton } from '@/components/ui';
+import { FilterSelect, OrgGate, Segmented, SmallButton, Toolbar, WorkspaceShell, type OrgContext } from '@/components/org/workspace';
+import { Body, Card, colors, ErrorText, SectionLabel, space } from '@/components/ui';
 import { api } from '@/lib/api';
 import { copyText } from '@/lib/support';
 
@@ -44,8 +44,9 @@ function downloadText({ text, filename, format }: Exported): boolean {
 function Export(ctx: OrgContext) {
   const { t } = useTranslation();
   const { org } = ctx;
-  const [courseId, setCourseId] = useState('');
-  const [topic, setTopic] = useState('');
+  const params = useLocalSearchParams<{ documentId?: string; topic?: string }>();
+  const [courseId, setCourseId] = useState(params.documentId ?? '');
+  const [topic, setTopic] = useState(params.topic ?? '');
   const [format, setFormat] = useState<ExportFormat>('csv');
   const [result, setResult] = useState<Exported | null>(null);
   const [copied, setCopied] = useState<boolean | null>(null);
@@ -68,64 +69,52 @@ function Export(ctx: OrgContext) {
   const web = Platform.OS === 'web';
 
   return (
-    <Screen>
-      <OrgNav {...ctx} active="export" />
-      <Body muted style={{ fontSize: 14 }}>{t('org.export.intro')}</Body>
-
+    <WorkspaceShell {...ctx} active="export" title={t('org.ws.export.title')} subtitle={t('org.export.intro')} maxWidth={880}>
       <Card style={{ gap: space(4) }}>
-        {!!courses.data?.length && (
-          <View style={{ gap: space(2) }}>
-            <SectionLabel>{t('org.bank.course')}</SectionLabel>
-            <Chips
-              options={[{ value: '', label: t('org.bank.allCourses') }, ...courses.data.map((c) => ({ value: c.id, label: c.title }))]}
+        <Toolbar>
+          {!!courses.data?.length && (
+            <FilterSelect
+              label={t('org.bank.course')}
               value={courseId}
+              options={[{ value: '', label: t('org.bank.allCourses') }, ...courses.data.map((c) => ({ value: c.id, label: c.title }))]}
               onChange={(v) => {
                 setCourseId(v);
                 setTopic('');
               }}
             />
-          </View>
-        )}
-        {topicOptions.length > 0 && (
-          <View style={{ gap: space(2) }}>
-            <SectionLabel>{t('org.bank.topic')}</SectionLabel>
-            <Chips options={[{ value: '', label: t('org.bank.allTopics') }, ...topicOptions.map((x) => ({ value: x, label: x }))]} value={topic} onChange={setTopic} />
-          </View>
-        )}
+          )}
+          {topicOptions.length > 0 && <FilterSelect label={t('org.bank.topic')} value={topic} options={[{ value: '', label: t('org.bank.allTopics') }, ...topicOptions.map((x) => ({ value: x, label: x }))]} onChange={setTopic} />}
+        </Toolbar>
         <View style={{ gap: space(2) }}>
           <SectionLabel>{t('org.export.format')}</SectionLabel>
-          <Chips options={EXPORT_FORMATS.map((f) => ({ value: f, label: t(`org.export.formats.${f}`) }))} value={format} onChange={setFormat} />
+          <Segmented options={EXPORT_FORMATS.map((f) => ({ value: f, label: t(`org.export.formats.${f}`) }))} value={format} onChange={setFormat} label={t('org.export.format')} />
         </View>
-        <Body style={{ fontWeight: '600' }}>{topics.isLoading ? t('org.export.counting') : t('org.export.approvedCount', { count: approvedCount })}</Body>
-        <Button title={t('org.export.button')} onPress={() => exportNow.mutate()} loading={exportNow.isPending} disabled={!topics.isLoading && approvedCount === 0} />
-        {!topics.isLoading && approvedCount === 0 && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('org.export.nothing')}</Body>}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space(3) }}>
+          <SmallButton title={t('org.export.button')} variant="primary" icon="export" onPress={() => exportNow.mutate()} loading={exportNow.isPending} disabled={!topics.isLoading && approvedCount === 0} />
+          <Body style={{ fontWeight: '600', fontSize: 14 }}>{topics.isLoading ? t('org.export.counting') : t('org.export.approvedCount', { count: approvedCount })}</Body>
+        </View>
+        {!topics.isLoading && approvedCount === 0 && <Body muted style={{ fontSize: 13 }}>{t('org.export.nothing')}</Body>}
         <ErrorText error={exportNow.error ?? topics.error} />
       </Card>
 
       {result && (
         <Card style={{ gap: space(3) }}>
           <SectionLabel>{t('org.export.resultTitle')}</SectionLabel>
-          <Body>{t('org.export.done', { count: result.count, filename: result.filename })}</Body>
-          {web ? (
-            <Button variant="secondary" title={t('org.export.downloadAgain')} onPress={() => downloadText(result)} />
-          ) : (
+          <Body style={{ fontSize: 14 }}>{t('org.export.done', { count: result.count, filename: result.filename })}</Body>
+          {!web && (
             <>
               <Body muted style={{ fontSize: 13 }}>{t('org.export.nativeHint')}</Body>
-              <TextInput
-                value={result.text}
-                editable={false}
-                multiline
-                scrollEnabled
-                accessibilityLabel={t('org.export.textLabel')}
-                style={{ minHeight: 160, maxHeight: 320, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, padding: space(3), fontSize: 13, color: colors.text }}
-              />
+              <TextInput value={result.text} editable={false} multiline scrollEnabled accessibilityLabel={t('org.export.textLabel')} style={{ minHeight: 160, maxHeight: 320, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, padding: space(3), fontSize: 13, color: colors.text }} />
             </>
           )}
-          <TextButton title={t('org.export.copy')} onPress={() => void copy(result.text)} />
-          {copied === true && <Body style={{ color: colors.success, fontSize: 14, textAlign: 'center' }}>{t('org.export.copied')}</Body>}
-          {copied === false && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('org.export.copyFailed')}</Body>}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+            {web && <SmallButton title={t('org.export.downloadAgain')} icon="export" onPress={() => downloadText(result)} />}
+            <SmallButton title={t('org.export.copy')} variant="ghost" onPress={() => void copy(result.text)} />
+          </View>
+          {copied === true && <Body style={{ color: colors.success, fontSize: 13 }}>{t('org.export.copied')}</Body>}
+          {copied === false && <Body muted style={{ fontSize: 13 }}>{t('org.export.copyFailed')}</Body>}
         </Card>
       )}
-    </Screen>
+    </WorkspaceShell>
   );
 }

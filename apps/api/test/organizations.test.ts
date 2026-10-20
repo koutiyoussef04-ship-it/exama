@@ -219,6 +219,32 @@ test('workflow: upload → generate drafts with located sources and flags → re
   assert.equal(createHash('sha256').update(chunkRow.content, 'utf8').digest('hex'), first.chunkHash);
   if (first.quoteStart !== null) assert.ok(chunkRow.content.slice(first.quoteStart, first.quoteEnd!).length > 0);
 
+  // Review screen data: the item detail carries the located passage (the chunk's text, verified against the
+  // hash) with the quote's offsets, so the reviewer sees the source next to the question. Unlocated sources
+  // get no passage (never a guessed one).
+  const detail = await call<BankItemDetail>(`/orgs/${orgId}/items/${located[0].id}`, { token: admin.token });
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.passages.length, 1);
+  const passage = detail.body.passages[0];
+  assert.deepEqual([passage.sourceId, passage.text, passage.pageStart], [first.id, chunkRow.content, first.pageStart]);
+  const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  if (first.quoteStart !== null) assert.equal(norm(passage.text.slice(passage.quoteStart!, passage.quoteEnd!)), norm(first.quote), 'offsets point at the quote');
+  const unlocatedItem = g.body.items.find((i) => !i.sources[0].located);
+  if (unlocatedItem) assert.deepEqual((await call<BankItemDetail>(`/orgs/${orgId}/items/${unlocatedItem.id}`, { token: admin.token })).body.passages, []);
+
+  // Search and attention filters on the list (server-side, so tables can page through large banks).
+  const word = located[0].stem.split(/\s+/).find((w) => /^[A-Za-z]{5,}$/.test(w))!;
+  const found = await call<BankItemList>(`/orgs/${orgId}/items?q=${encodeURIComponent(word.toUpperCase())}`, { token: admin.token });
+  assert.ok(found.body.items.some((i) => i.id === located[0].id), `search "${word}" finds the item (case-insensitive)`);
+  assert.ok(found.body.items.every((i) => JSON.stringify(i).toLowerCase().includes(word.toLowerCase())));
+  assert.equal((await call<BankItemList>(`/orgs/${orgId}/items?q=${encodeURIComponent('zzqx-no-such-text-%_')}`, { token: admin.token })).body.total, 0, 'wildcards are literal');
+  const flagged = await call<BankItemList>(`/orgs/${orgId}/items?attention=flagged`, { token: admin.token });
+  const clean = await call<BankItemList>(`/orgs/${orgId}/items?attention=clean`, { token: admin.token });
+  assert.ok(flagged.body.items.every((i) => i.reviewFlags.length > 0 || i.verification?.verdict !== 'supported'));
+  assert.ok(clean.body.items.every((i) => i.reviewFlags.length === 0 && i.verification?.verdict === 'supported'));
+  assert.equal(flagged.body.total + clean.body.total, g.body.items.length, 'every item is either flagged or clean');
+  assert.equal((await call(`/orgs/${orgId}/items?attention=maybe`, { token: admin.token })).status, 400);
+
   // Usage: charged to the organization (what was kept), not to the person.
   const ov = await call<OrganizationOverview>(`/orgs/${orgId}`, { token: admin.token });
   assert.deepEqual([ov.body.usage.coursesThisMonth, ov.body.usage.itemsThisMonth, ov.body.counts.drafts, ov.body.counts.courses], [1, g.body.items.length, g.body.items.length, 1]);

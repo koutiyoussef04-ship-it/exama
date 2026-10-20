@@ -5,14 +5,16 @@
  * - an edit creates a new version (snapshot in bank_item_revisions) and sends the item back to draft;
  * - every action writes a bank_item_events row (the audit history shown on the item).
  */
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { BankItem, BankItemDetail, BankItemEvent, BankItemList, BankItemStatus, CreateBankItemInput, TopicCount, UpdateBankItemInput } from '@study/shared';
+import { and, asc, count, desc, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
+import type { AttentionFilter, BankItem, BankItemDetail, BankItemEvent, BankItemList, BankItemStatus, CreateBankItemInput, SourcePassage, TopicCount, UpdateBankItemInput } from '@study/shared';
 import { legalRefSchema } from '@study/shared';
 import type { OrgContext } from '../../auth/org-access.js';
 import { db } from '../../db/client.js';
-import { bankItemEvents, bankItemRevisions, bankItems, documents, questionSources, users } from '../../db/schema.js';
+import { bankItemEvents, bankItemRevisions, bankItems, documentChunks, documents, questionSources, users } from '../../db/schema.js';
 import { HttpError } from '../../lib/errors.js';
 import { getOrgDocument } from '../org-documents.js';
+import { normalizeText } from '../../lib/grounding.js';
+import { chunkHash } from '../sources/locate.js';
 
 type Tx = Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
 type ItemRow = typeof bankItems.$inferSelect;
@@ -99,19 +101,28 @@ async function hydrate(rows: ItemRow[]): Promise<BankItem[]> {
   );
 }
 
+/** Items that need a reviewer's attention: any review flag, or a verdict other than "supported". */
+const needsAttention = sql`(jsonb_array_length(${bankItems.reviewFlags}) > 0 or coalesce(${bankItems.verification} ->> 'verdict', 'unavailable') <> 'supported')`;
+
+/** `%`, `_` and `\` in a search term are literal, not wildcards. */
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+
 export async function listItems(
   orgId: string,
-  q: { documentId?: string; status?: BankItemStatus; topic?: string; section?: string; limit: number; offset: number },
+  q: { documentId?: string; status?: BankItemStatus; topic?: string; section?: string; q?: string; attention?: AttentionFilter; sort?: 'newest' | 'oldest'; limit: number; offset: number },
 ): Promise<BankItemList> {
+  const term = q.q?.trim() ? `%${escapeLike(q.q.trim())}%` : null;
   const where = and(
     eq(bankItems.organizationId, orgId),
     q.documentId ? eq(bankItems.documentId, q.documentId) : undefined,
     q.status ? eq(bankItems.status, q.status) : undefined,
     q.topic ? eq(bankItems.topic, q.topic) : undefined,
     q.section ? eq(bankItems.section, q.section) : undefined,
+    term ? or(ilike(bankItems.stem, term), ilike(bankItems.explanation, term), ilike(bankItems.topic, term), ilike(bankItems.correctAnswer, term), sql`${bankItems.options}::text ilike ${term}`) : undefined,
+    q.attention === 'flagged' ? needsAttention : q.attention === 'clean' ? not(needsAttention) : undefined,
   );
   const [rows, [total]] = await Promise.all([
-    db.select().from(bankItems).where(where).orderBy(desc(bankItems.createdAt), asc(bankItems.id)).limit(q.limit).offset(q.offset),
+    db.select().from(bankItems).where(where).orderBy(q.sort === 'oldest' ? asc(bankItems.createdAt) : desc(bankItems.createdAt), asc(bankItems.id)).limit(q.limit).offset(q.offset),
     db.select({ n: count() }).from(bankItems).where(where),
   ]);
   return { items: await hydrate(rows), total: Number(total?.n ?? 0) };
@@ -126,6 +137,31 @@ export async function getItemRow(orgId: string, id: string): Promise<ItemRow> {
   return row;
 }
 
+/**
+ * The passages the item's located sources point at, for the side-by-side review: the chunk text as it is
+ * now, only when it still matches the hash recorded at generation time (a re-processed course would
+ * otherwise show a passage the quote was never found in). Chunks are read through the item's own
+ * document, so nothing outside the organization can be reached.
+ */
+async function loadPassages(item: BankItem): Promise<SourcePassage[]> {
+  const located = item.sources.filter((s) => s.located && s.chunkId);
+  if (located.length === 0) return [];
+  const chunks = await db
+    .select({ id: documentChunks.id, content: documentChunks.content })
+    .from(documentChunks)
+    .where(and(eq(documentChunks.documentId, item.documentId), inArray(documentChunks.id, located.map((s) => s.chunkId!))));
+  const byId = new Map(chunks.map((c) => [c.id, c.content]));
+  const out: SourcePassage[] = [];
+  for (const s of located) {
+    const text = byId.get(s.chunkId!);
+    if (text === undefined || chunkHash(text) !== s.chunkHash) continue;
+    // Offsets point into the raw chunk text; the quote itself was matched after whitespace/case normalisation.
+    const exact = s.quoteStart != null && s.quoteEnd != null && normalizeText(text.slice(s.quoteStart, s.quoteEnd)) === normalizeText(s.quote);
+    out.push({ sourceId: s.id, text, quoteStart: exact ? s.quoteStart : null, quoteEnd: exact ? s.quoteEnd : null, pageStart: s.pageStart, pageEnd: s.pageEnd, startSeconds: s.startSeconds, endSeconds: s.endSeconds });
+  }
+  return out;
+}
+
 export async function getItem(orgId: string, id: string): Promise<BankItemDetail> {
   const row = await getItemRow(orgId, id);
   const [[item], events] = await Promise.all([
@@ -137,8 +173,10 @@ export async function getItem(orgId: string, id: string): Promise<BankItemDetail
       .where(and(eq(bankItemEvents.bankItemId, id), eq(bankItemEvents.organizationId, orgId)))
       .orderBy(desc(bankItemEvents.createdAt)),
   ]);
+  const passages = await loadPassages(item);
   return {
     ...item,
+    passages,
     events: events.map(({ e, actorName }) => ({
       id: e.id,
       action: e.action as BankItemEvent['action'],

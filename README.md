@@ -100,7 +100,7 @@ GET  /orgs/:orgId · PATCH /orgs/:orgId { name }                  overview (coun
 GET|POST /orgs/:orgId/members · PATCH|DELETE /orgs/:orgId/members/:userId   members by email of an existing account (409 if already a member); roles admin | editor | reviewer; never removes the last admin (admin)
 GET|POST /orgs/:orgId/courses · GET|DELETE /orgs/:orgId/courses/:id · POST …/reprocess   organization courses (same pipeline as a student's course)
 POST /orgs/:orgId/courses/:id/generate { count, topic?, pageStart?, pageEnd?, questionTypes? }   AI drafts with located sources — never approved automatically (editor)
-GET  /orgs/:orgId/items?status&documentId&topic&section · POST /orgs/:orgId/items (by hand) · GET /orgs/:orgId/topics
+GET  /orgs/:orgId/items?status&documentId&topic&section&q&attention&sort&limit&offset · POST /orgs/:orgId/items (by hand) · GET /orgs/:orgId/topics
 GET|PATCH|DELETE /orgs/:orgId/items/:id · POST …/approve|reject|reopen (reviewer+) · POST …/retire (editor+)
 GET  /orgs/:orgId/export?format=csv|gift&documentId&topic      approved questions only (editor+)
 GET  /admin/organizations · PATCH /admin/organizations/:id { limits, status }   owner only: allowances and suspension (billing is manual)
@@ -282,7 +282,7 @@ Exama serves two kinds of accounts, chosen at sign-up (`users.account_type`, set
 - **Exports:** CSV (RFC 4180, UTF-8 BOM) and GIFT (Moodle), approved items only, organization-scoped, with the source label (`Course, p. 3-4` / `Course, 02:05` / `Course (location not confirmed)`).
 - **Usage and cost:** organization work is metered in `usage_ledger` with `organization_id` (course uploads, generated questions; pilot defaults in `billing/org-limits.ts`, per-organization overrides via the owner API) and never counts against a staff member's personal plan; `ai_usage.organization_id` attributes AI cost per organization. Organization billing is manual (invoice per pilot): no Stripe product exists for it.
 - **Files** of organization courses live under `org/<orgId>/…`, so deleting a staff member's account (`<userId>/`) never touches them.
-- **App:** sign-up asks "How will you use Exama?" first; organization accounts open `/org` (dashboard, courses, review queue, question bank, export, members); students never see organization screens unless an admin adds them (then the workspace is linked from Account). Web-first, same codebase and languages.
+- **App:** sign-up asks "How will you use Exama?" first; organization accounts open `/org` (dashboard, courses, review queue, question bank, export, members); students never see organization screens unless an admin adds them (then the workspace is linked from Account). Web-first, same codebase and languages. The workspace has its own desktop layout (`components/org/workspace.tsx`: left sidebar from 1024 px, top bar + tabs below that; tables that become cards on phones). The question screen shows the source passage (`passages` on `GET /orgs/:orgId/items/:id`, quote highlighted) next to the editable question, with approve / reject / "approve and next" and web keyboard shortcuts (A, R, N, P); the queue is the list the question was opened from (its filters travel in the URL).
 
 ## Account deletion
 

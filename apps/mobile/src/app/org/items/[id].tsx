@@ -1,48 +1,97 @@
 /**
- * One question of the bank: edit its content, read its source quote(s) and verification, and review it
- * (approve / reject / retire / reopen). Saving content edits creates a new version and sends the item
- * back to draft — the server enforces this; the screen only explains it. Role checks here are cosmetic:
- * a 403 from the server is shown like any other error.
+ * One question, reviewed next to its source. Wide screens: the source passage (quote highlighted, page or
+ * time, match score, verifier verdict, review flags) on the left and the editable question on the right;
+ * narrow screens: the source first, then the question. A fixed action bar does approve / reject / save,
+ * "approve and next" and previous/next within the queue the question was opened from (the list's
+ * filters travel in the URL). Web keyboard shortcuts: A approve-and-next, R reject, N next, P previous.
+ *
+ * Saving content edits creates a new version and sends the item back to draft — the server enforces
+ * this; the screen only explains it. Role checks here are cosmetic: a 403 is shown like any other error.
  */
-import { marketProfile, type BankItemDetail, type BankItemEvent } from '@study/shared';
+import { marketProfile, type BankItemDetail, type BankItemEvent, type BankItemStatus, type SourcePassage } from '@study/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { draftFromItem, draftToInput, ItemFields, validateDraft, type DraftProblem, type ItemDraft } from '@/components/org/item-form';
-import { OrgGate, OrgNav, type OrgContext } from '@/components/org/org-nav';
-import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, Field, Loading, pct, Screen, SectionLabel, space, TextButton } from '@/components/ui';
+import { ChecksCell } from '@/components/org/question-table';
+import { IconButton, OrgGate, queueParams, SmallButton, useIsWide, useKeyShortcuts, WorkspaceShell, type OrgContext, type QueueParams } from '@/components/org/workspace';
+import { Badge, Body, Card, colors, ErrorState, ErrorText, Field, Loading, pct, SectionLabel, space } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 import { canEdit, flagHint, flagLabel, sourceLabel, STATUS_TONE, statusLabel, VERDICT_TONE, verdictLabel } from '@/lib/org';
 
 type ReviewAction = 'approve' | 'reject' | 'retire' | 'reopen';
+const QUEUE_LIMIT = 200;
 
 export default function OrgItemScreen() {
   return <OrgGate>{(ctx) => <Item {...ctx} />}</OrgGate>;
 }
 
+/** The list this question was opened from, for previous / next. */
+function useQueue(orgId: string, currentId: string, params: QueueParams) {
+  const status = (['draft', 'approved', 'rejected', 'retired'] as const).find((s) => s === params.status) as BankItemStatus | undefined;
+  const enabled = !!status;
+  const filters = { status, documentId: params.documentId || undefined, q: params.q || undefined, attention: params.attention === 'flagged' || params.attention === 'clean' ? params.attention : undefined, sort: params.sort === 'oldest' ? ('oldest' as const) : undefined };
+  const list = useQuery({
+    queryKey: ['org', orgId, 'queue', filters],
+    queryFn: () => api.orgItems(orgId, { ...filters, limit: QUEUE_LIMIT }),
+    enabled,
+    staleTime: 60_000,
+  });
+  return useMemo(() => {
+    const ids = list.data?.items.map((i) => i.id) ?? [];
+    const index = ids.indexOf(currentId);
+    return {
+      enabled,
+      total: list.data?.total ?? 0,
+      index,
+      prevId: index > 0 ? ids[index - 1] : null,
+      nextId: index >= 0 && index < ids.length - 1 ? ids[index + 1] : null,
+      /** After the current item leaves the list (approved/rejected): the item that was after it, else the one before. */
+      afterLeaving: index >= 0 ? (ids[index + 1] ?? ids[index - 1] ?? null) : null,
+    };
+  }, [list.data, currentId, enabled]);
+}
+
 function Item(ctx: OrgContext) {
   const { t } = useTranslation();
   const { org } = ctx;
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ...rest } = useLocalSearchParams<{ id: string; documentId?: string; q?: string; attention?: string; status?: string; sort?: string }>();
+  const queueP: QueueParams = { documentId: rest.documentId, q: rest.q, attention: rest.attention, status: rest.status, sort: rest.sort };
   const qc = useQueryClient();
+  const wide = useIsWide();
   const profile = marketProfile(org.market);
   const key = ['org', org.id, 'item', id];
 
   const item = useQuery({ queryKey: key, queryFn: () => api.orgItem(org.id, id) });
+  const queue = useQueue(org.id, id, queueP);
 
-  // Editable copy of the item; reset whenever a fresh version arrives and nothing is being edited.
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState('');
   const [problem, setProblem] = useState<DraftProblem | null>(null);
+  const [endOfQueue, setEndOfQueue] = useState(false);
   useEffect(() => {
     if (item.data && !dirty) setDraft(draftFromItem(item.data));
   }, [item.data, dirty]);
+  // A new question: fresh form state.
+  useEffect(() => {
+    setDirty(false);
+    setSaved(false);
+    setNote('');
+    setProblem(null);
+    setEndOfQueue(false);
+  }, [id]);
+
+  const goTo = (nextId: string) => router.replace({ pathname: '/org/items/[id]', params: { id: nextId, orgId: org.id, ...queueParams(queueP) } });
+  const backToQueue = () => {
+    const status = queueP.status === 'approved' ? '/org/bank' : '/org/review';
+    router.replace({ pathname: status, params: { orgId: org.id, ...queueParams({ documentId: queueP.documentId, q: queueP.q, attention: queueP.attention }) } });
+  };
 
   const applyResult = (updated: BankItemDetail) => {
     qc.setQueryData(key, updated);
@@ -61,62 +110,133 @@ function Item(ctx: OrgContext) {
     },
   });
   const review = useMutation({
-    mutationFn: (action: ReviewAction) => api.orgReviewItem(org.id, id, action, note.trim() || undefined),
-    onSuccess: applyResult,
+    mutationFn: ({ action, andNext }: { action: ReviewAction; andNext: boolean }) => api.orgReviewItem(org.id, id, action, note.trim() || undefined).then((r) => ({ r, andNext })),
+    onSuccess: ({ r, andNext }) => {
+      applyResult(r);
+      if (andNext) {
+        const next = queue.afterLeaving;
+        if (next) goTo(next);
+        else setEndOfQueue(true);
+      }
+    },
+  });
+  /** Edited and approved in one go: save first (new version, back to draft), then approve that version. */
+  const saveAndApprove = useMutation({
+    mutationFn: async (d: ItemDraft) => {
+      await api.orgUpdateItem(org.id, id, draftToInput(d, item.data!.type, profile.legalMetadata));
+      return api.orgReviewItem(org.id, id, 'approve', note.trim() || undefined);
+    },
+    onSuccess: (updated) => {
+      applyResult(updated);
+      const next = queue.afterLeaving;
+      if (next) goTo(next);
+      else setEndOfQueue(true);
+    },
   });
   const remove = useMutation({
     mutationFn: () => api.orgDeleteItem(org.id, id),
     onSuccess: () => {
       qc.removeQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ['org', org.id] });
-      if (router.canGoBack()) router.back();
-      else router.replace({ pathname: '/org/review', params: { orgId: org.id } });
+      backToQueue();
     },
   });
 
-  const onSave = () => {
-    if (!draft || !item.data) return;
+  const validDraft = () => {
+    if (!draft || !item.data) return null;
     const bad = validateDraft(draft, item.data.type, profile.legalMetadata);
     setProblem(bad);
-    if (!bad) save.mutate(draft);
+    return bad ? null : draft;
+  };
+  const onSave = () => {
+    const d = validDraft();
+    if (d) save.mutate(d);
+  };
+  const onApproveNext = () => {
+    if (!item.data || item.data.status !== 'draft' || busy) return;
+    if (dirty) {
+      const d = validDraft();
+      if (d) saveAndApprove.mutate(d);
+    } else review.mutate({ action: 'approve', andNext: true });
   };
   const askDelete = async () => {
     if (await confirm({ title: t('org.item.deleteTitle'), message: t('org.item.deleteMessage'), confirmText: t('common.delete'), destructive: true })) remove.mutate();
   };
 
-  if (item.isLoading) return <Loading />;
-  if (!item.data || !draft) {
+  const it = item.data;
+  const busy = save.isPending || review.isPending || saveAndApprove.isPending || remove.isPending;
+  useKeyShortcuts(
+    {
+      a: it?.status === 'draft' ? onApproveNext : undefined,
+      r: it?.status === 'draft' && !dirty ? () => review.mutate({ action: 'reject', andNext: true }) : undefined,
+      n: queue.nextId ? () => goTo(queue.nextId!) : undefined,
+      p: queue.prevId ? () => goTo(queue.prevId!) : undefined,
+    },
+    !!it && !busy,
+  );
+
+  if (item.isLoading && !it) return <Loading />;
+  if (!it || !draft) {
     return (
-      <Screen>
-        <OrgNav {...ctx} active="review" />
+      <WorkspaceShell {...ctx} active="review" title={t('org.ws.review.questionPanel')} back={{ label: t('org.ws.item.back'), onPress: backToQueue }}>
         <ErrorState error={item.error} onRetry={() => item.refetch()} />
-      </Screen>
+      </WorkspaceShell>
     );
   }
-  const it = item.data;
   const retired = it.status === 'retired';
-  const busy = save.isPending || review.isPending || remove.isPending;
-  const actionError = save.error ?? review.error ?? remove.error;
+  const actionError = save.error ?? review.error ?? saveAndApprove.error ?? remove.error;
+  const section = it.status === 'approved' ? 'bank' : 'review';
 
-  return (
-    <Screen onRefresh={() => item.refetch()} refreshing={item.isRefetching}>
-      <OrgNav {...ctx} active={it.status === 'approved' ? 'bank' : 'review'} />
+  const sourcePane = (
+    <View style={{ gap: space(3), flex: wide ? 5 : undefined }}>
+      <SectionLabel>{t('org.ws.review.sourcePanel')}</SectionLabel>
+      <Card style={{ gap: space(3) }}>
+        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>{it.documentTitle}</Text>
+        {it.sources.length === 0 && <Body muted style={{ fontSize: 14 }}>{t('org.ws.review.noSourceHint')}</Body>}
+        {it.sources.map((s) => (
+          <SourceBlock key={s.id} source={s} passage={it.passages.find((p) => p.sourceId === s.id) ?? null} compact={!wide} />
+        ))}
+      </Card>
+      <Card style={{ gap: space(3) }}>
+        <SectionLabel>{t('org.ws.review.checks')}</SectionLabel>
+        <ChecksCell item={it} />
+        {it.verification ? (
+          <View style={{ gap: space(1) }}>
+            <View style={{ flexDirection: 'row', gap: space(2), alignItems: 'center' }}>
+              <Badge label={verdictLabel(it.verification.verdict)} tone={VERDICT_TONE[it.verification.verdict]} />
+              <Text style={{ color: colors.muted, fontSize: 12 }}>{t('org.item.verification')}</Text>
+            </View>
+            {!!it.verification.note && <Body muted style={{ fontSize: 14 }}>{it.verification.note}</Body>}
+          </View>
+        ) : (
+          <Body muted style={{ fontSize: 14 }}>{t('org.item.noVerification')}</Body>
+        )}
+        {it.reviewFlags.map((f) => (
+          <View key={f} style={{ gap: 2 }}>
+            <Text style={{ color: colors.warning, fontSize: 13, fontWeight: '700' }}>{flagLabel(f)}</Text>
+            <Body muted style={{ fontSize: 13 }}>{flagHint(f)}</Body>
+          </View>
+        ))}
+      </Card>
+      <Card style={{ gap: 0 }}>
+        <SectionLabel>{t('org.item.history')}</SectionLabel>
+        {it.events.map((e, i) => (
+          <EventRow key={e.id} event={e} last={i === it.events.length - 1} />
+        ))}
+      </Card>
+    </View>
+  );
 
-      <View style={{ gap: space(2) }}>
+  const questionPane = (
+    <View style={{ gap: space(3), flex: wide ? 6 : undefined }}>
+      <SectionLabel>{t('org.ws.review.questionPanel')}</SectionLabel>
+      <Card style={{ gap: space(4) }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
           <Badge label={statusLabel(it.status)} tone={STATUS_TONE[it.status]} />
           <Badge label={t(`org.type.${it.type}`)} />
           <Badge label={t(`org.item.origin.${it.origin}`)} />
           <Badge label={t('org.item.version', { version: it.version })} />
         </View>
-        <Body muted style={{ fontSize: 13 }}>
-          {t('org.item.course')}: {it.documentTitle}
-        </Body>
-      </View>
-
-      {/* Content */}
-      <Card style={{ gap: space(4) }}>
-        <SectionLabel>{t('org.item.content')}</SectionLabel>
         {retired && <Body muted style={{ fontSize: 14 }}>{t('org.item.retiredNoEdit')}</Body>}
         <ItemFields
           draft={draft}
@@ -130,108 +250,140 @@ function Item(ctx: OrgContext) {
             setProblem(null);
           }}
         />
+        {problem && <Body style={{ color: colors.danger, fontSize: 14 }}>{t(problem)}</Body>}
         {!retired && (
-          <View style={{ gap: space(2) }}>
-            <Body muted style={{ fontSize: 13 }}>{t('org.item.saveHint')}</Body>
-            {problem && <Body style={{ color: colors.danger, fontSize: 14 }}>{t(problem)}</Body>}
-            <Button title={t('org.item.save')} onPress={onSave} loading={save.isPending} disabled={!dirty || busy} />
-            {saved && !dirty && <Body style={{ color: colors.success, fontSize: 14, textAlign: 'center' }}>{t('org.item.saved')}</Body>}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
+            <SmallButton title={t('org.item.save')} onPress={onSave} loading={save.isPending} disabled={!dirty || busy} />
             {dirty && (
-              <TextButton
+              <SmallButton
                 title={t('org.item.discard')}
-                tone="muted"
+                variant="ghost"
                 onPress={() => {
                   setDraft(draftFromItem(it));
                   setDirty(false);
                   setProblem(null);
                 }}
+                disabled={busy}
               />
             )}
+            {saved && !dirty && <Text style={{ color: colors.success, fontSize: 13 }}>{t('org.item.saved')}</Text>}
+            {dirty && <Text style={{ color: colors.muted, fontSize: 13 }}>{t('org.item.saveHint')}</Text>}
           </View>
         )}
       </Card>
+      {(it.status === 'draft' || it.status === 'approved') && (
+        <Card style={{ gap: space(2) }}>
+          <Field label={t('org.item.note')} value={note} onChangeText={setNote} placeholder={t('org.item.notePlaceholder')} multiline maxLength={1000} />
+          {!!it.reviewNote && (
+            <Body muted style={{ fontSize: 13 }}>
+              {t('org.item.lastNote')}: {it.reviewNote}
+            </Body>
+          )}
+        </Card>
+      )}
+      {canEdit(org.role) && <SmallButton title={t('org.item.delete')} variant="ghost" onPress={askDelete} disabled={busy} style={{ alignSelf: 'flex-start' }} />}
+    </View>
+  );
 
-      {/* Sources */}
-      <Card style={{ gap: space(3) }}>
-        <SectionLabel>{t('org.source.title')}</SectionLabel>
-        {it.sources.length === 0 && <Body muted style={{ fontSize: 14 }}>{t('org.source.none')}</Body>}
-        {it.sources.map((s) => (
-          <View key={s.id} style={{ gap: space(1.5), backgroundColor: colors.bg, borderRadius: 12, padding: space(3) }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
-              <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14, flexShrink: 1 }}>{it.documentTitle}</Text>
-              <Badge label={sourceLabel(s)} tone={s.located ? 'neutral' : 'danger'} />
-              <Badge label={t('org.source.match', { pct: pct(s.matchScore) })} tone={s.matchScore >= 0.95 ? 'success' : 'warning'} />
+  const footer = (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space(2) }}>
+      {queue.enabled && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+          <IconButton icon="chevronLeft" label={t('org.ws.review.previous')} onPress={() => queue.prevId && goTo(queue.prevId)} disabled={!queue.prevId || busy} />
+          <Text style={{ color: colors.muted, fontSize: 13, minWidth: 64, textAlign: 'center' }}>{queue.index >= 0 ? t('org.ws.review.queuePosition', { index: queue.index + 1, total: queue.total }) : ''}</Text>
+          <IconButton icon="chevronRight" label={t('org.ws.review.next')} onPress={() => queue.nextId && goTo(queue.nextId)} disabled={!queue.nextId || busy} />
+        </View>
+      )}
+      <View style={{ flex: 1 }} />
+      {endOfQueue && <Text style={{ color: colors.success, fontSize: 13 }}>{t('org.ws.review.endOfQueue')}</Text>}
+      <ErrorText error={actionError} />
+      {it.status === 'draft' && (
+        <>
+          <SmallButton title={t('org.item.reject')} variant="danger" shortcut="R" onPress={() => review.mutate({ action: 'reject', andNext: true })} loading={review.isPending && review.variables?.action === 'reject'} disabled={busy || dirty} />
+          <SmallButton title={t('org.item.approve')} onPress={() => review.mutate({ action: 'approve', andNext: false })} loading={review.isPending && review.variables?.action === 'approve' && !review.variables.andNext} disabled={busy || dirty} />
+          <SmallButton title={dirty ? t('org.ws.review.saveAndApprove') : t('org.ws.review.approveNext')} variant="primary" icon="check" shortcut="A" onPress={onApproveNext} loading={saveAndApprove.isPending || (review.isPending && review.variables?.action === 'approve' && !!review.variables.andNext)} disabled={busy} />
+        </>
+      )}
+      {it.status === 'approved' && <SmallButton title={t('org.item.retire')} onPress={() => review.mutate({ action: 'retire', andNext: false })} loading={review.isPending} disabled={busy} />}
+      {(it.status === 'rejected' || it.status === 'retired') && <SmallButton title={t('org.item.reopen')} variant="primary" onPress={() => review.mutate({ action: 'reopen', andNext: false })} loading={review.isPending} disabled={busy} />}
+    </View>
+  );
+
+  return (
+    <WorkspaceShell {...ctx} active={section} title={it.stem} subtitle={[it.topic, it.section].filter(Boolean).join(' · ')} back={{ label: queueP.status === 'approved' ? t('org.ws.bank.title') : t('org.ws.review.backToQueue'), onPress: backToQueue }} footer={footer} onRefresh={() => item.refetch()} refreshing={item.isRefetching}>
+      {wide && <Text style={{ color: colors.muted, fontSize: 12 }}>{t('org.ws.review.shortcuts')}</Text>}
+      <View style={{ flexDirection: wide ? 'row' : 'column', gap: space(5), alignItems: 'flex-start' }}>
+        {sourcePane}
+        {questionPane}
+      </View>
+    </WorkspaceShell>
+  );
+}
+
+/** One source: location, match score, and the passage with the quote highlighted (or the quote alone). */
+/** Small screens show this much text either side of the quote until the passage is expanded. */
+const COMPACT_CONTEXT = 220;
+
+function SourceBlock({ source: s, passage, compact }: { source: BankItemDetail['sources'][number]; passage: SourcePassage | null; compact: boolean }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const parts = useMemo(() => {
+    if (!passage) return null;
+    const { text } = passage;
+    if (passage.quoteStart == null || passage.quoteEnd == null) {
+      const trimmed = compact && !expanded && text.length > COMPACT_CONTEXT * 2;
+      return { parts: [{ text: trimmed ? `${text.slice(0, COMPACT_CONTEXT * 2)}…` : text, mark: false }], trimmed };
+    }
+    let from = 0;
+    let to = text.length;
+    const trimmed = compact && !expanded && (passage.quoteStart > COMPACT_CONTEXT || text.length - passage.quoteEnd > COMPACT_CONTEXT);
+    if (trimmed) {
+      from = Math.max(0, passage.quoteStart - COMPACT_CONTEXT);
+      to = Math.min(text.length, passage.quoteEnd + COMPACT_CONTEXT);
+    }
+    return {
+      trimmed,
+      parts: [
+        { text: (from > 0 ? '…' : '') + text.slice(from, passage.quoteStart), mark: false },
+        { text: text.slice(passage.quoteStart, passage.quoteEnd), mark: true },
+        { text: text.slice(passage.quoteEnd, to) + (to < text.length ? '…' : ''), mark: false },
+      ].filter((p) => p.text.length > 0),
+    };
+  }, [passage, compact, expanded]);
+  return (
+    <View style={{ gap: space(2) }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1.5), alignItems: 'center' }}>
+        <Badge label={sourceLabel(s)} tone={s.located ? 'primary' : 'danger'} />
+        <Badge label={t('org.source.match', { pct: pct(s.matchScore) })} tone={s.matchScore >= 0.95 ? 'success' : 'warning'} />
+      </View>
+      {parts ? (
+        <View style={{ backgroundColor: colors.bg, borderRadius: 10, padding: space(3), borderWidth: 1, borderColor: colors.border }}>
+          <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>
+            {parts.parts.map((p, i) => (
+              <Text key={i} style={p.mark ? { backgroundColor: '#FFF2B3', color: colors.navy, fontWeight: '600' } : undefined}>
+                {p.text}
+              </Text>
+            ))}
+          </Text>
+          {(parts.trimmed || expanded) && (
+            <Pressable onPress={() => setExpanded((v) => !v)} hitSlop={8} accessibilityRole="button" style={{ marginTop: space(2) }}>
+              <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>{expanded ? t('course.showLess') : t('course.readMore')}</Text>
+            </Pressable>
+          )}
+          {passage && passage.quoteStart == null && (
+            <View style={{ marginTop: space(2), gap: 2 }}>
+              <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>{t('org.ws.review.quotedPassage')}</Text>
+              <Text style={{ color: colors.navy, fontSize: 14, lineHeight: 21, fontStyle: 'italic' }}>“{s.quote}”</Text>
             </View>
-            <Text style={{ color: colors.text, fontSize: 15, lineHeight: 22, fontStyle: 'italic' }}>“{s.quote}”</Text>
-            {!s.located && <Body style={{ color: colors.danger, fontSize: 13 }}>{t('org.source.notConfirmedHint')}</Body>}
-          </View>
-        ))}
-      </Card>
-
-      {/* Verification + flags */}
-      <Card style={{ gap: space(3) }}>
-        <SectionLabel>{t('org.item.verification')}</SectionLabel>
-        {it.verification ? (
-          <View style={{ gap: space(1.5) }}>
-            <Badge label={verdictLabel(it.verification.verdict)} tone={VERDICT_TONE[it.verification.verdict]} />
-            {!!it.verification.note && <Body muted style={{ fontSize: 14 }}>{it.verification.note}</Body>}
-          </View>
-        ) : (
-          <Body muted style={{ fontSize: 14 }}>{t('org.item.noVerification')}</Body>
-        )}
-        <SectionLabel>{t('org.item.flagsTitle')}</SectionLabel>
-        {it.reviewFlags.length === 0 && <Body muted style={{ fontSize: 14 }}>{t('org.item.noFlags')}</Body>}
-        {it.reviewFlags.map((f) => (
-          <View key={f} style={{ gap: space(1) }}>
-            <Badge label={flagLabel(f)} tone="warning" />
-            <Body muted style={{ fontSize: 13 }}>{flagHint(f)}</Body>
-          </View>
-        ))}
-      </Card>
-
-      {/* Review actions */}
-      <Card style={{ gap: space(3) }}>
-        <SectionLabel>{t('org.item.actions')}</SectionLabel>
-        {it.status === 'draft' && (
-          <>
-            <Body muted style={{ fontSize: 14 }}>{t('org.item.approveHint')}</Body>
-            <Field label={t('org.item.note')} value={note} onChangeText={setNote} placeholder={t('org.item.notePlaceholder')} multiline maxLength={1000} />
-            <Button title={t('org.item.approve')} onPress={() => review.mutate('approve')} loading={review.isPending && review.variables === 'approve'} disabled={busy || dirty} />
-            <Button variant="danger" title={t('org.item.reject')} onPress={() => review.mutate('reject')} loading={review.isPending && review.variables === 'reject'} disabled={busy || dirty} />
-            {dirty && <Body muted style={{ fontSize: 13, textAlign: 'center' }}>{t('org.item.saveFirst')}</Body>}
-          </>
-        )}
-        {it.status === 'approved' && (
-          <>
-            <Body muted style={{ fontSize: 14 }}>{t('org.item.retireHint')}</Body>
-            <Field label={t('org.item.note')} value={note} onChangeText={setNote} placeholder={t('org.item.notePlaceholder')} multiline maxLength={1000} />
-            <Button variant="secondary" title={t('org.item.retire')} onPress={() => review.mutate('retire')} loading={review.isPending} disabled={busy} />
-          </>
-        )}
-        {(it.status === 'rejected' || it.status === 'retired') && (
-          <>
-            <Body muted style={{ fontSize: 14 }}>{t('org.item.reopenHint')}</Body>
-            <Button variant="secondary" title={t('org.item.reopen')} onPress={() => review.mutate('reopen')} loading={review.isPending} disabled={busy} />
-          </>
-        )}
-        {!!it.reviewNote && (
-          <Body muted style={{ fontSize: 13 }}>
-            {t('org.item.lastNote')}: {it.reviewNote}
-          </Body>
-        )}
-        <ErrorText error={actionError} />
-      </Card>
-
-      {/* History */}
-      <Card style={{ gap: 0 }}>
-        <SectionLabel>{t('org.item.history')}</SectionLabel>
-        {it.events.map((e, i) => (
-          <EventRow key={e.id} event={e} last={i === it.events.length - 1} />
-        ))}
-      </Card>
-
-      {canEdit(org.role) && <TextButton title={t('org.item.delete')} tone="danger" onPress={askDelete} disabled={busy} />}
-    </Screen>
+          )}
+        </View>
+      ) : (
+        <View style={{ gap: space(1.5) }}>
+          <Text style={{ color: colors.text, fontSize: 14, lineHeight: 21, fontStyle: 'italic' }}>“{s.quote}”</Text>
+          {s.located ? <Body muted style={{ fontSize: 13 }}>{t('org.ws.review.passageMissing')}</Body> : <Body style={{ color: colors.danger, fontSize: 13 }}>{t('org.source.notConfirmedHint')}</Body>}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -240,15 +392,13 @@ function EventRow({ event: e, last }: { event: BankItemEvent; last: boolean }) {
   const when = new Date(e.createdAt);
   const time = Number.isNaN(when.getTime()) ? '' : when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   return (
-    <View style={{ gap: 2, paddingVertical: space(2.5), borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.border }}>
+    <View style={{ gap: 2, paddingVertical: space(2), borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.border }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2), flexWrap: 'wrap' }}>
-        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>{t(`org.item.events.${e.action}`)}</Text>
+        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>{t(`org.item.events.${e.action}`)}</Text>
         <Badge label={t('org.item.version', { version: e.version })} />
       </View>
-      <Text style={{ color: colors.muted, fontSize: 13 }}>
-        {[e.actorName ?? t('org.item.system'), `${formatDate(e.createdAt)} ${time}`.trim()].join(' · ')}
-      </Text>
-      {!!e.note && <Text style={{ color: colors.text, fontSize: 14 }}>{e.note}</Text>}
+      <Text style={{ color: colors.muted, fontSize: 12 }}>{[e.actorName ?? t('org.item.system'), `${formatDate(e.createdAt)} ${time}`.trim()].join(' · ')}</Text>
+      {!!e.note && <Text style={{ color: colors.text, fontSize: 13 }}>{e.note}</Text>}
     </View>
   );
 }
