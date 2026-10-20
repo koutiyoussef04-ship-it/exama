@@ -1367,6 +1367,8 @@ const en = {
       organization_account_required: 'Only organization accounts can create organizations.',
       last_admin: 'An organization needs at least one admin. Make someone else an admin first.',
       user_not_found: 'No Exama account uses this email. Ask the person to create one first, then add them.',
+      already_member: 'This person is already a member. Change their role from the members list.',
+      organization_limit_reached: 'This account has reached its organization limit ({{max}}). Contact Exama to add another organization.',
       insufficient_source: 'There is not enough text in the selected material to write questions from. Try a wider page range or another topic.',
       item_retired: 'A retired question cannot be edited. Reopen it first.',
       item_status_conflict: 'This question changed status in the meantime. It has been reloaded.',

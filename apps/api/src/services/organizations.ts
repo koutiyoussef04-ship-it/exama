@@ -34,6 +34,29 @@ export async function createOrganization(tx: Tx | typeof db, userId: string, inp
   return org;
 }
 
+/**
+ * How many organizations one account may create (the sign-up one included). Every organization starts with its
+ * own monthly AI allowances and is billed by hand, so an unbounded `POST /orgs` would let one account multiply
+ * its allowances for free. Pilots rarely need more than the sign-up organization; the owner raises the limit
+ * with ORG_MAX_PER_ACCOUNT when a customer really runs several.
+ */
+export const MAX_ORGANIZATIONS_PER_ACCOUNT = Math.max(1, Number(process.env.ORG_MAX_PER_ACCOUNT) || 2);
+
+/**
+ * Creates a further organization for an existing account, under the per-account cap. Counted and inserted in
+ * one transaction, under the creator's advisory lock, so two parallel requests cannot both pass the count.
+ */
+export async function createAdditionalOrganization(userId: string, input: { name: string; market: OrganizationMarket }): Promise<OrgRow> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`org-create:${userId}`}, 0))`);
+    const [row] = await tx.select({ n: count() }).from(organizations).where(eq(organizations.createdBy, userId));
+    if (Number(row?.n ?? 0) >= MAX_ORGANIZATIONS_PER_ACCOUNT) {
+      throw new HttpError(403, 'This account has reached its organization limit. Contact Exama to add another organization.', 'organization_limit_reached', { max: MAX_ORGANIZATIONS_PER_ACCOUNT });
+    }
+    return createOrganization(tx, userId, input);
+  });
+}
+
 /** Organizations the account belongs to (for GET /auth/me and the app's switcher). */
 export async function listMemberships(userId: string): Promise<OrganizationMembershipSummary[]> {
   return db
@@ -87,15 +110,22 @@ export async function listMembers(orgId: string): Promise<OrganizationMember[]> 
 
 /**
  * Adds an existing account by email. 404 `user_not_found` when there is no such account (an admin adding
- * colleagues needs to know; the organization workspace is not a public surface).
+ * colleagues needs to know; the organization workspace is not a public surface). Someone who is already a
+ * member is not re-added: 409 `already_member` — their role changes only through `updateMemberRole`, which
+ * is where the last-admin rule lives (an upsert here would have let the only admin demote themselves).
  */
 export async function addMember(org: OrgContext, actorUserId: string, input: { email: string; role: OrganizationRole }): Promise<OrganizationMember[]> {
   const [user] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalizeEmail(input.email)));
   if (!user) throw new HttpError(404, 'No Exama account with this email. Ask them to create one first.', 'user_not_found');
-  await db
-    .insert(organizationMembers)
-    .values({ organizationId: org.id, userId: user.id, role: input.role, addedBy: actorUserId })
-    .onConflictDoUpdate({ target: [organizationMembers.organizationId, organizationMembers.userId], set: { role: input.role } });
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`org-members:${org.id}`}, 0))`);
+    const inserted = await tx
+      .insert(organizationMembers)
+      .values({ organizationId: org.id, userId: user.id, role: input.role, addedBy: actorUserId })
+      .onConflictDoNothing({ target: [organizationMembers.organizationId, organizationMembers.userId] })
+      .returning({ userId: organizationMembers.userId });
+    if (inserted.length === 0) throw new HttpError(409, 'This person is already a member. Change their role from the members list.', 'already_member');
+  });
   return listMembers(org.id);
 }
 

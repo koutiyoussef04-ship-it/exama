@@ -43,10 +43,12 @@ import { exportApproved } from '../services/bank/export.js';
 import { generateDraftItems } from '../services/bank/generate.js';
 import { approveItem, createManualItem, deleteItem, getItem, listItems, listTopics, rejectItem, reopenItem, retireItem, updateItem } from '../services/bank/service.js';
 import { createOrgDocument, deleteOrgDocument, getOrgDocument, listOrgDocuments, orgDocumentDetail, reprocessOrgDocument } from '../services/org-documents.js';
-import { addMember, createOrganization, getOrganization, getOverview, listMemberships, listMembers, removeMember, updateMemberRole, updateOrganization } from '../services/organizations.js';
+import { addMember, createAdditionalOrganization, getOrganization, getOverview, listMemberships, listMembers, removeMember, updateMemberRole, updateOrganization } from '../services/organizations.js';
 
 /** Generation is the expensive call: per organization member, 20 an hour. */
 const generationLimiter = new RateLimiter(20, 60 * 60 * 1000);
+/** Creating organizations is rare; bursts are a sign of abuse (each organization has its own allowances). */
+const createOrganizationLimiter = new RateLimiter(5, 24 * 60 * 60 * 1000, 'Too many organizations created recently. Please try again tomorrow.');
 
 const org = new Hono<OrgEnv>()
   // ---- organization
@@ -150,13 +152,15 @@ export const orgRoutes = new Hono<AuthEnv>()
   .get('/', async (c) => c.json<OrganizationMembershipSummary[]>(await listMemberships(c.var.userId)))
   /**
    * Creates an organization with the caller as admin. Only organization accounts (the sign-up choice) can
-   * create organizations; student accounts join when an admin adds them.
+   * create organizations; student accounts join when an admin adds them. Capped per account
+   * (MAX_ORGANIZATIONS_PER_ACCOUNT, sign-up organization included) and rate limited.
    */
   .post('/', async (c) => {
     const input = parseBody(createOrganizationSchema, await c.req.json().catch(() => ({})));
     const [user] = await db.select({ accountType: users.accountType }).from(users).where(eq(users.id, c.var.userId));
     if (user?.accountType !== 'organization') throw new HttpError(403, 'Only organization accounts can create organizations', 'organization_account_required');
-    const created = await createOrganization(db, c.var.userId, input);
+    createOrganizationLimiter.take(c.var.userId);
+    const created = await createAdditionalOrganization(c.var.userId, input);
     return c.json<OrganizationMembershipSummary>({ id: created.id, name: created.name, market: created.market, role: 'admin' }, 201);
   })
   .route('/:orgId', org);

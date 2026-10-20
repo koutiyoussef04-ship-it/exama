@@ -95,9 +95,9 @@ POST /documents/:id/materials/:mid/retry · DELETE /documents/:id/materials/:mid
 Errors: { error, code } — `code` is stable and translated by the app (src/lib/errors.ts)
 
 Organizations (B2B workspace; membership + role checked on the server on every call, 404 for outsiders):
-GET  /orgs · POST /orgs { name, market }                         the caller's organizations · create one (organization accounts only)
+GET  /orgs · POST /orgs { name, market }                         the caller's organizations · create one (organization accounts only; capped per account by ORG_MAX_PER_ACCOUNT, default 2)
 GET  /orgs/:orgId · PATCH /orgs/:orgId { name }                  overview (counts, usage, limits) · rename (admin)
-GET|POST /orgs/:orgId/members · PATCH|DELETE /orgs/:orgId/members/:userId   members by email of an existing account; roles admin | editor | reviewer (admin)
+GET|POST /orgs/:orgId/members · PATCH|DELETE /orgs/:orgId/members/:userId   members by email of an existing account (409 if already a member); roles admin | editor | reviewer; never removes the last admin (admin)
 GET|POST /orgs/:orgId/courses · GET|DELETE /orgs/:orgId/courses/:id · POST …/reprocess   organization courses (same pipeline as a student's course)
 POST /orgs/:orgId/courses/:id/generate { count, topic?, pageStart?, pageEnd?, questionTypes? }   AI drafts with located sources — never approved automatically (editor)
 GET  /orgs/:orgId/items?status&documentId&topic&section · POST /orgs/:orgId/items (by hand) · GET /orgs/:orgId/topics

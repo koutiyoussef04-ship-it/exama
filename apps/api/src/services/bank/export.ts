@@ -1,7 +1,8 @@
 /**
  * Exports of APPROVED bank items only, scoped to one organization. Drafts, rejected and retired questions are
  * never exported. Formats:
- *  - CSV (RFC 4180: every field quoted, quotes doubled, CRLF line ends, UTF-8 BOM so Excel reads accents)
+ *  - CSV (RFC 4180: every field quoted, quotes doubled, CRLF line ends, UTF-8 BOM so Excel reads accents;
+ *    fields that would be read as formulas are prefixed with an apostrophe)
  *  - GIFT (Moodle's text format: `~`, `=`, `#`, `{`, `}`, `:` and `\` escaped; one question per block)
  */
 import { and, asc, eq } from 'drizzle-orm';
@@ -53,7 +54,17 @@ export function sourceLabel(documentTitle: string, s?: { located: boolean; pageS
   return documentTitle;
 }
 
-const csvField = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+/**
+ * One CSV field: quoted, quotes doubled (RFC 4180), and defused against formula injection. Spreadsheet apps
+ * evaluate a cell that starts with `=`, `+`, `-` or `@` (and some trim a leading tab or CR first) even when it is
+ * quoted, so a question written as `=HYPERLINK(...)` by an editor or by the model would run when a colleague
+ * opens the export. Such a value is prefixed with an apostrophe, which spreadsheets show as text.
+ */
+const csvField = (v: string | number | null | undefined) => {
+  const text = String(v ?? '');
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
 
 export function toCsv(rows: Row[]): string {
   const header = ['id', 'version', 'course', 'section', 'topic', 'type', 'difficulty', 'question', 'option_a', 'option_b', 'option_c', 'option_d', 'option_e', 'option_f', 'correct_answer', 'explanation', 'source', 'source_quote', 'law', 'publication', 'article', 'effective_date'];

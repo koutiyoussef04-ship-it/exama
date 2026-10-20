@@ -1360,6 +1360,8 @@ const es: LocaleDict = {
       organization_account_required: 'Solo las cuentas de organización pueden crear organizaciones.',
       last_admin: 'Una organización necesita al menos un administrador. Nombra antes a otra persona administradora.',
       user_not_found: 'Ninguna cuenta de Exama usa este correo. Pide a la persona que cree una primero y después añádela.',
+      already_member: 'Esta persona ya es miembro. Cambia su rol desde la lista de miembros.',
+      organization_limit_reached: 'Esta cuenta ha alcanzado su límite de organizaciones ({{max}}). Contacta con Exama para añadir otra.',
       insufficient_source: 'No hay suficiente texto en el material seleccionado para escribir preguntas. Prueba con un rango de páginas más amplio u otro tema.',
       item_retired: 'Una pregunta retirada no se puede editar. Reábrela primero.',
       item_status_conflict: 'Esta pregunta cambió de estado mientras tanto. Se ha vuelto a cargar.',

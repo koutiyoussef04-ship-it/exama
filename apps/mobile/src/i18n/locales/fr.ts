@@ -1360,6 +1360,8 @@ const fr: LocaleDict = {
       organization_account_required: 'Seuls les comptes d’organisation peuvent créer une organisation.',
       last_admin: 'Une organisation a besoin d’au moins un administrateur. Nommez d’abord quelqu’un d’autre administrateur.',
       user_not_found: 'Aucun compte Exama n’utilise cet e-mail. Demandez à la personne d’en créer un d’abord, puis ajoutez-la.',
+      already_member: 'Cette personne est déjà membre. Modifiez son rôle depuis la liste des membres.',
+      organization_limit_reached: 'Ce compte a atteint sa limite d’organisations ({{max}}). Contactez Exama pour en ajouter une autre.',
       insufficient_source: 'Le support sélectionné ne contient pas assez de texte pour rédiger des questions. Essayez une plage de pages plus large ou un autre thème.',
       item_retired: 'Une question retirée ne peut pas être modifiée. Rouvrez-la d’abord.',
       item_status_conflict: 'Le statut de cette question a changé entre-temps. Elle a été rechargée.',
