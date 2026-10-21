@@ -15,11 +15,15 @@
  * Each registration attempt is its own row with its own token, so a sign-up started by someone else for your address never
  * changes yours, and opening a link creates exactly the account that link was sent for; after that, every other pending row
  * for the address is removed. Limits: per client IP (registrations), per address (60 s between emails, 5 an hour), and the
- * unique email constraint on users settles races. Pending rows expire after 24 hours and are deleted a week later.
+ * unique (email, account type) index on users settles races. Pending rows expire after 24 hours and are deleted a week later.
+ *
+ * Student and organization accounts are separate identities (services/accounts.ts): everything above is per address AND
+ * account type. An address with a student account can still create an organization account (and the reverse); the two
+ * never share a password, a session, a membership or data.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { and, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
-import { EMAIL_VERIFICATION_RESEND_SECONDS, EMAIL_VERIFICATION_TTL_HOURS, SIGNUP_EMAILS_PER_HOUR, type Language, type MarketingConsentInput, type SignupPending, type User, type VerifyEmailResult } from '@study/shared';
+import { EMAIL_VERIFICATION_RESEND_SECONDS, EMAIL_VERIFICATION_TTL_HOURS, SIGNUP_EMAILS_PER_HOUR, type AccountType, type Language, type MarketingConsentInput, type SignupPending, type User, type VerifyEmailResult } from '@study/shared';
 import { track } from '../analytics/index.js';
 import { hashPassword, signToken, verifyPassword } from '../auth/auth.js';
 import { config } from '../config.js';
@@ -28,6 +32,7 @@ import { pendingSignups, userOnboarding, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { sendMail } from '../lib/mailer.js';
 import { RateLimiter } from '../lib/rate-limit.js';
+import { findAccount, toUser } from './accounts.js';
 import { assertEmailNotHeld } from './email-hold.js';
 import { verificationAvailable, verificationEmail, verifyLimiter } from './email-verification.js';
 import { grantMarketingConsent } from './marketing-consent.js';
@@ -52,7 +57,7 @@ const hashToken = (token: string) => createHmac('sha256', config.JWT_SECRET).upd
 
 type Tx = Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
 type UserRow = typeof users.$inferSelect;
-export const toUser = (u: UserRow, organizations: User['organizations'] = []): User => ({ id: u.id, email: u.email, name: u.name, accountType: u.accountType, organizations });
+export { toUser };
 
 /** What an account is created from (a validated registration, now or when its link is opened). */
 export type AccountDetails = {
@@ -78,7 +83,9 @@ export async function createAccount(tx: Tx, d: AccountDetails, verifiedAt: Date 
     .returning();
   if (d.accountType === 'organization') {
     await tx.insert(userOnboarding).values({ userId: created.id, status: 'skipped', finishedAt: new Date() }).onConflictDoNothing();
-    const org = await createOrganization(tx, created.id, { name: d.organizationName!, market: d.market! });
+    // No organization name: a colleague who will be added to an existing organization by its admin.
+    if (!d.organizationName || !d.market) return { user: created, organizations: [] };
+    const org = await createOrganization(tx, created.id, { name: d.organizationName, market: d.market });
     return { user: created, organizations: [{ id: org.id, name: org.name, market: org.market, role: 'admin' as const }] };
   }
   await tx.insert(userOnboarding).values({ userId: created.id }).onConflictDoNothing();
@@ -86,7 +93,9 @@ export async function createAccount(tx: Tx, d: AccountDetails, verifiedAt: Date 
   return { user: created, organizations: [] };
 }
 
-const lock = (tx: Tx, email: string) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`signup:${email}`}))`);
+const lock = (tx: Tx, email: string, accountType: AccountType) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`signup:${accountType}:${email}`}))`);
+const pendingFor = (email: string, accountType: AccountType | undefined) =>
+  accountType ? and(eq(pendingSignups.email, email), eq(pendingSignups.accountType, accountType)) : eq(pendingSignups.email, email);
 
 /** Removes pending sign-ups that expired more than a week ago (cheap; runs with every registration). */
 const purgeOld = (now: number) => db.delete(pendingSignups).where(lt(pendingSignups.expiresAt, new Date(now - PURGE_AFTER_MS)));
@@ -99,19 +108,18 @@ const purgeOld = (now: number) => db.delete(pendingSignups).where(lt(pendingSign
 export async function startSignup(d: Omit<AccountDetails, 'passwordHash'> & { password: string; language: Language }, clientKey: string, now = Date.now()): Promise<SignupPending> {
   registerLimiter.take(clientKey);
   if (!verificationAvailable()) throw new HttpError(503, 'Sign-up is unavailable right now: we can’t send email. Please try again later.', 'email_unavailable');
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, d.email));
-  if (existing) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
-  await assertEmailNotHeld(d.email);
+  if (await findAccount(d.email, d.accountType)) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
+  await assertEmailNotHeld(d.email, d.accountType);
   void purgeOld(now).catch(() => {});
 
   const passwordHash = await hashPassword(d.password);
   const token = randomBytes(32).toString('base64url');
   const row = await db.transaction(async (tx) => {
-    await lock(tx, d.email);
-    const [last] = await tx.select({ lastSentAt: pendingSignups.lastSentAt }).from(pendingSignups).where(eq(pendingSignups.email, d.email)).orderBy(desc(pendingSignups.lastSentAt)).limit(1);
+    await lock(tx, d.email, d.accountType);
+    const [last] = await tx.select({ lastSentAt: pendingSignups.lastSentAt }).from(pendingSignups).where(pendingFor(d.email, d.accountType)).orderBy(desc(pendingSignups.lastSentAt)).limit(1);
     const wait = last ? last.lastSentAt.getTime() + COOLDOWN_MS - now : 0;
     if (wait > 0) throw new HttpError(429, 'We just sent a link to this address. Please check your inbox or wait a minute.', 'too_many_requests', { retryAfterSeconds: Math.ceil(wait / 1000) });
-    if (!signupEmailLimiter.tryTake(d.email, now)) throw new HttpError(429, TOO_MANY, 'too_many_requests');
+    if (!signupEmailLimiter.tryTake(`${d.accountType}:${d.email}`, now)) throw new HttpError(429, TOO_MANY, 'too_many_requests');
     const [created] = await tx
       .insert(pendingSignups)
       .values({
@@ -154,11 +162,11 @@ export async function completeSignup(token: string, clientKey: string, now = Dat
   const used = () => new HttpError(409, 'This link has already been used.', 'verification_link_used', { emailVerified: true });
   if (row.usedAt) throw used();
   if (row.expiresAt.getTime() <= now) throw new HttpError(410, 'This link has expired. Request a new one.', 'verification_link_expired');
-  await assertEmailNotHeld(row.email);
+  await assertEmailNotHeld(row.email, row.accountType);
 
   const at = new Date(now);
   const result = await db.transaction(async (tx) => {
-    await lock(tx, row.email);
+    await lock(tx, row.email, row.accountType);
     const claimed = await tx
       .update(pendingSignups)
       .set({ usedAt: at })
@@ -166,28 +174,27 @@ export async function completeSignup(token: string, clientKey: string, now = Dat
       .returning({ id: pendingSignups.id });
     if (!claimed.length) throw used();
     // Another link for the same address was opened first: that account exists; sign in instead.
-    const [existing] = await tx.select({ id: users.id }).from(users).where(eq(users.email, row.email));
-    if (existing) throw used();
+    if (await findAccount(row.email, row.accountType, tx)) throw used();
     const account = await createAccount(
       tx,
       { email: row.email, passwordHash: row.passwordHash, name: row.name, accountType: row.accountType, ageRange: row.ageRange, organizationName: row.organizationName, market: row.market, marketingConsent: row.marketingConsent as AccountDetails['marketingConsent'] },
       at,
     );
-    // The address is taken now: every other pending sign-up for it is obsolete.
-    await tx.delete(pendingSignups).where(and(eq(pendingSignups.email, row.email), isNull(pendingSignups.usedAt)));
+    // The address is taken now (for this account type): every other pending sign-up of that type for it is obsolete.
+    await tx.delete(pendingSignups).where(and(pendingFor(row.email, row.accountType), isNull(pendingSignups.usedAt)));
     return account;
   });
   void track('signup_completed', result.user.id, { account_type: result.user.accountType });
   void track('email_verified', result.user.id, {});
-  return { status: 'verified', auth: { token: await signToken(result.user.id), user: toUser(result.user, result.organizations) } };
+  return { status: 'verified', auth: { token: await signToken(result.user.id, null, result.user.accountType), user: toUser(result.user, result.organizations) } };
 }
 
 /** Sign-in with the password of a sign-up that isn't confirmed yet → 403 signup_pending (otherwise nothing). */
-export async function assertNoPendingSignup(email: string, password: string, now = Date.now()): Promise<void> {
+export async function assertNoPendingSignup(email: string, password: string, accountType?: AccountType, now = Date.now()): Promise<void> {
   const rows = await db
     .select({ passwordHash: pendingSignups.passwordHash })
     .from(pendingSignups)
-    .where(and(eq(pendingSignups.email, email), isNull(pendingSignups.usedAt), gt(pendingSignups.expiresAt, new Date(now - PURGE_AFTER_MS))))
+    .where(and(pendingFor(email, accountType), isNull(pendingSignups.usedAt), gt(pendingSignups.expiresAt, new Date(now - PURGE_AFTER_MS))))
     .orderBy(desc(pendingSignups.createdAt))
     .limit(3);
   for (const r of rows) {
@@ -201,19 +208,20 @@ export async function assertNoPendingSignup(email: string, password: string, now
  * Signed-out "send me a new link" for an address without an account: the newest pending sign-up gets a fresh token and a
  * new email (60 s apart, 5 an hour per address). Silent in every other case (the caller answers the same for any address).
  */
-export async function resendPendingSignup(email: string, language: Language, now = Date.now()): Promise<void> {
+export async function resendPendingSignup(email: string, language: Language, now = Date.now(), accountType?: AccountType): Promise<void> {
   if (!verificationAvailable()) return;
   const token = randomBytes(32).toString('base64url');
   const target = await db.transaction(async (tx) => {
-    await lock(tx, email);
+    // Same locks as registration (both account types, in a fixed order, when the request doesn't name one).
+    for (const t of accountType ? [accountType] : (['organization', 'student'] as const)) await lock(tx, email, t);
     const [row] = await tx
-      .select({ id: pendingSignups.id, lastSentAt: pendingSignups.lastSentAt, language: pendingSignups.language })
+      .select({ id: pendingSignups.id, lastSentAt: pendingSignups.lastSentAt, language: pendingSignups.language, accountType: pendingSignups.accountType })
       .from(pendingSignups)
-      .where(and(eq(pendingSignups.email, email), isNull(pendingSignups.usedAt), gt(pendingSignups.expiresAt, new Date(now - PURGE_AFTER_MS))))
+      .where(and(pendingFor(email, accountType), isNull(pendingSignups.usedAt), gt(pendingSignups.expiresAt, new Date(now - PURGE_AFTER_MS))))
       .orderBy(desc(pendingSignups.createdAt))
       .limit(1);
     if (!row || row.lastSentAt.getTime() + COOLDOWN_MS > now) return null;
-    if (!signupEmailLimiter.tryTake(email, now)) return null;
+    if (!signupEmailLimiter.tryTake(`${row.accountType}:${email}`, now)) return null;
     await tx.update(pendingSignups).set({ tokenHash: hashToken(token), expiresAt: new Date(now + TTL_MS), lastSentAt: new Date(now) }).where(eq(pendingSignups.id, row.id));
     return row;
   });

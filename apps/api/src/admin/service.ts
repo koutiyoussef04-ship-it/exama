@@ -67,7 +67,8 @@ const bucket = (col: SQL, r: Range) => sql`to_char(date_trunc(${r.interval}, ${c
 // ---------------------------------------------------------------- account categories (same rules as getEntitlement)
 
 const inList = (col: SQL, values: string[]) => (values.length ? sql`${col} in (${sql.join(values.map((v) => sql`${v}`), sql`, `)})` : sql`false`);
-const ownerCond = () => sql`(${inList(sql`u.id::text`, config.OWNER_USER_IDS.map((x) => x.toLowerCase()))} or ${inList(sql`lower(u.email)`, config.OWNER_EMAILS)})`;
+/** Same rule as isOwner: an email match counts for student accounts only. */
+const ownerCond = () => sql`(${inList(sql`u.id::text`, config.OWNER_USER_IDS.map((x) => x.toLowerCase()))} or (u.account_type = 'student' and ${inList(sql`lower(u.email)`, config.OWNER_EMAILS)}))`;
 /** A trial period: trialing, or a trial cancelled before converting (same as isTrialPeriod). */
 const trialPeriod = sql`(s.status = 'trialing' or (s.trial_ends_at is not null and s.current_period_ends_at = s.trial_ends_at))`;
 const accessEnd = sql`(case when s.status = 'trialing' then s.trial_ends_at else coalesce(s.current_period_ends_at, s.trial_ends_at) end)`;

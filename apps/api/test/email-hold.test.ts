@@ -75,8 +75,8 @@ test('expiry is exact: still restricted 1 ms before the end, free at the end; ex
   await remove(r.body.token);
   const [row] = await holdRows(email);
   const end = new Date(row.expires_at);
-  await assert.rejects(assertEmailNotHeld(email, new Date(end.getTime() - 1)), (e: { code?: string }) => e.code === 'signup_email_unavailable');
-  await assertEmailNotHeld(email, end); // resolves: the restriction is over at its end time
+  await assert.rejects(assertEmailNotHeld(email, 'student', new Date(end.getTime() - 1)), (e: { code?: string }) => e.code === 'signup_email_unavailable');
+  await assertEmailNotHeld(email, 'student', end); // resolves: the restriction is over at its end time
   // Through the API: move the end into the past → sign-up works at once, even before the purge.
   await sql`update deleted_email_holds set expires_at = now() - interval '1 millisecond' where email_hash = ${emailHoldHash(email)}`;
   assert.equal((await register(email)).status, 201);

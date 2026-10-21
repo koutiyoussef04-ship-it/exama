@@ -68,7 +68,7 @@ export async function deleteAccount(userId: string, password: string): Promise<D
     await tx.delete(documents).where(and(eq(documents.userId, userId), isNull(documents.organizationId))); // cascades to materials, chunks, exams, plan
     await tx.delete(usageLedger).where(and(eq(usageLedger.userId, userId), isNull(usageLedger.organizationId)));
     await tx.delete(users).where(eq(users.id, userId)); // cascades to the remaining user-owned rows; organization rows keep their data
-    return holdDeletedEmail(tx, user.email);
+    return holdDeletedEmail(tx, user.email, new Date(), user.accountType);
   });
 
   // Files last: if this fails the account is already gone; log loudly so ops can clean up.

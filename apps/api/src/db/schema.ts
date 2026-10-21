@@ -1,5 +1,6 @@
 import type {
   AccountType,
+  B2BRole,
   AgeRange,
   BankItemStatus,
   BankItemType,
@@ -53,7 +54,12 @@ export const questionType = pgEnum('question_type', ['mcq', 'short_answer']);
 
 export const users = pgTable('users', {
   id: id(),
-  email: text('email').notNull().unique(),
+  /**
+   * Unique PER ACCOUNT TYPE (index below): the same address can have one student account and one organization
+   * account — two independent identities with their own password, sessions and data. Every lookup by email
+   * names the account type (services/accounts.ts).
+   */
+  email: text('email').notNull(),
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
   createdAt: createdAt(),
@@ -87,7 +93,15 @@ export const users = pgTable('users', {
    * organization's data always comes from organization_members, never from this value.
    */
   accountType: text('account_type').$type<AccountType>().notNull().default('student'),
+  /**
+   * B2B staff role, organization accounts only (check below): `owner` = the B2B owner dashboard and unlimited B2B
+   * usage. Granted ONLY by the provisioning command (src/scripts/b2b-owner.ts, run on the server) — never at sign-up,
+   * never from an email address. The student owner (OWNER_EMAILS / OWNER_USER_IDS) is a different thing.
+   */
+  b2bRole: text('b2b_role').$type<B2BRole>(),
 }, (t) => [
+  uniqueIndex('users_email_account_type_unique').on(t.email, t.accountType),
+  check('users_b2b_role_check', sql`${t.b2bRole} is null or (${t.b2bRole} = 'owner' and ${t.accountType} = 'organization')`),
   check('users_age_range_check', sql`${t.ageRange} is null or ${t.ageRange} in ('13_17', '18_24', '25_34', '35_plus')`),
   // All four consent columns are NULL (no consent) or all set with valid values: a half-written or invented consent can't exist.
   check(

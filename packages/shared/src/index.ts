@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { normalizeEmail } from './email';
 import { aiLanguageSchema, languageSchema } from './languages';
 import { marketingConsentSchema } from './marketing-consent';
-import { ACCOUNT_TYPES, ORGANIZATION_MARKETS, organizationNameSchema, type AccountType, type OrganizationMembershipSummary } from './organizations';
+import { ACCOUNT_TYPES, ORGANIZATION_MARKETS, organizationNameSchema, type AccountType, type B2BRole, type OrganizationMembershipSummary } from './organizations';
 
 // ---------- Auth ----------
 
@@ -46,8 +46,10 @@ export const registerSchema = z.object({
    */
   marketingConsent: z.union([marketingConsentSchema, z.literal(false)]).nullish(),
   /**
-   * student (default, what older apps create) or organization. An organization sign-up also names the
-   * organization and its market; the server creates it and makes the account its first admin.
+   * student (default, what older apps create) or organization. The two are SEPARATE identities: the same email can
+   * have one of each, with its own password, sessions and data. An organization sign-up either names a new
+   * organization and its market (the server creates it and makes the account its first admin) or names none: a
+   * colleague's account, added to an existing organization by one of its admins.
    */
   accountType: z.enum(ACCOUNT_TYPES).default('student'),
   organizationName: organizationNameSchema.optional(),
@@ -55,16 +57,25 @@ export const registerSchema = z.object({
 }).superRefine((v, ctx) => {
   // Students state an age group; organization (staff) accounts are not asked.
   if (v.accountType !== 'organization' && !v.ageRange) ctx.addIssue({ code: 'custom', path: ['ageRange'], message: 'Age group is required' });
-  if (v.accountType === 'organization') {
+  // A new organization needs both its name and its kind; a colleague's account (joining) sends neither.
+  if (v.accountType === 'organization' && (v.organizationName || v.market)) {
     if (!v.organizationName) ctx.addIssue({ code: 'custom', path: ['organizationName'], message: 'Organization name is required' });
     if (!v.market) ctx.addIssue({ code: 'custom', path: ['market'], message: 'Choose the kind of organization' });
   }
 });
 export type RegisterInput = z.input<typeof registerSchema>;
 
+/**
+ * Which identity a signed-out request is about: the student account or the organization account of an email
+ * (independent accounts). Absent (older apps): the student account when the email has one, otherwise the
+ * organization account — so every existing account keeps signing in as before.
+ */
+export const accountRealmSchema = z.enum(ACCOUNT_TYPES).optional();
+
 export const loginSchema = z.object({
   email: z.email().transform(normalizeEmail),
   password: z.string().min(1),
+  accountType: accountRealmSchema,
 });
 export type LoginInput = z.input<typeof loginSchema>;
 
@@ -76,6 +87,8 @@ export type User = {
   accountType: AccountType;
   /** Organizations this account belongs to (authorization comes from these memberships, not from accountType). */
   organizations: OrganizationMembershipSummary[];
+  /** B2B staff role (organization accounts only): `owner` opens the B2B owner dashboard. Enforced by the server. */
+  b2bRole?: B2BRole | null;
 };
 export type AuthResponse = { token: string; user: User };
 /** POST /auth/register: 202 with `SignupPending` (email must be confirmed first); 201 with a session only where sign-up verification is off (development/tests). */
@@ -100,6 +113,8 @@ export const passwordResetRequestSchema = z.object({
   email: z.email().transform(normalizeEmail),
   /** App language, for the email. */
   language: languageSchema.optional(),
+  /** Which account's password (student or organization); see accountRealmSchema. */
+  accountType: accountRealmSchema,
 });
 export type PasswordResetRequestInput = z.input<typeof passwordResetRequestSchema>;
 export const passwordResetConfirmSchema = z.object({
@@ -109,6 +124,7 @@ export const passwordResetConfirmSchema = z.object({
     .trim()
     .regex(new RegExp(`^\\d{${PASSWORD_RESET_CODE_LENGTH}}$`), 'Enter the code from the email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  accountType: accountRealmSchema,
 });
 export type PasswordResetConfirmInput = z.input<typeof passwordResetConfirmSchema>;
 
@@ -247,3 +263,4 @@ export * from './flashcards';
 export * from './admin';
 export * from './organizations';
 export * from './bank';
+export * from './b2b-admin';

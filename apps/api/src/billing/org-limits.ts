@@ -14,12 +14,18 @@
  *
  * Billing for organizations is manual (the owner assigns a plan after the customer has agreed and been invoiced);
  * nothing here charges anyone.
+ *
+ * The B2B owner (an organization account with users.b2b_role = 'owner', read from the database on every check) is not
+ * bound by plan allowances or by the pilot's end when IT uploads or generates: its usage is still recorded in the ledger
+ * (so the dashboard shows real totals) but never refused. The per-request size cap (maxItemsPerRequest) and the
+ * anti-abuse rate limits still apply, since they protect the AI calls rather than meter a plan.
  */
 import { and, eq, gte, sql, sum } from 'drizzle-orm';
 import { ORGANIZATION_PLAN_CATALOG, type OrganizationLimits, type OrganizationPlanState, type OrganizationUsage } from '@study/shared';
 import { db } from '../db/client.js';
 import { aiUsage, documents, organizations, usageLedger } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
+import { isB2BOwner } from '../services/accounts.js';
 
 /** What the plan rules need from an organization row. */
 export type OrgPlanRow = Pick<typeof organizations.$inferSelect, 'plan' | 'billingPeriod' | 'limits' | 'pilotStartedAt' | 'pilotEndsAt'>;
@@ -75,6 +81,12 @@ export async function getOrgUsage(orgId: string, exec: Exec = db, now = new Date
   };
 }
 
+/** Pre-check before storing a file or reprocessing: the pilot must be running, unless the actor is the B2B owner. */
+export async function assertActorCanCreate(orgId: string, actorUserId: string) {
+  if (await isB2BOwner(actorUserId)) return;
+  assertCanCreate(await loadOrgPlan(orgId));
+}
+
 /** 402 org_pilot_expired: no new courses, AI drafts or reprocessing once the pilot has ended. */
 export function assertCanCreate(o: Pick<OrgPlanRow, 'plan' | 'pilotEndsAt'>, now = new Date()) {
   if (isPilotExpired(o, now)) {
@@ -96,11 +108,13 @@ export type OrgReservation = { id: string; amount: number };
 export async function reserveOrgCourseUpload(tx: Exec, orgId: string, actorUserId: string): Promise<void> {
   await lockOrgUsage(tx, orgId);
   const plan = await loadOrgPlan(orgId, tx);
-  assertCanCreate(plan);
-  const limits = resolveOrgLimits(plan);
-  const usage = await getOrgUsage(orgId, tx, new Date(), plan);
-  if (usage.coursesThisMonth >= limits.coursesPerMonth) {
-    throw new HttpError(402, limitMessage(usage.period, 'course'), 'org_limit_reached', { limit: 'courses', period: usage.period, used: usage.coursesThisMonth, max: limits.coursesPerMonth });
+  if (!(await isB2BOwner(actorUserId, tx))) {
+    assertCanCreate(plan);
+    const limits = resolveOrgLimits(plan);
+    const usage = await getOrgUsage(orgId, tx, new Date(), plan);
+    if (usage.coursesThisMonth >= limits.coursesPerMonth) {
+      throw new HttpError(402, limitMessage(usage.period, 'course'), 'org_limit_reached', { limit: 'courses', period: usage.period, used: usage.coursesThisMonth, max: limits.coursesPerMonth });
+    }
   }
   await tx.insert(usageLedger).values({ organizationId: orgId, userId: actorUserId, kind: 'course_upload', amount: 1 });
 }
@@ -110,13 +124,17 @@ export async function reserveOrgItems(orgId: string, actorUserId: string, count:
   return db.transaction(async (tx) => {
     await lockOrgUsage(tx, orgId);
     const plan = await loadOrgPlan(orgId, tx);
-    assertCanCreate(plan);
+    const owner = await isB2BOwner(actorUserId, tx);
+    if (!owner) assertCanCreate(plan);
     const limits = resolveOrgLimits(plan);
     if (count > limits.maxItemsPerRequest) throw new HttpError(400, `At most ${limits.maxItemsPerRequest} questions per request`, 'invalid_request');
-    const usage = await getOrgUsage(orgId, tx, new Date(), plan);
-    const left = limits.itemsPerMonth - usage.itemsThisMonth;
-    if (left <= 0) throw new HttpError(402, limitMessage(usage.period, 'question'), 'org_limit_reached', { limit: 'items', period: usage.period, used: usage.itemsThisMonth, max: limits.itemsPerMonth });
-    const amount = Math.min(count, left);
+    let amount = count;
+    if (!owner) {
+      const usage = await getOrgUsage(orgId, tx, new Date(), plan);
+      const left = limits.itemsPerMonth - usage.itemsThisMonth;
+      if (left <= 0) throw new HttpError(402, limitMessage(usage.period, 'question'), 'org_limit_reached', { limit: 'items', period: usage.period, used: usage.itemsThisMonth, max: limits.itemsPerMonth });
+      amount = Math.min(count, left);
+    }
     const [row] = await tx.insert(usageLedger).values({ organizationId: orgId, userId: actorUserId, kind: 'bank_items', amount }).returning({ id: usageLedger.id });
     return { id: row.id, amount };
   });

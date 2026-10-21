@@ -1,4 +1,10 @@
 import type {
+  AccountType,
+  AdminUpdateOrganizationInput,
+  B2BAccountRow,
+  B2BOrganizationDetail,
+  B2BOrganizationRow,
+  B2BOverview,
   AuthResponse,
   CreateExamInput,
   DocumentDetail,
@@ -262,7 +268,8 @@ export const api = {
   unsubscribeEmails: (token: string, category: UnsubscribeCategory) => post<{ ok: true }>('/email/unsubscribe', { token, category }),
   verifyEmail: (token: string) => post<VerifyEmailResult>('/auth/email-verification/verify', { token }),
   resendVerification: (language: Language | undefined) => post<ResendVerificationResult>('/auth/email-verification/resend', { language }),
-  requestVerification: (email: string, language: Language | undefined) => post<{ retryAfterSeconds: number }>('/auth/email-verification/request', { email, language }),
+  requestVerification: (email: string, language: Language | undefined, accountType?: AccountType) =>
+    post<{ retryAfterSeconds: number }>('/auth/email-verification/request', { email, language, ...(accountType && { accountType }) }),
 
   // Student onboarding (five questions, asked once to new accounts).
   getOnboarding: () => request<OnboardingState>('/onboarding'),
@@ -276,6 +283,14 @@ export const api = {
   admin: <T>(section: 'overview' | 'customers' | 'ai' | 'billing' | 'analytics' | 'health', query: Record<string, string | number | undefined> = {}) =>
     request<T>(`/admin/${section}${adminQuery(query)}`),
   adminCustomer: <T>(id: string) => request<T>(`/admin/customers/${encodeURIComponent(id)}`),
+
+  // B2B owner dashboard (the server answers 404 to everyone but the B2B owner's organization account).
+  b2bOverview: () => request<B2BOverview>('/b2b-admin/overview'),
+  b2bOrganizations: () => request<B2BOrganizationRow[]>('/b2b-admin/organizations'),
+  b2bOrganization: (id: string) => request<B2BOrganizationDetail>(`/b2b-admin/organizations/${encodeURIComponent(id)}`),
+  b2bUpdateOrganization: (id: string, input: AdminUpdateOrganizationInput) =>
+    request<B2BOrganizationDetail>(`/b2b-admin/organizations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  b2bAccounts: () => request<B2BAccountRow[]>('/b2b-admin/accounts'),
 
   createExam: (documentId: string, input: CreateExamInput) => post<Exam>(`/documents/${documentId}/exams`, input),
 

@@ -211,7 +211,7 @@ Plus the free trials (once per account): the **store trial** (App Store / Google
 
 Tune in `apps/api/src/billing/limits.ts`, or without a deploy via `PLAN_LIMITS_OVERRIDE` (JSON, tiers `free`/`trial`/`basic`/`student`/`pro`) in `apps/api/.env`, e.g. `{"trial":{"practiceQuestionsPerMonth":10}}`.
 
-**Owner access:** set `OWNER_EMAILS` and/or `OWNER_USER_IDS` in `apps/api/.env`. Matching accounts always resolve to full access (status `complimentary`, no limits, no expiry), whatever their subscription row says. Check with `npm run owner:check -- you@example.com`.
+**Owner access:** set `OWNER_EMAILS` and/or `OWNER_USER_IDS` in `apps/api/.env`. Matching accounts always resolve to full access (status `complimentary`, no limits, no expiry), whatever their subscription row says. Check with `npm run owner:check -- you@example.com`. An `OWNER_EMAILS` match counts for the **student** account only; the B2B owner is a separate organization account (see [docs/b2b-accounts.md](docs/b2b-accounts.md)).
 
 **Providers:** billing is behind `BillingProvider` (`apps/api/src/billing/providers/`). Every provider emits a normalized `SubscriptionUpdate`; `applySubscriptionUpdate` is the only writer and also records the monetization analytics.
 - `mock` (development only, `BILLING_MOCK_ENABLED=true`): trials/subscriptions/cancel/restore without payment, plus a state switcher on the Account screen. Refused when `NODE_ENV=production`.

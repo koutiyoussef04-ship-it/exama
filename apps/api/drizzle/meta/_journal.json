@@ -169,6 +169,13 @@
       "when": 1792539687127,
       "tag": "0023_signup_verification_org_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792591183698,
+      "tag": "0024_separate_account_identities",
+      "breakpoints": true
     }
   ]
 }

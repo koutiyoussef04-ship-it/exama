@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/org/icons';
 import { colors, space } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { showB2BAdminEntry } from '@/lib/b2b-admin';
 import { canAdmin, roleLabel, useCurrentOrg } from '@/lib/org';
 
 export const WIDE_BREAKPOINT = 1024;
@@ -201,6 +202,7 @@ function Sidebar({ org, orgs, switchOrg, active, draftCount }: ShellProps) {
 
       <View style={{ gap: 2, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space(3) }}>
         {user?.accountType === 'student' && <NavItem icon="courses" label={t('org.ws.myCourses')} onPress={() => router.push('/')} />}
+        {showB2BAdminEntry(user) && <NavItem icon="dashboard" label={t('b2bAdmin.entry')} onPress={() => router.push('/b2b-admin')} />}
         <NavItem icon="help" label={t('org.ws.support')} onPress={() => router.push('/support')} />
         <NavItem icon="account" label={t('org.nav.account')} onPress={() => router.push('/account')} />
       </View>

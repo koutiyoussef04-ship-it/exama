@@ -234,7 +234,7 @@ test('pilot: 30 days, pilot allowances; seats count admins and editors, reviewer
   assert.deepEqual(o.limits, { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 });
   assert.equal(o.usage.period, 'pilot');
 
-  const add = (role: string) => signUp(`m-${role}`).then(async (m) => ({ m, r: await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: m.email, role }), token: admin.token }) }));
+  const add = (role: string) => signUp(`m-${role}`, { accountType: 'organization' }).then(async (m) => ({ m, r: await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: m.email, role }), token: admin.token }) }));
   assert.equal((await add('editor')).r.status, 201);
   assert.equal((await add('admin')).r.status, 201);
   const fourth = await add('editor');
@@ -302,4 +302,31 @@ test('pilot totals count the whole pilot; an ended pilot keeps data and exports 
   const back = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token });
   assert.equal(back.body.billingPeriod, null);
   assert.ok(new Date(back.body.pilotEndsAt!).getTime() > Date.now() + 29 * 86_400_000);
+});
+
+test('separate identities with confirmed sign-up: a student and an organization sign-up for one address are independent', async () => {
+  const email = emailFor('both');
+  const student = await signUp('both', { email });
+  // The organization sign-up for the same address is accepted (it used to be 409 email_taken) and is its own pending row.
+  const pending = await register({ email, password: 'org-password-77', accountType: 'organization', organizationName: `SV both ${RUN}`, market: 'academy' });
+  assert.equal(pending.status, 202, JSON.stringify(pending.body));
+  // Signing in to the organization before confirming: "check your email", never the student account.
+  const early = await call('/auth/login', json('POST', { email, password: 'org-password-77', accountType: 'organization' }));
+  assert.equal(early.body.code, 'signup_pending');
+  // A new link for the organization sign-up only.
+  resetSignupRateLimits();
+  resetVerificationRateLimits();
+  await new Promise((r) => setTimeout(r, 5));
+  const v = await verify(links(email).at(-1)!);
+  assert.equal(v.status, 200, JSON.stringify(v.body));
+  const org = v.body.auth!;
+  assert.equal(org.user.accountType, 'organization');
+  assert.notEqual(org.user.id, student.id);
+  assert.equal(await usersWith(email), 2);
+  // Both sign in, each to its own identity; the student's pending-signup state is not touched.
+  assert.equal((await login(email)).body.user.id, student.id);
+  assert.equal((await call<AuthResponse>('/auth/login', json('POST', { email, password: 'org-password-77', accountType: 'organization' }))).body.user.id, org.user.id);
+  // Another organization sign-up for the address is now refused; a student one too.
+  assert.equal((await register({ email, accountType: 'organization' })).body.code, 'email_taken');
+  assert.equal((await register({ email, ageRange: '25_34' })).body.code, 'email_taken');
 });

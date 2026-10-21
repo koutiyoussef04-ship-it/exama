@@ -18,6 +18,8 @@ import { flashcardDocumentRoutes, flashcardRoutes } from './routes/flashcards.js
 import { onboardingRoutes } from './routes/onboarding.js';
 import { orgRoutes } from './routes/orgs.js';
 import { requireVerifiedEmail } from './services/email-verification.js';
+import { studentAreaOnly } from './auth/auth.js';
+import { b2bAdminRoutes } from './routes/b2b-admin.js';
 import { studyPlanRoutes } from './routes/study-plans.js';
 
 export const app = new Hono()
@@ -32,6 +34,13 @@ export const app = new Hono()
   .use('/documents/*', requireVerifiedEmail)
   .use('/exams/*', requireVerifiedEmail)
   .use('/flashcards/*', requireVerifiedEmail)
+  // Student areas: organization accounts (a separate identity) work in /orgs only.
+  .use('/documents', studentAreaOnly)
+  .use('/documents/*', studentAreaOnly)
+  .use('/exams', studentAreaOnly)
+  .use('/exams/*', studentAreaOnly)
+  .use('/flashcards', studentAreaOnly)
+  .use('/flashcards/*', studentAreaOnly)
   .route('/documents', documentRoutes)
   .route('/documents', studyPlanRoutes)
   .route('/documents', materialRoutes)
@@ -47,7 +56,9 @@ export const app = new Hono()
   .use('/orgs/*', requireVerifiedEmail)
   .route('/orgs', orgRoutes)
   // Owner-only dashboard (server-side owner check on every route; see routes/admin.ts).
-  .route('/admin', adminRoutes);
+  .route('/admin', adminRoutes)
+  // B2B owner dashboard: organization account with b2b_role = owner, checked on every route (routes/b2b-admin.ts).
+  .route('/b2b-admin', b2bAdminRoutes);
 
 app.onError((err, c) => {
   if (err instanceof LimitError) return c.json(err.body, 402);

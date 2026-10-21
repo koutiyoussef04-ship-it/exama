@@ -65,7 +65,7 @@ const org = new Hono<OrgEnv>()
   })
   .patch('/members/:userId', requireOrgRole('admin'), async (c) => {
     const { role } = parseBody(updateMemberSchema, await c.req.json().catch(() => ({})));
-    return c.json<OrganizationMember[]>(await updateMemberRole(c.var.org, c.req.param('userId'), role));
+    return c.json<OrganizationMember[]>(await updateMemberRole(c.var.org, c.req.param('userId'), role, c.var.userId));
   })
   .delete('/members/:userId', requireOrgRole('admin'), async (c) => c.json<OrganizationMember[]>(await removeMember(c.var.org, c.req.param('userId'))))
   // ---- courses
@@ -90,7 +90,7 @@ const org = new Hono<OrgEnv>()
     },
   )
   .get('/courses/:id', requireOrgRole('reviewer'), async (c) => c.json<DocumentDetail>(orgDocumentDetail(await getOrgDocument(c.var.org.id, c.req.param('id')))))
-  .post('/courses/:id/reprocess', requireOrgRole('editor'), async (c) => c.json<DocumentDetail>(orgDocumentDetail(await reprocessOrgDocument(c.var.org.id, c.req.param('id')))))
+  .post('/courses/:id/reprocess', requireOrgRole('editor'), async (c) => c.json<DocumentDetail>(orgDocumentDetail(await reprocessOrgDocument(c.var.org.id, c.req.param('id'), c.var.userId))))
   .delete('/courses/:id', requireOrgRole('editor'), async (c) => {
     await deleteOrgDocument(c.var.org, c.var.userId, c.req.param('id'));
     return c.body(null, 204);

@@ -18,7 +18,9 @@ export default function ForgotPassword() {
   const { t } = useTranslation();
   const { resetPassword } = useAuth();
   const { appLanguage } = usePreferences();
-  const params = useLocalSearchParams<{ email?: string }>();
+  // Which of the address's accounts (student / organization are separate identities); from the sign-in screen.
+  const params = useLocalSearchParams<{ email?: string; account?: string }>();
+  const accountType = params.account === 'organization' ? 'organization' : 'student';
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState(params.email ?? '');
   const [code, setCode] = useState('');
@@ -58,7 +60,7 @@ export default function ForgotPassword() {
 
   const sendCode = (again = false) =>
     run(async () => {
-      const res = await api.requestPasswordReset({ email: email.trim(), language: appLanguage });
+      const res = await api.requestPasswordReset({ email: email.trim(), language: appLanguage, accountType });
       const sent = Date.now();
       setNow(sent);
       setRetryAt(sent + (res.retryAfterSeconds ?? 0) * 1000);
@@ -68,7 +70,7 @@ export default function ForgotPassword() {
   const confirm = () =>
     run(async () => {
       // Signed in: the root navigator leaves the signed-out screens by itself.
-      await resetPassword({ email: email.trim(), code: code.trim(), password });
+      await resetPassword({ email: email.trim(), code: code.trim(), password, accountType });
     });
 
   const codeOk = new RegExp(`^\\d{${PASSWORD_RESET_CODE_LENGTH}}$`).test(code.trim());
@@ -79,6 +81,7 @@ export default function ForgotPassword() {
           <>
             <Title>{t('reset.title')}</Title>
             <Body muted>{t('reset.intro')}</Body>
+            {accountType === 'organization' && <Body style={{ fontWeight: '600' }}>{t('reset.organizationAccount')}</Body>}
             <Field
               label={t('auth.email')}
               value={email}

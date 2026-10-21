@@ -23,6 +23,8 @@ export type ResendVerificationInput = z.input<typeof resendVerificationSchema>;
 export const requestVerificationSchema = z.object({
   email: z.email().transform(normalizeEmail),
   language: languageSchema.optional(),
+  /** Student or organization account of that email (independent accounts); absent = student first, then organization. */
+  accountType: z.enum(['student', 'organization']).optional(),
 });
 export type RequestVerificationInput = z.input<typeof requestVerificationSchema>;
 

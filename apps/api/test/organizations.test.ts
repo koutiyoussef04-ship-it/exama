@@ -65,6 +65,8 @@ async function signup(tag: string, extra: Record<string, unknown> = {}): Promise
 }
 const orgSignup = (tag: string, market: 'training_provider' | 'academy' = 'training_provider') =>
   signup(tag, { accountType: 'organization', organizationName: `Org ${tag} ${RUN}`, market });
+/** A colleague's organization account, without an organization of its own (an admin adds it). */
+const staffSignup = (tag: string) => signup(tag, { accountType: 'organization' });
 const orgOf = (a: Account) => a.user.organizations[0].id;
 
 async function uploadCourse(token: string, orgId: string, name = 'notes.pdf') {
@@ -104,8 +106,11 @@ test('sign-up: students by default (older apps too); organization accounts creat
   assert.equal(ob.body.status, 'skipped');
   assert.equal((await call<{ status: string }>('/onboarding', { token: s.token })).body.status, 'pending');
 
-  // Validation: an organization sign-up needs a name and a market; the client cannot pick an unknown type.
-  for (const bad of [{ accountType: 'organization' }, { accountType: 'organization', organizationName: 'X' }, { accountType: 'organization', organizationName: 'Org', market: 'bank' }, { accountType: 'owner' }]) {
+  // An organization account without an organization: a colleague waiting to be added by an admin.
+  const colleague = await staffSignup('colleague');
+  assert.deepEqual([colleague.user.accountType, colleague.user.organizations], ['organization', []]);
+  // Validation: creating an organization needs a name AND a market; the client cannot pick an unknown type.
+  for (const bad of [{ accountType: 'organization', market: 'academy' }, { accountType: 'organization', organizationName: 'X' }, { accountType: 'organization', organizationName: 'Org', market: 'bank' }, { accountType: 'owner' }]) {
     const r = await call('/auth/register', json('POST', { email: `org-bad-${RUN}-${++n}@example.com`, password: PASSWORD, name: 'B', ageRange: '18_24', ...bad }));
     assert.equal(r.status, 400, JSON.stringify(bad));
   }
@@ -127,9 +132,9 @@ test('sign-up: students by default (older apps too); organization accounts creat
 test('membership and roles: add by email of an existing account, change role, never remove the last admin; access read per request', async () => {
   const admin = await orgSignup('roles');
   const orgId = orgOf(admin);
-  const editor = await signup('editor');
-  const reviewer = await signup('reviewer');
-  const outsider = await signup('outsider');
+  const editor = await staffSignup('editor');
+  const reviewer = await staffSignup('reviewer');
+  const outsider = await staffSignup('outsider');
 
   // Non-members (and anonymous callers) see nothing, not even that the organization exists.
   assert.equal((await call(`/orgs/${orgId}`, { token: outsider.token })).status, 404);
@@ -144,7 +149,7 @@ test('membership and roles: add by email of an existing account, change role, ne
   assert.deepEqual(members.body.map((m) => m.role), ['admin', 'editor', 'reviewer']);
   // Adding someone changes nothing about their account type or plan.
   const e = await call<User>('/auth/me', { token: editor.token });
-  assert.equal(e.body.accountType, 'student');
+  assert.equal(e.body.accountType, 'organization');
   assert.equal(e.body.organizations[0].role, 'editor');
   assert.equal((await call<Entitlement>('/billing/status', { token: editor.token })).body.tier, 'free');
 
@@ -179,9 +184,9 @@ test('workflow: upload → generate drafts with located sources and flags → re
   const orgId = orgOf(admin);
   const doc = await uploadCourse(admin.token, orgId, 'Safety course.pdf');
   assert.ok(doc.topics.length > 0);
-  // The uploader's own student view never shows the organization's course, and their free plan is untouched.
-  assert.deepEqual((await call<DocumentSummary[]>('/documents', { token: admin.token })).body, []);
-  assert.equal((await call(`/documents/${doc.id}`, { token: admin.token })).status, 404);
+  // Organization accounts never reach the student areas (403), and their (unused) personal plan is untouched.
+  assert.equal((await call<DocumentSummary[]>('/documents', { token: admin.token })).body.code, 'student_account_required');
+  assert.equal((await call(`/documents/${doc.id}`, { token: admin.token })).status, 403);
   const ent = await call<Entitlement>('/billing/status', { token: admin.token });
   assert.deepEqual([ent.body.usage.courses, ent.body.usage.courseUploadsThisMonth], [0, 0]);
 
@@ -441,22 +446,18 @@ test('isolation: organization B cannot read, write, download or delete anything 
   const s = await signup('iso-student');
   assert.equal((await call(`/orgs/${orgA}/courses/${doc.id}`, { token: s.token })).status, 404);
   assert.equal((await call(`/documents/${doc.id}/exams`, { ...json('POST', { kind: 'standard', questionCount: 3 }), token: s.token })).status, 404);
-  assert.equal((await call(`/documents/${doc.id}/exams`, { ...json('POST', { kind: 'standard', questionCount: 3 }), token: a.token })).status, 404, 'not even for the uploader');
+  assert.equal((await call(`/documents/${doc.id}/exams`, { ...json('POST', { kind: 'standard', questionCount: 3 }), token: a.token })).status, 403, 'organization accounts never use the student routes');
 });
 
 test('account deletion: a staff member leaves; the organization keeps its courses, files, questions and usage', async () => {
   const admin = await orgSignup('del');
   const orgId = orgOf(admin);
-  const editor = await signup('del-editor');
+  const editor = await staffSignup('del-editor');
   await call(`/orgs/${orgId}/members`, { ...json('POST', { email: editor.email, role: 'admin' }), token: admin.token });
-  // The editor uploads the course and generates the drafts; they also have a personal course of their own.
+  // The editor uploads the course and generates the drafts.
   const doc = await uploadCourse(editor.token, orgId, 'Org manual.pdf');
   const g = await generate(editor.token, orgId, doc.id, { count: 3 });
   assert.equal(g.status, 201);
-  const form = new FormData();
-  form.append('file', new File([pdf], 'mine.pdf', { type: 'application/pdf' }));
-  const personal = await call<DocumentDetail>('/documents', { method: 'POST', body: form, token: editor.token });
-  assert.equal(personal.status, 201);
   const [docRow] = (await sql`select file_key from documents where id = ${doc.id}`) as unknown as { file_key: string }[];
   assert.ok(docRow.file_key.startsWith(`org/${orgId}/`), 'organization files live under the organization, not the uploader');
   const { storage } = await import('../src/storage/index.js');
@@ -464,7 +465,7 @@ test('account deletion: a staff member leaves; the organization keeps its course
   const del = await call('/auth/me', { ...json('DELETE', { password: PASSWORD }), token: editor.token });
   assert.equal(del.status, 200, JSON.stringify(del.body));
 
-  // Organization data intact, file still there, uploader link cleared; the personal course and its file are gone.
+  // Organization data intact, file still there, uploader link cleared.
   const after = await call<DocumentDetail>(`/orgs/${orgId}/courses/${doc.id}`, { token: admin.token });
   assert.equal(after.status, 200);
   assert.equal(after.body.status, 'ready');
@@ -476,9 +477,6 @@ test('account deletion: a staff member leaves; the organization keeps its course
   assert.ok(items.body.items.every((i) => i.createdBy === null && i.sources.length === 1));
   const ov = await call<OrganizationOverview>(`/orgs/${orgId}`, { token: admin.token });
   assert.deepEqual([ov.body.usage.coursesThisMonth, ov.body.usage.itemsThisMonth, ov.body.counts.members], [1, g.body.items.length, 1]);
-  const [gone] = (await sql`select count(*)::int as n from documents where id = ${personal.body.id}`) as unknown as { n: number }[];
-  assert.equal(gone.n, 0, 'personal course deleted with the account');
-  await assert.rejects(storage.get(`${editor.id}/${personal.body.id}.pdf`));
   const [orphans] = (await sql`select count(*)::int as n from documents where user_id is null and organization_id is null`) as unknown as { n: number }[];
   assert.equal(orphans.n, 0);
 });

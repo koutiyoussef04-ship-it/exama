@@ -3,20 +3,20 @@
  *   npm run owner:check -- you@example.com
  * Prints the account's user id (to use in OWNER_USER_IDS if you prefer ids over emails).
  */
-import { eq } from 'drizzle-orm';
 import { getEntitlement, isOwner } from '../src/billing/entitlements.js';
 import { config } from '../src/config.js';
-import { db, sql } from '../src/db/client.js';
-import { users } from '../src/db/schema.js';
+import { sql } from '../src/db/client.js';
+import { findAccount } from '../src/services/accounts.js';
 
 const email = process.argv[2]?.trim().toLowerCase();
 if (!email) {
   console.error('Usage: npm run owner:check -- you@example.com');
   process.exit(1);
 }
-const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.email, email));
+// Owner (full) access is for the STUDENT account only; the B2B owner is a separate organization account (npm run b2b:owner).
+const user = await findAccount(email, 'student');
 if (!user) {
-  console.error(`✖ No account with email ${email}. Sign up in the app first.`);
+  console.error(`✖ No student account with email ${email}. Sign up in the app first.`);
   await sql.end();
   process.exit(1);
 }
