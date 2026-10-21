@@ -516,11 +516,11 @@ test('owner tooling: organizations are listed with usage; limits and suspension 
   const list = await call<AdminOrganization[]>('/admin/organizations', { token: owner.token });
   assert.equal(list.status, 200);
   const mine = list.body.find((o) => o.id === orgId)!;
-  assert.deepEqual([mine.market, mine.status, mine.limits.itemsPerMonth, mine.counts.members, mine.creatorEmail], ['training_provider', 'active', 500, 1, admin.email]);
+  assert.deepEqual([mine.market, mine.status, mine.limits.itemsPerMonth, mine.counts.members, mine.creatorEmail], ['training_provider', 'active', 150, 1, admin.email]);
 
   // Limits: merged over the defaults and enforced on the next generation.
   const updated = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { limits: { itemsPerMonth: 2 } }), token: owner.token });
-  assert.deepEqual([updated.body.limits.itemsPerMonth, updated.body.limits.coursesPerMonth], [2, 20]);
+  assert.deepEqual([updated.body.limits.itemsPerMonth, updated.body.limits.coursesPerMonth], [2, 5], 'override on top of the pilot allowances');
   const doc = await uploadCourse(admin.token, orgId);
   const g = await generate(admin.token, orgId, doc.id, { count: 5 });
   assert.equal(g.status, 201);

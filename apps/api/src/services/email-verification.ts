@@ -139,7 +139,7 @@ const REMINDER: Record<Language, EmailCopy> = {
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 export const verificationLink = (token: string) => `${config.WEB_APP_URL}/verify-email#token=${token}`;
 
-function verificationEmail(to: string, token: string, language: Language, copy: Record<Language, EmailCopy> = EMAIL) {
+export function verificationEmail(to: string, token: string, language: Language, copy: Record<Language, EmailCopy> = EMAIL) {
   const t = copy[language] ?? copy.en;
   const link = verificationLink(token);
   const outro = t.outro(EMAIL_VERIFICATION_TTL_HOURS);
@@ -278,7 +278,14 @@ export async function resendVerification(userId: string, language: Language, cli
 }
 
 /** Signed out: same answer for every email (known, unknown, verified); a link is only sent when it makes sense. */
-export async function requestVerification(email: string, language: Language, clientKey: string, now = Date.now()): Promise<{ retryAfterSeconds: number }> {
+export async function requestVerification(
+  email: string,
+  language: Language,
+  clientKey: string,
+  now = Date.now(),
+  /** No account with this email: e.g. a sign-up still waiting for its link (services/signup.ts). Not awaited. */
+  onNoAccount?: (email: string, language: Language, now: number) => Promise<void>,
+): Promise<{ retryAfterSeconds: number }> {
   requestLimiter.take(clientKey);
   const inMemory = Math.max(0, (cooldownUntil.get(email) ?? 0) - now);
   if (inMemory > 0) return { retryAfterSeconds: toSeconds(inMemory) };
@@ -286,6 +293,7 @@ export async function requestVerification(email: string, language: Language, cli
   const fresh = { retryAfterSeconds: toSeconds(COOLDOWN_MS) };
 
   const [u] = await db.select(accountColumns).from(users).where(eq(users.email, email));
+  if (!u && onNoAccount) void onNoAccount(email, language, now).catch(logFailure);
   if (!u || u.emailVerifiedAt || !verificationAvailable() || !emailLimiter.tryTake(u.id, now)) return fresh;
   const issued = await issueToken(u.id, now);
   if (!('token' in issued)) return fresh;
@@ -335,8 +343,9 @@ export async function sendVerificationReminder(userId: string, language: Languag
 
 const invalid = () => new HttpError(400, 'This link isn’t valid. Request a new one.', 'verification_link_invalid');
 
-export async function verifyEmail(token: string, clientKey: string, now = Date.now()): Promise<VerifyEmailResult> {
-  verifyLimiter.take(clientKey);
+export async function verifyEmail(token: string, clientKey: string | null, now = Date.now()): Promise<VerifyEmailResult> {
+  // null: the caller already counted this attempt (POST /auth/email-verification/verify checks sign-up links first).
+  if (clientKey !== null) verifyLimiter.take(clientKey);
   if (!TOKEN_FORMAT.test(token)) throw invalid();
   const [row] = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.tokenHash, hashToken(token)));
   if (!row) throw invalid();

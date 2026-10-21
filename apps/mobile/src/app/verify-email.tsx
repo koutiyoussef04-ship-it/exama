@@ -1,9 +1,11 @@
 /**
  * Email verification page, signed in or out (the link may be opened on another device).
  *
- *   /verify-email#token=…  → checks the link: confirmed / already used / expired / invalid (+ new link)
+ *   /verify-email#token=…  → checks the link: confirmed / already used / expired / invalid (+ new link). A sign-up
+ *                            link creates the account and signs it in here.
  *   /verify-email          → "Check your email": resend (with the server's cooldown), "I've confirmed it",
  *                            or, signed out, ask for a new link by email (same answer for every address).
+ *   ?email=…&pending=1     → right after sign-up (or signing in before confirming): the address is filled in.
  *
  * The server decides who must confirm and enforces it; this page only reflects it.
  */
@@ -90,7 +92,7 @@ function Done({ title, body }: { title: string; body: string }) {
 
 function OpenedLink({ token }: { token: string }) {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, signInWith } = useAuth();
   const qc = useQueryClient();
   const [outcome, setOutcome] = useState<LinkOutcome | 'checking'>(token ? 'checking' : 'invalid');
   const [error, setError] = useState<unknown>(null);
@@ -100,9 +102,11 @@ function OpenedLink({ token }: { token: string }) {
     setOutcome('checking');
     setError(null);
     try {
-      await api.verifyEmail(token);
+      const r = await api.verifyEmail(token);
+      // A sign-up link: the account now exists and this is its first session.
+      if (r.auth) await signInWith(r.auth);
+      else if (user) markVerified(qc, user.id);
       setOutcome('verified');
-      if (user) markVerified(qc, user.id);
     } catch (e) {
       setError(e);
       setOutcome(linkOutcome(e));
@@ -144,14 +148,16 @@ function CheckYourEmail() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const state = useEmailVerification();
+  const params = useLocalSearchParams<{ email?: string; pending?: string }>();
   if (!user) {
+    const pendingEmail = params.pending === '1' && typeof params.email === 'string' ? params.email : '';
     return (
       <Screen>
         <View style={{ gap: space(1) }}>
           <Title>{t('verify.checkTitle')}</Title>
-          <Body muted>{t('verify.signedOutBody')}</Body>
+          <Body muted>{pendingEmail ? t('verify.pendingBody', { email: pendingEmail }) : t('verify.signedOutBody')}</Body>
         </View>
-        <NewLink />
+        <NewLink initialEmail={pendingEmail} sentJustNow={!!pendingEmail} />
       </Screen>
     );
   }
@@ -182,14 +188,15 @@ function CheckYourEmail() {
  * "Send a new link": signed in → for this account (with the cooldown the server reports);
  * signed out → by email address (the answer is the same whatever the address).
  */
-function NewLink({ checkAgain = false }: { checkAgain?: boolean }) {
+function NewLink({ checkAgain = false, initialEmail = '', sentJustNow = false }: { checkAgain?: boolean; initialEmail?: string; sentJustNow?: boolean }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { appLanguage } = usePreferences();
   const qc = useQueryClient();
   const state = useEmailVerification();
-  const [email, setEmail] = useState('');
-  const [retryAt, setRetryAt] = useState(0);
+  const [email, setEmail] = useState(initialEmail);
+  // Right after sign-up the server has just sent the link: the same one-minute wait applies.
+  const [retryAt, setRetryAt] = useState(() => (sentJustNow ? Date.now() + 60_000 : 0));
   const [now, setNow] = useState(() => Date.now());
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const wait = secondsLeft(retryAt, now);

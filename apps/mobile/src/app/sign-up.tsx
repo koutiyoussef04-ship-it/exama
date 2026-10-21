@@ -2,13 +2,13 @@ import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
-import { ORGANIZATION_MARKETS, SIGNUP_AGE_ANSWERS, type AccountType, type OrganizationMarket, type SignupAgeAnswer } from '@study/shared';
+import { ORGANIZATION_MARKETS, SIGNUP_AGE_ANSWERS, type AccountType, type AgeRange, type OrganizationMarket, type SignupAgeAnswer } from '@study/shared';
 import { AccountTypeChoice } from '@/components/account-type-choice';
 import { Chips } from '@/components/planner';
 import { Body, Button, Card, CheckRow, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
 import { AGE_BLOCK_KEY, ageBlockActive, ageBlockValue, isBelowMinimumAge, MINIMUM_SIGNUP_AGE } from '@/lib/age-gate';
 import { ApiError } from '@/lib/api';
-import { canSubmitSignup, MIN_PASSWORD_LENGTH, passwordsMatch, showPasswordMismatch, signupRequest } from '@/lib/signup-form';
+import { canSubmitSignup, isOrganizationSignup, MIN_PASSWORD_LENGTH, passwordsMatch, showPasswordMismatch, signupRequest } from '@/lib/signup-form';
 import { kv } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 import { usePreferences } from '@/lib/preferences';
@@ -63,13 +63,20 @@ export default function SignUp() {
   const submit = async () => {
     // The two passwords must match before anything is sent.
     if (!passwordsMatch(form)) return setMismatch(true);
-    if (!canSubmit || !ageRange) return;
-    if (isBelowMinimumAge(ageRange)) return decline();
+    if (!canSubmit) return;
+    if (isOrganizationSignup(form)) return send(null); // organizations are not asked their age group
+    if (!form.ageRange) return;
+    if (isBelowMinimumAge(form.ageRange)) return decline();
+    return send(form.ageRange);
+  };
+  const send = async (ageRange: AgeRange | null) => {
     setLoading(true);
     setError(null);
     try {
       // The app language is used for the verification email, and is the language of the consent wording the person saw.
-      await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage, marketing }));
+      const pending = await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage, marketing }));
+      // No account until the emailed link is opened: show "check your email" for this address.
+      if (pending) router.replace({ pathname: '/verify-email', params: { email: pending.email, pending: '1' } });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'age_requirement_not_met') decline();
       else setError(e);
@@ -191,15 +198,18 @@ export default function SignUp() {
             {t('auth.passwordsDontMatch')}
           </Text>
         )}
-        <View style={{ gap: space(2) }}>
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">
-            {t('auth.ageQuestion')}
-          </Text>
-          <Chips options={SIGNUP_AGE_ANSWERS.map((value) => ({ value, label: t(`auth.age.${value}`) }))} value={ageRange as SignupAgeAnswer} onChange={setAgeRange} />
-          <Body muted style={{ fontSize: 13 }}>{t('auth.ageHint')}</Body>
-        </View>
-        {/* Optional and unticked: ticking it is the only thing that records marketing consent; signing up works the same without it. */}
-        <CheckRow tone="primary" checked={marketing} onChange={setMarketing} label={t('marketing.statement')} hint={t('marketing.hint')} />
+        {/* Students only: organization (staff) sign-ups are not asked their age group. */}
+        {!isOrganization && (
+          <View style={{ gap: space(2) }}>
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">
+              {t('auth.ageQuestion')}
+            </Text>
+            <Chips options={SIGNUP_AGE_ANSWERS.map((value) => ({ value, label: t(`auth.age.${value}`) }))} value={ageRange as SignupAgeAnswer} onChange={setAgeRange} />
+            <Body muted style={{ fontSize: 13 }}>{t('auth.ageHint')}</Body>
+          </View>
+        )}
+        {/* Optional and unticked: ticking it is the only thing that records marketing consent; signing up works the same without it. Student app only. */}
+        {!isOrganization && <CheckRow tone="primary" checked={marketing} onChange={setMarketing} label={t('marketing.statement')} hint={t('marketing.hint')} />}
         <ErrorText error={error} />
         <Button title={t('auth.createAccount')} onPress={submit} loading={loading} disabled={!canSubmit} />
         <Body muted style={{ fontSize: 13, textAlign: 'center' }}>

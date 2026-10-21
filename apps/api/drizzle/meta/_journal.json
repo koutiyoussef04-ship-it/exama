@@ -162,6 +162,13 @@
       "when": 1792490620773,
       "tag": "0022_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792539687127,
+      "tag": "0023_signup_verification_org_plans",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import type {
   PasswordResetConfirmInput,
   PasswordResetRequestInput,
   RegisterInput,
+  RegisterResponse,
   SubmitExamInput,
   BillingCatalog,
   BillingPeriod,
@@ -181,7 +182,8 @@ async function uploadMaterialFile(documentId: string, file: PickedFile, language
 }
 
 export const api = {
-  register: (input: RegisterInput) => post<AuthResponse>('/auth/register', input),
+  /** 202 SignupPending (the account is created when the emailed link is opened); 201 AuthResponse only on development servers. */
+  register: (input: RegisterInput) => post<RegisterResponse>('/auth/register', input),
   login: (input: LoginInput) => post<AuthResponse>('/auth/login', input),
   requestPasswordReset: (input: PasswordResetRequestInput) => post<{ ok: true; retryAfterSeconds?: number }>('/auth/password-reset/request', input),
   confirmPasswordReset: (input: PasswordResetConfirmInput) => post<AuthResponse>('/auth/password-reset/confirm', input),

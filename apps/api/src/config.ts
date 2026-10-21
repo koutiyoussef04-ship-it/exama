@@ -164,6 +164,13 @@ const envSchema = z
       .transform((v) => v === 'true'),
     // Hours a new account can use everything before verifying (only matters when EMAIL_VERIFICATION_REQUIRED=true).
     EMAIL_VERIFICATION_GRACE_HOURS: z.coerce.number().int().min(0).max(720).default(72),
+    // Sign-up requires a confirmed email (services/signup.ts): POST /auth/register only emails a link; the account is
+    // created when the link is opened. Default true. `false` (old behaviour: account + session at once) is for local
+    // development and the automated tests only — the API refuses to start with it in production.
+    SIGNUP_EMAIL_VERIFICATION: z
+      .enum(['true', 'false', ''])
+      .optional()
+      .transform((v) => v !== 'false'),
     // ---- Daily study-plan reminder emails (services/study-reminders.ts) ----
     // true = students with a study plan and no active subscription get one email a day with that day's
     // tasks (no AI is used). Default false: nothing is sent until you turn it on.
@@ -257,6 +264,9 @@ const envSchema = z
       if (!u || !(u.protocol === 'https:' || (!production && u.protocol === 'http:'))) {
         ctx.addIssue({ code: 'custom', path: ['WEB_APP_URL'], message: 'WEB_APP_URL must be the web app origin (https in production), e.g. https://app.exama.app.' });
       }
+    }
+    if (production && !e.SIGNUP_EMAIL_VERIFICATION) {
+      ctx.addIssue({ code: 'custom', path: ['SIGNUP_EMAIL_VERIFICATION'], message: 'SIGNUP_EMAIL_VERIFICATION=false is for development and tests only: production sign-ups must confirm their email.' });
     }
     if (e.EMAIL_VERIFICATION_REQUIRED) {
       // Never restrict accounts that cannot receive the email that unlocks them.
@@ -367,7 +377,9 @@ function loadConfig() {
     console.warn('⚠ STRIPE_ENABLED=true but BILLING_MOCK_ENABLED=true: the mock provider replaces every real provider, so Stripe is NOT used. Set BILLING_MOCK_ENABLED=false to test Stripe.');
   }
   if (cfg.EMAIL_PROVIDER === 'disabled') {
-    console.warn('⚠ EMAIL_PROVIDER is disabled: password-reset and email-verification emails are not sent. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.');
+    console.warn(
+      `⚠ EMAIL_PROVIDER is disabled: password-reset and email-verification emails are not sent${cfg.SIGNUP_EMAIL_VERIFICATION ? ', and new sign-ups are refused (503 email_unavailable) because they must confirm their email' : ''}. Set EMAIL_PROVIDER=resend, RESEND_API_KEY and EMAIL_FROM.`,
+    );
   }
   if (cfg.ANTHROPIC_API_KEY && !cfg.ANTHROPIC_API_KEY.startsWith('sk-ant-')) {
     console.warn('⚠ ANTHROPIC_API_KEY does not start with "sk-ant-" — double-check you copied the whole key.');

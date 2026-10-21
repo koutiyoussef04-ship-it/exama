@@ -35,11 +35,11 @@ export const registerSchema = z.object({
   /** App language, for the verification email (optional: older apps don't send it). */
   language: languageSchema.optional(),
   /**
-   * Required: proves nothing on its own, but every account must state an age group of 13 or over.
+   * Students: required (an age group of 13 or over; proves nothing on its own). Organization accounts are not asked.
    * (The API answers a missing value with 400 age_range_required — older app versions must update —
    * and "under_13" with 403 age_requirement_not_met, before anything is created.)
    */
-  ageRange: z.enum(AGE_RANGES),
+  ageRange: z.enum(AGE_RANGES).optional(),
   /**
    * Optional marketing-email consent (see marketing-consent.ts). Send it ONLY when the box is ticked. Absent, null or
    * false = no consent recorded; the API records consent for nothing else than an explicit, known version.
@@ -53,6 +53,8 @@ export const registerSchema = z.object({
   organizationName: organizationNameSchema.optional(),
   market: z.enum(ORGANIZATION_MARKETS).optional(),
 }).superRefine((v, ctx) => {
+  // Students state an age group; organization (staff) accounts are not asked.
+  if (v.accountType !== 'organization' && !v.ageRange) ctx.addIssue({ code: 'custom', path: ['ageRange'], message: 'Age group is required' });
   if (v.accountType === 'organization') {
     if (!v.organizationName) ctx.addIssue({ code: 'custom', path: ['organizationName'], message: 'Organization name is required' });
     if (!v.market) ctx.addIssue({ code: 'custom', path: ['market'], message: 'Choose the kind of organization' });
@@ -76,6 +78,8 @@ export type User = {
   organizations: OrganizationMembershipSummary[];
 };
 export type AuthResponse = { token: string; user: User };
+/** POST /auth/register: 202 with `SignupPending` (email must be confirmed first); 201 with a session only where sign-up verification is off (development/tests). */
+export type RegisterResponse = AuthResponse | import('./email-verification').SignupPending;
 
 /**
  * After an account is deleted, its email address (normalized with `normalizeEmail`, the sign-in rule)

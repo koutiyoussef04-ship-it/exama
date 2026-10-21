@@ -37,7 +37,10 @@ export const organizationFieldsComplete = (f: Pick<SignupForm, 'accountType' | '
 
 /** Every required field is complete and valid, including the two matching passwords. */
 export const canSubmitSignup = (f: SignupForm) =>
-  !!f.name.trim() && !!f.email.trim() && f.password.length >= MIN_PASSWORD_LENGTH && passwordsMatch(f) && !!f.ageRange && organizationFieldsComplete(f);
+  !!f.name.trim() && !!f.email.trim() && f.password.length >= MIN_PASSWORD_LENGTH && passwordsMatch(f) && (isOrganizationSignup(f) || !!f.ageRange) && organizationFieldsComplete(f);
+
+/** Organization (staff) sign-ups are not asked the age-group question. */
+export const isOrganizationSignup = (f: Pick<SignupForm, 'accountType'>) => (f.accountType ?? 'student') === 'organization';
 
 /**
  * The request body (age already checked to be 13+): the confirmation is deliberately not part of it.
@@ -45,15 +48,13 @@ export const canSubmitSignup = (f: SignupForm) =>
  * is ticked; unticked, the key is absent, so nothing is recorded. It never affects whether the form can be submitted.
  * Organization sign-ups add the account type, the organization's name and its market.
  */
-export function signupRequest(f: Omit<SignupForm, 'ageRange'> & { ageRange: AgeRange }, opts: { language: Language; marketing?: boolean }): RegisterInput {
-  const base: RegisterInput = {
-    name: f.name.trim(),
-    email: f.email.trim(),
-    password: f.password,
-    language: opts.language,
-    ageRange: f.ageRange,
+export function signupRequest(f: Omit<SignupForm, 'ageRange'> & { ageRange: AgeRange | null }, opts: { language: Language; marketing?: boolean }): RegisterInput {
+  const base = { name: f.name.trim(), email: f.email.trim(), password: f.password, language: opts.language };
+  // Organizations: no age group. (The marketing box is a student-app consent; it is not recorded for staff.)
+  if (isOrganizationSignup(f)) return { ...base, accountType: 'organization', organizationName: (f.organizationName ?? '').trim(), market: f.market ?? undefined };
+  return {
+    ...base,
+    ageRange: f.ageRange ?? undefined,
     ...(opts.marketing === true && { marketingConsent: { version: MARKETING_CONSENT_VERSION, language: opts.language } }),
   };
-  if ((f.accountType ?? 'student') !== 'organization') return base;
-  return { ...base, accountType: 'organization', organizationName: (f.organizationName ?? '').trim(), market: f.market ?? undefined };
 }

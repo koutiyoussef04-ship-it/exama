@@ -1,4 +1,4 @@
-import type { LoginInput, PasswordResetConfirmInput, RegisterInput, User } from '@study/shared';
+import type { AuthResponse, LoginInput, PasswordResetConfirmInput, RegisterInput, SignupPending, User } from '@study/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, setAuthToken, setUnauthorizedHandler } from './api';
@@ -8,7 +8,10 @@ type AuthState = {
   user: User | null;
   isLoading: boolean;
   signIn: (input: LoginInput) => Promise<void>;
-  signUp: (input: RegisterInput) => Promise<void>;
+  /** Starts a sign-up: the server emails a confirmation link and answers "pending" (no session yet). */
+  signUp: (input: RegisterInput) => Promise<SignupPending | null>;
+  /** Signs in with a session the server handed out (a sign-up link that was just opened). */
+  signInWith: (auth: AuthResponse) => Promise<void>;
   /** Password reset: the new password is set and the student is signed in with a fresh session. */
   resetPassword: (input: PasswordResetConfirmInput) => Promise<void>;
   signOut: () => Promise<void>;
@@ -66,7 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     isLoading,
     signIn: async (input) => finish(await api.login(input)),
-    signUp: async (input) => finish(await api.register(input)),
+    signUp: async (input) => {
+      const r = await api.register(input);
+      if ('status' in r) return r;
+      await finish(r); // development servers with SIGNUP_EMAIL_VERIFICATION=false
+      return null;
+    },
+    signInWith: finish,
     resetPassword: async (input) => finish(await api.confirmPasswordReset(input)),
     signOut,
     sessionExpired,

@@ -6,13 +6,17 @@ import type {
   BillingEnvironment,
   Difficulty,
   FlashcardResult,
+  Language,
   LegalRef,
+  MarketingConsentInput,
   MarketingConsentSource,
   MaterialFormat,
   MaterialKnowledge,
   OnboardingAnswers,
   OrganizationLimits,
+  OrganizationBillingPeriod,
   OrganizationMarket,
+  OrganizationPlan,
   OrganizationRole,
   PlanId,
   PreparedLevel,
@@ -222,6 +226,34 @@ export const deletedEmailHolds = pgTable(
  * Email-verification links. Only a keyed hash of the random token is stored. A token works once and
  * for 24 hours; sending a new link expires the older ones.
  */
+/**
+ * Sign-ups waiting for their email to be confirmed (services/signup.ts). No account exists until the link is
+ * opened: then the account (and its organization, onboarding row, marketing consent) is created from this row.
+ * One row per registration attempt, each with its own single-use token (only an HMAC is stored); rows expire after
+ * 24 hours and are removed a week later.
+ */
+export const pendingSignups = pgTable(
+  'pending_signups',
+  {
+    id: id(),
+    email: text('email').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    name: text('name').notNull(),
+    accountType: text('account_type').$type<AccountType>().notNull(),
+    ageRange: text('age_range').$type<AgeRange>(),
+    organizationName: text('organization_name'),
+    market: text('market').$type<OrganizationMarket>(),
+    marketingConsent: jsonb('marketing_consent').$type<MarketingConsentInput>(),
+    language: text('language').$type<Language>().notNull().default('en'),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('pending_signups_email_idx').on(t.email, t.createdAt), index('pending_signups_expires_idx').on(t.expiresAt)],
+);
+
 export const emailVerificationTokens = pgTable(
   'email_verification_tokens',
   {
@@ -282,13 +314,23 @@ export const organizations = pgTable(
     name: text('name').notNull(),
     market: text('market').$type<OrganizationMarket>().notNull(),
     status: text('status').$type<'active' | 'suspended'>().notNull().default('active'),
-    /** Per-organization allowances (see billing/org-limits.ts for the defaults applied when null). */
+    /** Commercial plan (billing is manual). New organizations start on the pilot; the owner assigns paid plans. */
+    plan: text('plan').$type<OrganizationPlan>().notNull().default('pilot'),
+    billingPeriod: text('billing_period').$type<OrganizationBillingPeriod>(),
+    /** Pilot only: when it ends. After that no new courses or AI drafts; reading, review and exports keep working. */
+    pilotStartedAt: timestamp('pilot_started_at', { withTimezone: true }).notNull().defaultNow(),
+    pilotEndsAt: timestamp('pilot_ends_at', { withTimezone: true }),
+    /** Owner overrides on top of the plan's allowances (see billing/org-limits.ts). */
     limits: jsonb('limits').$type<Partial<OrganizationLimits>>().notNull().default({}),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check('organizations_market_check', sql`${t.market} in ('training_provider', 'academy')`)],
+  (t) => [
+    check('organizations_market_check', sql`${t.market} in ('training_provider', 'academy')`),
+    check('organizations_plan_check', sql`${t.plan} in ('pilot', 'esencial', 'profesional', 'centro')`),
+    check('organizations_billing_period_check', sql`${t.billingPeriod} is null or ${t.billingPeriod} in ('monthly', 'yearly')`),
+  ],
 );
 
 /** Who belongs to an organization and what they may do there. Leaving or deleting an account removes only the membership. */

@@ -5,10 +5,10 @@
  * Rules: an organization always keeps at least one admin; members are added by the email of an EXISTING
  * account (no invitations yet); adding someone never changes their account type or billing.
  */
-import { and, count, desc, eq, sql } from 'drizzle-orm';
-import type { Organization, OrganizationLimits, OrganizationMarket, OrganizationMember, OrganizationMembershipSummary, OrganizationOverview, OrganizationRole } from '@study/shared';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { ORGANIZATION_PILOT_DAYS, type Organization, type OrganizationLimits, type OrganizationMarket, type OrganizationMember, type OrganizationMembershipSummary, type OrganizationOverview, type OrganizationRole } from '@study/shared';
 import { normalizeEmail } from '@study/shared';
-import { countOrgCourses, getOrgUsage, resolveOrgLimits } from '../billing/org-limits.js';
+import { countOrgCourses, getOrgUsage, orgPlanState, resolveOrgLimits } from '../billing/org-limits.js';
 import type { OrgContext } from '../auth/org-access.js';
 import { db } from '../db/client.js';
 import { bankItems, organizationMembers, organizations, users } from '../db/schema.js';
@@ -23,13 +23,21 @@ const toOrganization = (o: OrgRow, role: OrganizationRole): Organization => ({
   market: o.market,
   status: o.status,
   role,
-  limits: resolveOrgLimits(o.limits),
+  limits: resolveOrgLimits(o),
+  ...orgPlanState(o),
   createdAt: o.createdAt.toISOString(),
 });
 
-/** Creates the organization and makes `userId` its first admin (same transaction as a sign-up when called from there). */
+/**
+ * Creates the organization on a 30-day pilot and makes `userId` its first admin (same transaction as a sign-up when
+ * called from there).
+ */
 export async function createOrganization(tx: Tx | typeof db, userId: string, input: { name: string; market: OrganizationMarket }): Promise<OrgRow> {
-  const [org] = await tx.insert(organizations).values({ name: input.name, market: input.market, createdBy: userId }).returning();
+  const now = new Date();
+  const [org] = await tx
+    .insert(organizations)
+    .values({ name: input.name, market: input.market, createdBy: userId, plan: 'pilot', pilotStartedAt: now, pilotEndsAt: new Date(now.getTime() + ORGANIZATION_PILOT_DAYS * 86_400_000) })
+    .returning();
   await tx.insert(organizationMembers).values({ organizationId: org.id, userId, role: 'admin', addedBy: userId });
   return org;
 }
@@ -119,6 +127,11 @@ export async function addMember(org: OrgContext, actorUserId: string, input: { e
   if (!user) throw new HttpError(404, 'No Exama account with this email. Ask them to create one first.', 'user_not_found');
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`org-members:${org.id}`}, 0))`);
+    const [member] = await tx
+      .select({ userId: organizationMembers.userId })
+      .from(organizationMembers)
+      .where(and(eq(organizationMembers.organizationId, org.id), eq(organizationMembers.userId, user.id)));
+    if (!member) await assertSeatAvailable(tx, org.id, input.role);
     const inserted = await tx
       .insert(organizationMembers)
       .values({ organizationId: org.id, userId: user.id, role: input.role, addedBy: actorUserId })
@@ -133,6 +146,7 @@ export async function updateMemberRole(org: OrgContext, memberUserId: string, ro
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`org-members:${org.id}`}, 0))`);
     if (role !== 'admin') await assertNotLastAdmin(tx, org.id, memberUserId);
+    await assertSeatAvailable(tx, org.id, role, memberUserId);
     const updated = await tx
       .update(organizationMembers)
       .set({ role })
@@ -154,6 +168,26 @@ export async function removeMember(org: OrgContext, memberUserId: string): Promi
     if (removed.length === 0) throw new HttpError(404, 'Member not found', 'not_found');
   });
   return listMembers(org.id);
+}
+
+/**
+ * The plan's `maxMembers` counts admins and editors (the people who upload courses and generate questions); reviewers
+ * are unlimited. 402 org_member_limit_reached when a new admin/editor would exceed it. Call under the members lock.
+ * `memberUserId`: a member whose role is changing (their current admin/editor seat is not counted twice).
+ */
+async function assertSeatAvailable(tx: Tx, orgId: string, role: OrganizationRole, memberUserId?: string) {
+  if (role === 'reviewer') return;
+  const [org] = await tx.select({ plan: organizations.plan, limits: organizations.limits }).from(organizations).where(eq(organizations.id, orgId));
+  if (!org) throw new HttpError(404, 'Organization not found', 'not_found');
+  const { maxMembers } = resolveOrgLimits(org);
+  const seats = await tx
+    .select({ userId: organizationMembers.userId })
+    .from(organizationMembers)
+    .where(and(eq(organizationMembers.organizationId, orgId), inArray(organizationMembers.role, ['admin', 'editor'])));
+  if (memberUserId && seats.some((s) => s.userId === memberUserId)) return;
+  if (seats.length >= maxMembers) {
+    throw new HttpError(402, `This organization's plan includes ${maxMembers} admins and editors. Add them as reviewers, or contact Exama to change the plan.`, 'org_member_limit_reached', { max: maxMembers, used: seats.length });
+  }
 }
 
 async function assertNotLastAdmin(tx: Tx, orgId: string, memberUserId: string) {
