@@ -33,6 +33,8 @@ export function orgPathFor(lang: OrgLang, page: OrgPage = ''): string {
 export const orgLangFor = (lang: Lang): OrgLang => (isOrgLang(lang) ? lang : 'en');
 export const orgAlternatesFor = (page: OrgPage) => ORG_LANGS.map((l) => ({ lang: l, path: orgPathFor(l, page) }));
 export const orgAnchor = (lang: OrgLang, id: string) => `${orgPathFor(lang)}#${id}`;
+/** Link-preview image of the organizations pages (public/og-image-org-<lang>.png, from scripts/og-image-org.html). */
+export const orgOgImage = (lang: OrgLang) => `/og-image-org-${lang}.png`;
 
 /** Anchor on the home page of a language, e.g. /es/#pricing. */
 export const homeAnchor = (lang: Lang, id: string) => `${pathFor(lang)}#${id}`;

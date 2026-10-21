@@ -12,7 +12,7 @@ import OrgFaq from './OrgFaq.astro';
 import OrgFinalCta from './OrgFinalCta.astro';
 import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
-import { orgAlternatesFor, orgPathFor, type OrgLang } from '../../i18n';
+import { orgAlternatesFor, orgOgImage, orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
 interface Props {
@@ -32,11 +32,11 @@ const jsonLd = [
 ];
 ---
 
-<Base title={c.meta.title} description={c.meta.description} path={orgPathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={orgAlternatesFor('')} nav="org">
+<Base title={c.meta.title} description={c.meta.description} path={orgPathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={orgAlternatesFor('')} nav="org" ogImage={orgOgImage(lang)} ogAlt={c.meta.ogAlt}>
   <OrgHero lang={lang} />
-  <OrgAudiences lang={lang} />
   <OrgHow lang={lang} />
   <OrgReview lang={lang} />
+  <OrgAudiences lang={lang} />
   <OrgTeam lang={lang} />
   <OrgPricing lang={lang} />
   <OrgPilot lang={lang} />

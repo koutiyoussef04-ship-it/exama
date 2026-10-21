@@ -95,7 +95,7 @@ const EXPECT = {
 /** What the organizations pages must show, per language — independent of src/i18n/b2b. Prices exclude VAT. */
 const ORG_EXPECT = {
   en: {
-    title: 'Exama for organizations — Question banks from your own course material',
+    title: 'Exama for organizations — Test questions from your own course material',
     demoTitle: 'Request a demo — Exama for organizations',
     pilotCta: 'Start the free 30-day pilot',
     pilotShort: 'Start the free pilot',
@@ -111,9 +111,10 @@ const ORG_EXPECT = {
     generations: /\bgenerations?\b/i,
     emailButton: 'Email examaweb@gmail.com',
     faqCount: 8,
+    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
   },
   es: {
-    title: 'Exama para organizaciones — Bancos de preguntas a partir de tu propio material',
+    title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
     demoTitle: 'Solicitar una demo — Exama para organizaciones',
     pilotCta: 'Empieza el piloto gratuito de 30 días',
     pilotShort: 'Empezar el piloto gratuito',
@@ -129,6 +130,7 @@ const ORG_EXPECT = {
     generations: /\bgeneraciones?\b/i,
     emailButton: 'Escribir a examaweb@gmail.com',
     faqCount: 8,
+    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
   },
 };
 /** Sales claims the organizations pages must never make: online purchase, guarantees, time savings, customers. */
@@ -344,6 +346,11 @@ for (const { lang, page, route, file } of orgPages) {
   const hit = body.match(ORG_FORBIDDEN);
   check(!hit, `no purchase, guarantee, time-saving or customer claims${hit ? ` (found "${hit[0]}")` : ''}`);
   check(!e.generations.test(body), 'says "question drafts", never "generations"');
+  if (lang === 'es') {
+    const leaks = ['Request a demo', 'How it works', 'Start the free', 'For students', 'Pricing', 'Log in', 'question drafts', 'per month', 'Unlimited reviewers', 'Skip to content'].filter((s) => body.includes(s));
+    check(leaks.length === 0, `no untranslated English text${leaks.length ? ` (found "${leaks[0]}")` : ''}`);
+  }
+  check(links.filter((a) => /class="brand"/.test(a.attrs)).every((a) => a.href === orgPath(lang)), 'logo links stay on the organizations page (header and footer)');
   if (!page) {
     for (const id of ['how-it-works', 'review', 'pricing', 'pilot', 'faq']) check(new RegExp(`id="${id}"`).test(html), `section #${id}`);
     for (const price of e.prices) check(body.includes(price), `pricing shows ${price}`);
@@ -357,10 +364,20 @@ for (const { lang, page, route, file } of orgPages) {
     const questions = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map((m) => text(m[1]).trim());
     const faqLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1])).find((d) => d['@type'] === 'FAQPage');
     check(questions.length === e.faqCount && faqLd?.mainEntity.length === e.faqCount && faqLd.mainEntity.every((q, i) => q.name === questions[i]), `FAQ: ${e.faqCount} questions, mirrored in the structured data`);
-    check(links.some((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')), `"${e.demoCta}" → ${orgPath(lang, 'demo')}`);
+    // Above the fold: the pilot AND a demo request (directors who want to talk first), then verified trust facts.
+    const heroHtml = html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'));
+    const heroLinks = anchors(heroHtml);
+    check(heroLinks.some((a) => a.label === e.pilotCta && a.href === ORG_SIGNUP(lang)) && heroLinks.some((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')), `hero: "${e.pilotCta}" + "${e.demoCta}"`);
+    for (const fact of e.trust) check(text(html.slice(html.indexOf('class="trust-strip"'))).includes(fact), `trust strip: "${fact}"`);
+    check(links.filter((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')).length >= 2, `"${e.demoCta}" → ${orgPath(lang, 'demo')} (hero and final CTA)`);
+    check(new RegExp(`<meta property="og:image" content="https://exama.app/og-image-org-${lang}.png"`).test(html) && existsSync(join(dist, `og-image-org-${lang}.png`)), `link preview: og-image-org-${lang}.png`);
+    // Footer of the organizations pages: organization sign-up, no student sign-up.
+    const foot = anchors(html.slice(html.indexOf('<footer')));
+    check(foot.some((a) => a.href === ORG_SIGNUP(lang)) && !foot.some((a) => a.href === SIGNUP(lang)), 'footer: organization sign-up, not the student one');
+    check(foot.some((a) => a.href === homePath(lang)), `footer: link back to the student site (${homePath(lang)})`);
     // Screenshots: real captures only (public/screenshots/org-*.{webp,png,jpg}); until they exist, icon cards.
-    const shots = (html.match(/\/screenshots\/org-[a-z-]+\.(webp|png|jpg)/g) ?? []).length;
-    console.log(`  • workspace screenshots on the page: ${shots} of 3${shots < 3 ? ' (icon cards until real captures are added)' : ''}`);
+    const shots = new Set(html.match(/\/screenshots\/org-[a-z-]+\.(webp|png|jpg)/g) ?? []);
+    check(shots.size === 3 && /org-review\./.test(html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'))), `real workspace screenshots: ${shots.size} of 3, the review screen in the hero`);
   } else {
     const mail = links.filter((a) => a.href.startsWith(`mailto:${DEMO_EMAIL}`));
     check(mail.some((a) => a.label === e.emailButton && /subject=/.test(a.href) && /body=/.test(a.href)), `"${e.emailButton}" → mailto:${DEMO_EMAIL} with subject and body`);

@@ -4,13 +4,18 @@ import logoMark from '../assets/brand/logo-mark.png';
 import Wordmark from './Wordmark.astro';
 import { SECTIONS } from '../data/content';
 import { site } from '../config/site';
-import { copy, homeAnchor, isOrgLang, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
+import { ORG_SECTIONS } from '../data/b2b';
+import { copy, homeAnchor, isOrgLang, orgAnchor, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
+import { orgCopy } from '../i18n/b2b';
 
 interface Props {
   lang: Lang;
+  /** The organizations pages get their own tagline, links and sign-up (no student sign-up there). */
+  nav?: 'student' | 'org';
 }
-const { lang } = Astro.props;
+const { lang, nav = 'student' } = Astro.props;
 const c = copy(lang);
+const org = nav === 'org' && isOrgLang(lang) ? orgCopy(lang) : null;
 const year = new Date().getFullYear();
 const product = [
   { label: c.footer.links.how, href: homeAnchor(lang, SECTIONS.how) },
@@ -29,30 +34,45 @@ const account = [
   { label: c.footer.links.signup, href: site.links.signUp(lang) },
   { label: c.footer.links.login, href: site.links.signIn(lang) },
 ];
+const productLinks = org && isOrgLang(lang)
+  ? [
+      { label: org.footer.how, href: orgAnchor(lang, ORG_SECTIONS.how) },
+      { label: org.footer.pricing, href: orgAnchor(lang, ORG_SECTIONS.pricing) },
+      { label: org.footer.faq, href: orgAnchor(lang, ORG_SECTIONS.faq) },
+      { label: org.footer.demo, href: orgPathFor(lang, 'demo') },
+      { label: org.footer.students, href: pathFor(lang) },
+    ]
+  : product;
+const accountLinks = org
+  ? [
+      { label: org.footer.signup, href: site.links.orgSignUp(lang) },
+      { label: c.footer.links.login, href: site.links.signIn(lang) },
+    ]
+  : account;
 ---
 
 <footer class="site-footer">
   <div class="container footer-grid">
     <div class="footer-brand">
-      <a class="brand" href={pathFor(lang)} aria-label={c.ui.homeAria}>
+      <a class="brand" href={org && isOrgLang(lang) ? orgPathFor(lang) : pathFor(lang)} aria-label={org ? org.meta.title : c.ui.homeAria}>
         <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" />
         <Wordmark />
       </a>
-      <p>{c.footer.tagline}</p>
+      <p>{org ? org.footer.tagline : c.footer.tagline}</p>
       <a class="footer-app" href={site.appUrl}>{c.footer.openApp}</a>
     </div>
 
-    <nav aria-label={c.footer.product}>
-      <h2 class="footer-heading">{c.footer.product}</h2>
+    <nav aria-label={org ? org.footer.product : c.footer.product}>
+      <h2 class="footer-heading">{org ? org.footer.product : c.footer.product}</h2>
       <ul>
-        {product.map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
+        {productLinks.map((l) => <li><a href={l.href} {...('attrs' in l ? l.attrs : {})}>{l.label}</a></li>)}
       </ul>
     </nav>
 
     <nav aria-label={c.footer.account}>
       <h2 class="footer-heading">{c.footer.account}</h2>
       <ul>
-        {account.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {accountLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
       </ul>
     </nav>
 

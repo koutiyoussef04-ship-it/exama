@@ -93,9 +93,13 @@ centers. English and Spanish only (Spain first); the French and Arabic pages lin
   requested by email and activated by Exama; nothing is charged automatically, and the copy says so.
 - **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
   with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
-- **Screenshots**: real captures of the workspace only. Save them as `public/screenshots/org-review`,
-  `org-queue` and `org-dashboard` (`.webp`, `.png` or `.jpg`, landscape, about 1280×800) and they appear in the
-  "Every question shows where it comes from" section automatically; until then the cards show icons.
+- **Screenshots**: real captures of the workspace only — `public/screenshots/org-review.jpg`, `org-queue.jpg`
+  and `org-dashboard.jpg` are genuine captures of app.exama.app/org (the demo organization "Academia Demo Exama",
+  whose only course is the Spanish Constitution, arts. 1–55, from the BOE). `org-review` is also the hero image.
+  To replace them, drop sharper captures (landscape, about 1280×800, `.webp`, `.png` or `.jpg`) under the same
+  names; the build requires all three.
+- **Link previews**: `public/og-image-org-en.png` / `-es.png` (from `scripts/og-image-org-en.html` / `-es.html`),
+  so links shared by email, LinkedIn or WhatsApp show the organizations headline, not the student one.
 - **House rules**, enforced by `npm run verify` on these pages: no customer names, logos, counts, testimonials,
   case studies, statistics, time savings or guarantees; no "buy"/"checkout"; "question drafts", never
   "generations"; monthly wording on the paid plans; the exact app links; English + Spanish hreflang only;

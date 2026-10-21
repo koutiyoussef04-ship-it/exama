@@ -1,10 +1,12 @@
 ---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { Image } from 'astro:assets';
 import logoMark from '../../assets/brand/logo-mark.png';
 import Icon from '../Icon.astro';
-import { ORG_PILOT_DAYS, ORG_SECTIONS } from '../../data/b2b';
+import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
-import { type OrgLang } from '../../i18n';
+import { orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
 interface Props {
@@ -13,12 +15,18 @@ interface Props {
 const { lang } = Astro.props;
 const c = orgCopy(lang);
 const h = c.hero;
-const chipIcons = ['pdf', 'quote', 'graded', 'export'];
+const trustIcons = ['globe', 'users', 'graded', 'export'];
 const inputIcons = ['pdf', 'slides'];
 const outputIcons = ['check', 'export', 'export'];
+/**
+ * The hero shows the REAL review screen as soon as public/screenshots/org-review.{webp,png,jpg} exists (a genuine
+ * capture of app.exama.app/org — never a mock-up). Until then: the diagram of the workflow.
+ */
+const shotExt = ['webp', 'png', 'jpg'].find((e) => existsSync(join(process.cwd(), 'public', 'screenshots', `org-review.${e}`)));
+const shot = shotExt ? `/screenshots/org-review.${shotExt}` : null;
 ---
 
-<section class="hero org-hero" aria-labelledby="hero-title">
+<section class:list={['hero', 'org-hero', { 'has-shot': !!shot }]} aria-labelledby="hero-title">
   <div class="container hero-grid">
     <div class="hero-copy">
       <p class="eyebrow">{h.eyebrow}</p>
@@ -29,17 +37,16 @@ const outputIcons = ['check', 'export', 'export'];
 
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
-        <a class="btn btn-secondary btn-lg" href={`#${ORG_SECTIONS.how}`}>{c.cta.seeHow}</a>
+        <a class="btn btn-secondary btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
       </div>
       <p class="cta-note">{h.note(ORG_PILOT_DAYS)}</p>
-
-      <ul class="chips" aria-label={h.chipsAria}>
-        {h.chips.map((label, i) => (
-          <li class="chip"><Icon name={chipIcons[i]!} size={18} />{label}</li>
-        ))}
-      </ul>
     </div>
 
+    {shot ? (
+      <figure class="hero-shot">
+        <img src={shot} alt={h.shotAlt} width="800" height="500" loading="eager" decoding="async" />
+      </figure>
+    ) : (
     <div class="flow" role="img" aria-label={h.flowAria}>
       <div class="flow-group flow-in">
         <p class="flow-label">{h.flowIn}</p>
@@ -71,5 +78,14 @@ const outputIcons = ['check', 'export', 'export'];
         </ul>
       </div>
     </div>
+    )}
   </div>
+</section>
+
+<section class="trust-strip" aria-label={h.trustAria}>
+  <ul class="container trust-list">
+    {h.trust.map((label, i) => (
+      <li><Icon name={trustIcons[i]!} size={20} /><span>{label}</span></li>
+    ))}
+  </ul>
 </section>

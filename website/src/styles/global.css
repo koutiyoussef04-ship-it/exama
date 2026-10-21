@@ -1556,3 +1556,123 @@ html[lang='ar'] .eyebrow {
 .demo-or .btn {
   margin-top: 16px;
 }
+
+/* Organizations hero: a real screenshot of the review screen when one exists (public/screenshots/org-review.*). */
+.hero-shot {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 40px 80px -40px rgba(21, 23, 63, 0.45);
+}
+.hero-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Verified facts under the organizations hero. */
+.trust-strip {
+  background: var(--surface);
+  border-block: 1px solid var(--border);
+}
+.trust-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px 24px;
+  padding-block: 18px;
+}
+.trust-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+.trust-list svg {
+  flex: none;
+  color: var(--primary);
+}
+@media (min-width: 640px) {
+  .trust-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1100px) {
+  .trust-list {
+    grid-template-columns: repeat(4, auto);
+    justify-content: space-between;
+  }
+}
+
+/* The pilot: how it starts + what happens after. */
+.pilot-side {
+  display: grid;
+  gap: 16px;
+  align-self: start;
+}
+.pilot-start h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.pilot-steps {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 0;
+  list-style: none;
+  counter-reset: pilot;
+}
+.pilot-steps li {
+  position: relative;
+  padding-inline-start: 38px;
+  color: var(--muted);
+  counter-increment: pilot;
+}
+.pilot-steps li::before {
+  content: counter(pilot);
+  position: absolute;
+  inset-inline-start: 0;
+  top: -1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* Organizations hero: a longer headline and two buttons side by side — a wider text column, a slightly smaller title. */
+.org-hero h1 {
+  font-size: clamp(2rem, 6.2vw, 3.2rem);
+}
+@media (min-width: 960px) {
+  .org-hero {
+    padding: 72px 0 80px;
+  }
+  .org-hero .hero-grid {
+    grid-template-columns: 1.3fr 0.7fr;
+    gap: 48px;
+  }
+  .org-hero .cta-row .btn {
+    white-space: nowrap;
+  }
+}
+@media (max-width: 539px) {
+  /* Phones: the workflow diagram is decoration below the buttons; the trust facts matter more. */
+  .org-hero .flow {
+    display: none;
+  }
+}
+@media (min-width: 960px) {
+  /* With the real review screenshot in place, give it as much room as the text. */
+  .org-hero.has-shot .hero-grid {
+    grid-template-columns: 1.05fr 0.95fr;
+  }
+}
