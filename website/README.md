@@ -19,7 +19,7 @@ This is a **separate, static site** next to the Exama app. It does not import, s
 | Framework | [Astro](https://astro.build) 7 — static output, zero client-side JavaScript framework |
 | Styling | one hand-written stylesheet (`src/styles/global.css`), system fonts, no web-font requests |
 | Runtime JS | none, except a small inline helper that closes the menus after a link is used |
-| Languages | `/` English, `/es/` Spanish, `/fr/` French, `/ar/` Arabic (right-to-left) — plus the legal and support pages in each; the organizations pages in English and Spanish |
+| Languages | `/` English, `/es/` Spanish, `/fr/` French, `/ar/` Arabic (right-to-left) — plus the legal and support pages in each; the organizations pages in all four too |
 | Page weight | ~8 KB HTML + ~4 KB CSS (gzipped), plus a few tiny images |
 
 ```
@@ -51,7 +51,7 @@ npm test           # pricing check + typecheck + build + post-build verification
 ```
 src/config/site.ts       domain, app URL, links into the app (/start), the web-checkout flag, OG image, legal/contact details (null until confirmed), the B2B demo address
 src/data/b2b.ts          organization plans (allowances, prices ex-VAT, pilot length) — checked against packages/shared/src/organizations.ts
-src/i18n/b2b/            types.ts + en.ts / es.ts: ALL text of the organizations pages
+src/i18n/b2b/            types.ts + en.ts / es.ts / fr.ts / ar.ts: ALL text of the organizations pages
 src/components/b2b/      the organizations page (OrgPage.astro = hero, audiences, how, review, team, pricing, pilot, FAQ, final CTA) and the demo page
 src/components/AudienceBand.astro   the band under the student hero that points academies to the organizations page
 src/i18n/                languages.ts (languages, URLs, direction), types.ts (the shape of the copy), en.ts / es.ts / fr.ts / ar.ts (ALL page text)
@@ -60,7 +60,7 @@ src/data/legal.ts        Privacy Policy + Terms (en/es/fr/ar) from legal.generat
 src/components/*.astro   one component per page section (Hero, HowItWorks, …), each takes `lang`; Home.astro puts them together
 src/layouts/             Base.astro (head/SEO/hreflang/lang+dir), InfoPage.astro (support/404)
 src/components/LegalDocument.astro   one legal document in one language (language links, draft notice, hreflang)
-src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); for-organizations/ (index, demo), es/para-organizaciones/ (index, demo); 404, robots.txt, sitemap.xml
+src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); for-organizations/ (index, demo), es/para-organizaciones/, fr/pour-les-organismes/, ar/for-organizations/ (each index, demo); 404, robots.txt, sitemap.xml
 src/styles/global.css    design tokens (the app's palette) + all styles
 public/                  favicon, apple-touch-icon, og-image.png, _headers, screenshots/
 scripts/                 check-pricing.mjs, verify-build.mjs, og-image.html (source of og-image.png)
@@ -75,11 +75,12 @@ planner section). When the app changes — a price, a plan feature, a supported 
 
 ### For organizations (B2B)
 
-`/for-organizations` and `/es/para-organizaciones` (each with a `/demo` page) present the organization
+`/for-organizations`, `/es/para-organizaciones`, `/fr/pour-les-organismes` and `/ar/for-organizations` (right to left;
+the slug stays ASCII so shared links aren't percent-encoded), each with a `/demo` page, present the organization
 workspace — question banks drafted from an organization's own PDF/PowerPoint courses, each draft with its
 source, reviewed by the organization's team, exported as Moodle GIFT or CSV — to academies and training
-centers. English and Spanish only (Spain first); the French and Arabic pages link to the English one with
-`hreflang="en"`. The student home gets a header link, an audience band under the hero and a footer link.
+centers, in the same four languages as the student site. Each student home links to the organizations page in its own
+language (header link, audience band under the hero, footer link).
 
 - **Facts** come from `src/data/b2b.ts`, which mirrors the app's plan catalog
   (`packages/shared/src/organizations.ts`): pilot 30 days — 5 courses, 150 question drafts and 3 admin/editor
@@ -91,14 +92,17 @@ centers. English and Spanish only (Spain first); the French and Arabic pages lin
   (the app's `/start` route opens the sign-up with the organization form pre-selected; the pilot starts with the
   account). Esencial, Profesional and Centro → the demo page. **There is no online checkout**: plans are
   requested by email and activated by Exama; nothing is charged automatically, and the copy says so.
+  "Log in" (header, menu, footer) → `…/start?mode=signin&account=organization&lang=…`: the sign-in form opens on
+  "Organization account", because the organization identity is separate from a student account with the same email.
 - **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
   with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
 - **Screenshots**: real captures of the workspace only — `public/screenshots/org-review.jpg`, `org-queue.jpg`
   and `org-dashboard.jpg` are genuine captures of app.exama.app/org (the demo organization "Academia Demo Exama",
   whose only course is the Spanish Constitution, arts. 1–55, from the BOE). `org-review` is also the hero image.
+  The same captures are used on every language's page (the workspace shown is in Spanish; the alt texts are translated).
   To replace them, drop sharper captures (landscape, about 1280×800, `.webp`, `.png` or `.jpg`) under the same
   names; the build requires all three.
-- **Link previews**: `public/og-image-org-en.png` / `-es.png` (from `scripts/og-image-org-en.html` / `-es.html`),
+- **Link previews**: `public/og-image-org-{en,es,fr,ar}.png` (from `scripts/og-image-org-{en,es,fr,ar}.html`),
   so links shared by email, LinkedIn or WhatsApp show the organizations headline, not the student one.
 - **House rules**, enforced by `npm run verify` on these pages: no customer names, logos, counts, testimonials,
   case studies, statistics, time savings or guarantees; no "buy"/"checkout"; "question drafts", never

@@ -22,7 +22,7 @@ const product = [
   { label: c.footer.links.materials, href: homeAnchor(lang, SECTIONS.materials) },
   { label: c.footer.links.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
   { label: c.footer.links.faq, href: homeAnchor(lang, SECTIONS.faq) },
-  // The organizations page: in English and Spanish; the English one from the other languages.
+  // The organizations page in the same language.
   { label: c.footer.links.organizations, href: orgPathFor(orgLangFor(lang)), attrs: isOrgLang(lang) ? {} : { hreflang: 'en' } },
 ];
 const legal = [
@@ -46,7 +46,7 @@ const productLinks = org && isOrgLang(lang)
 const accountLinks = org
   ? [
       { label: org.footer.signup, href: site.links.orgSignUp(lang) },
-      { label: c.footer.links.login, href: site.links.signIn(lang) },
+      { label: c.footer.links.login, href: site.links.orgSignIn(lang) },
     ]
   : account;
 ---

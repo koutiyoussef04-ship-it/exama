@@ -17,19 +17,20 @@ export function pathFor(lang: Lang, page: '' | 'privacy' | 'terms' | 'support' =
   return page ? `/${lang}/${page}` : `/${lang}/`;
 }
 /**
- * The "for organizations" (B2B) pages exist in English and Spanish only: /for-organizations and
- * /es/para-organizaciones (+ /demo). French and Arabic pages link to the English one.
+ * The "for organizations" (B2B) pages, in the same four languages as the rest of the site (+ /demo):
+ * /for-organizations, /es/para-organizaciones, /fr/pour-les-organismes, /ar/for-organizations. The Arabic slug stays
+ * ASCII so shared links never turn into percent-encoded text.
  */
-export const ORG_LANGS = ['en', 'es'] as const;
+export const ORG_LANGS = ['en', 'es', 'fr', 'ar'] as const;
 export type OrgLang = (typeof ORG_LANGS)[number];
 export const isOrgLang = (v: unknown): v is OrgLang => typeof v === 'string' && (ORG_LANGS as readonly string[]).includes(v);
-const ORG_SLUG: Record<OrgLang, string> = { en: 'for-organizations', es: 'para-organizaciones' };
+const ORG_SLUG: Record<OrgLang, string> = { en: 'for-organizations', es: 'para-organizaciones', fr: 'pour-les-organismes', ar: 'for-organizations' };
 export type OrgPage = '' | 'demo';
 export function orgPathFor(lang: OrgLang, page: OrgPage = ''): string {
   const base = lang === 'en' ? `/${ORG_SLUG.en}` : `/${lang}/${ORG_SLUG[lang]}`;
   return page ? `${base}/${page}` : base;
 }
-/** The organizations page nearest to a language: its own in English/Spanish, the English one otherwise. */
+/** The organizations page of a language (every language has its own now; kept for callers typed with Lang). */
 export const orgLangFor = (lang: Lang): OrgLang => (isOrgLang(lang) ? lang : 'en');
 export const orgAlternatesFor = (page: OrgPage) => ORG_LANGS.map((l) => ({ lang: l, path: orgPathFor(l, page) }));
 export const orgAnchor = (lang: OrgLang, id: string) => `${orgPathFor(lang)}#${id}`;

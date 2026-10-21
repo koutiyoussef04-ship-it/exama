@@ -18,7 +18,7 @@ interface Props {
 }
 const { lang, alternates, nav = 'student' } = Astro.props;
 const c = copy(lang);
-// The organizations pages exist in English and Spanish; from French or Arabic the link opens the English one.
+// The organizations pages exist in every language of the site.
 const orgLang = orgLangFor(lang);
 const orgHref = orgPathFor(orgLang);
 const orgLinkAttrs = isOrgLang(lang) ? {} : { hreflang: 'en' };
@@ -41,6 +41,8 @@ const navLinks = org
     ];
 const ctaLabel = org ? org.cta.pilotShort : site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
 const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
+// On the organizations pages, "Log in" opens the organization sign-in (separate identity from the student account).
+const loginHref = org ? site.links.orgSignIn(lang) : site.links.signIn(lang);
 ---
 
 <header class:list={['site-header', { 'site-header-org': !!org }]}>
@@ -71,7 +73,7 @@ const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
       </ul>
     </details>
 
-    <a class="header-login" href={site.links.signIn(lang)}>{c.nav.login}</a>
+    <a class="header-login" href={loginHref}>{c.nav.login}</a>
     <a class="btn btn-primary btn-sm header-cta" href={ctaHref}>{ctaLabel}</a>
 
     <details class="menu">
@@ -82,7 +84,7 @@ const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
       <nav class="menu-panel" aria-label={c.ui.mobileNav}>
         <ul>
           {navLinks.map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
-          <li><a href={site.links.signIn(lang)}>{c.nav.login}</a></li>
+          <li><a href={loginHref}>{c.nav.login}</a></li>
         </ul>
         <a class="btn btn-primary btn-block" href={ctaHref}>{ctaLabel}</a>
       </nav>

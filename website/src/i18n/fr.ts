@@ -16,7 +16,7 @@ export const fr: Copy = {
     choose: (plan) => `Choisir ${plan}`,
     startFree: 'Commencer gratuitement',
   },
-  audience: { text: 'Vous êtes une académie ou un organisme de formation ? Exama rédige aussi des banques de questions à partir de vos propres supports, relues par votre équipe (en anglais ou en espagnol).', link: 'Exama pour les organismes' },
+  audience: { text: 'Vous êtes une académie ou un organisme de formation ? Exama rédige aussi des banques de questions à partir de vos propres supports, relues par votre équipe.', link: 'Exama pour les organismes' },
   hero: {
     eyebrow: 'La préparation aux examens par l’IA, pour les étudiants',
     titleStart: 'Transformez vos supports de cours en ',
