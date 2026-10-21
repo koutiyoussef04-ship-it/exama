@@ -245,6 +245,10 @@ test('email failures: sign-up still succeeds, no dead link is kept, and resend r
 
 test('accounts created before verification existed are never asked', async () => {
   const u = await signUp('legacy');
+  // The sign-up link is issued in the background: wait for it (as the other tests do) so that ageLinks below
+  // really ages it. Without this the token could be written after the update, and the resend would then
+  // (correctly) be refused by the 60-second cooldown — the intermittent failure seen in full-suite runs.
+  await waitForMails(u.email, 1);
   await sql`update users set email_verification_required = false where id = ${u.id}`;
   const s = (await state(u.token)).body;
   assert.equal(s.required, false);

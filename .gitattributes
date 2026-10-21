@@ -1,0 +1,5 @@
+# Generated legal texts are compared byte for byte with what `npm run legal:export -w @study/mobile` produces
+# (apps/mobile/test/legal.test.ts). Keep them LF on every checkout, including Windows with core.autocrlf=true,
+# where they would otherwise be rewritten with CRLF and fail that comparison although the text is identical.
+docs/legal/*.md text eol=lf
+website/src/data/legal.generated.json text eol=lf

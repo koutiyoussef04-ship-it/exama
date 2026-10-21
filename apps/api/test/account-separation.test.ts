@@ -226,6 +226,9 @@ test('student owner (OWNER_EMAILS) is unchanged, and only ever the student accou
   const o = await registerOrg(STUDENT_OWNER_EMAIL, ORG_PW, 'ownermail');
   assert.equal(await isOwner(o.body.user.id), false);
   assert.equal((await call('/admin/access', { token: o.body.token })).status, 403);
+  // …nor the B2B owner: the owner email in configuration grants nothing to an organization account.
+  assert.equal((await call('/b2b-admin/overview', { token: o.body.token })).status, 404);
+  assert.equal(o.body.user.b2bRole, undefined);
   // And the student owner has no B2B owner powers.
   assert.equal((await call('/b2b-admin/overview', { token: s.body.token })).status, 404);
 });
@@ -268,10 +271,13 @@ test('B2B owner: provisioned only by the server command (idempotent, no password
 
   // Dashboard: the owner only. A regular organization admin gets 404 (as for an unknown route).
   const customer = await registerOrg(`customer-${RUN}@example.com`, ORG_PW, 'customer');
-  for (const path of ['/b2b-admin/access', '/b2b-admin/overview', '/b2b-admin/organizations', '/b2b-admin/accounts']) {
+  const customerOrg = customer.body.user.organizations[0].id;
+  for (const path of ['/b2b-admin/access', '/b2b-admin/overview', '/b2b-admin/organizations', '/b2b-admin/accounts', `/b2b-admin/organizations/${customerOrg}`]) {
     assert.equal((await call(path, { token: customer.body.token })).status, 404, path);
     assert.equal((await call(path)).status, 401, path);
   }
+  // A token signed for the owner's account id but claiming the student identity is refused outright.
+  assert.equal((await call('/b2b-admin/overview', { token: await signToken(owner.user.id, new Date(), 'student') })).status, 401);
   const ov = await call<B2BOverview>('/b2b-admin/overview', { token: owner.token });
   assert.equal(ov.status, 200);
   assert.ok(ov.body.organizations.total >= 1);
@@ -331,4 +337,16 @@ test('B2B owner role cannot be obtained by signing up: the sign-up body never se
   assert.equal(r.status, 201);
   assert.equal(r.body.user.b2bRole, undefined);
   assert.equal((await call('/b2b-admin/overview', { token: r.body.token })).status, 404);
+  const [row] = (await sql`select b2b_role from users where id = ${r.body.user.id}`) as unknown as { b2b_role: string | null }[];
+  assert.equal(row.b2b_role, null, 'nothing stored either');
+  // The confirmed-email sign-up path cannot carry it: pending sign-ups have no such column, and the account is created from that row.
+  const cols = (await sql`select column_name from information_schema.columns where table_name = 'pending_signups'`) as unknown as { column_name: string }[];
+  assert.ok(!cols.some((c) => c.column_name.includes('role')), 'pending_signups stores no role');
+  // No API route writes the role: only scripts/b2b-owner.ts does.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const srcDir = new URL('../src/', import.meta.url);
+  const files = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(new URL(`${e.name}/`, dir)) : e.name.endsWith('.ts') ? [new URL(e.name, dir)] : []));
+  const code = (f: URL) => readFileSync(f, 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l)).join('\n'); // comments describe the role
+  const writers = files(srcDir).filter((f) => /b2bRole\s*:\s*'owner'|b2b_role\s*=\s*'owner'/.test(code(f)) && !f.pathname.endsWith('/db/schema.ts'));
+  assert.deepEqual(writers.map((f) => f.pathname.split('/src/')[1]), [], 'no server code sets the role');
 });

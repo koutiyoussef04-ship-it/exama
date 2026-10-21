@@ -82,16 +82,64 @@ To revoke the role: `npm run b2b:owner:prod -w @study/api -- --email you@example
 
 ## Upgrade and rollback
 
-Migration 0024:
+### Before deploying: read-only check
+
+Run in the Render Shell of exama-api (it changes nothing, and masks emails):
+
+```
+npm run accounts:split-check:prod -w @study/api
+```
+
+It reports:
+
+1. student accounts holding organization memberships;
+2. organizations without an organization-account admin;
+3. organization accounts with personal courses;
+4. emails with both account types and B2B owners (both 0 before the deploy).
+
+Items 1–3 are people who lose access at the split. If any are found:
+
+- **Item 1:** the person signs up as an organization account ("Join an existing organization"). An organization admin then adds them by email. Nothing is linked automatically.
+- **Item 2:** if the only admin was a student account, nobody can manage the organization in the workspace any more. After that person has created an organization account, the owner adds it explicitly, once, on the server:
+
+  ```sql
+  insert into organization_members (organization_id, user_id, role, added_by)
+  select '<organization id>', u.id, 'admin', u.id from users u
+  where u.email = '<their email>' and u.account_type = 'organization';
+  ```
+
+  This is a deliberate owner action for a named person, never an automatic email match.
+- **Item 3:** the courses stay in the database. Tell the person to use a student account for personal study.
+
+### What migration 0024 does
+
+The migration runs as the API's pre-deploy step, inside one transaction:
 
 1. Creates the `(email, account_type)` unique index **before** dropping the email-only constraint.
-2. Adds `b2b_role` and its check.
+2. Adds the nullable `b2b_role` column (metadata only).
+3. Adds the check constraint (a fast scan; every value is null).
 
-It runs automatically as the API's pre-deploy step.
+It is safe for existing data:
 
-Rollback works only while no email has both account types. The statements are in the migration's header.
+- **No conflicts:** every existing email is already unique, so the new index can't conflict.
+- **Locks:** the locks on `users` last as long as the index build, which is milliseconds for this table's size.
 
-Read-only checks to run in production after deploying:
+### During the deploy
+
+The old API keeps serving until the new one is live. Old code works with the new schema:
+
+- It selects only the columns it knows, so it ignores `b2b_role`.
+- It still refuses a second account for an email, so no duplicates appear before the new code runs.
+
+### Rollback
+
+Code rollback to a version before this change is safe **only while no email has both account types**: `accounts:split-check` reports this. Once duplicates exist, older code would sign in to or add whichever row the database returns first.
+
+To roll back the schema (same condition), use the statements in the migration's header.
+
+### Read-only checks (SQL)
+
+The same checks as the script, as SQL:
 
 ```sql
 -- Student accounts holding organization memberships (they no longer reach those organizations)
