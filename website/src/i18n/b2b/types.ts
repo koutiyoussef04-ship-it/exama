@@ -18,7 +18,7 @@ export type OrgPlanCopy = {
 };
 
 export type OrgCopy = {
-  meta: { title: string; description: string; demoTitle: string; demoDescription: string };
+  meta: { title: string; description: string; demoTitle: string; demoDescription: string; ogAlt: string };
   nav: { how: string; pricing: string; faq: string; students: string; demo: string };
   /** `pilotShort`: the header button (little room); `pilot` everywhere else. */
   cta: { pilot: (days: number) => string; pilotShort: string; demo: string; seeHow: string };
@@ -28,8 +28,11 @@ export type OrgCopy = {
     titleHighlight: string;
     lead: string;
     note: (days: number) => string;
-    chipsAria: string;
-    chips: string[];
+    /** Verified facts shown as a strip under the hero (storage, access, review, export). */
+    trustAria: string;
+    trust: string[];
+    /** Alt text of the real review screenshot shown in the hero when public/screenshots/org-review.* exists. */
+    shotAlt: string;
     flowAria: string;
     flowIn: string;
     inputs: string[];
@@ -57,7 +60,16 @@ export type OrgCopy = {
     vatNote: string;
     billingNote: string;
   };
-  pilot: { eyebrow: string; title: (days: number) => string; lead: string; includes: (limits: OrgLimits, perRequest: number) => string[]; afterTitle: string; after: string[] };
+  pilot: {
+    eyebrow: string;
+    title: (days: number) => string;
+    lead: string;
+    includes: (limits: OrgLimits, perRequest: number) => string[];
+    startTitle: string;
+    start: string[];
+    afterTitle: string;
+    after: string[];
+  };
   faq: { eyebrow: string; title: string; items: (days: number) => Faq[] };
   final: { title: string; text: string; note: string };
   demo: {
@@ -75,5 +87,5 @@ export type OrgCopy = {
     orText: (days: number) => string;
     back: string;
   };
-  footer: { heading: string; overview: string; pricing: string; demo: string };
+  footer: { tagline: string; product: string; account: string; how: string; pricing: string; faq: string; demo: string; signup: string; students: string };
 };

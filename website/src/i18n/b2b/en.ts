@@ -9,22 +9,24 @@ const n = (v: number) => new Intl.NumberFormat('en-IE', { useGrouping: 'always' 
 
 export const enOrg: OrgCopy = {
   meta: {
-    title: 'Exama for organizations — Question banks from your own course material',
+    title: 'Exama for organizations — Test questions from your own course material',
     description:
       'For academies and training centers: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Free 30-day pilot.',
     demoTitle: 'Request a demo — Exama for organizations',
+    ogAlt: 'Exama for organizations: test questions from your own course material, each one with its source',
     demoDescription: 'Ask for a walkthrough of the Exama organization workspace by email, or start the free 30-day pilot yourself.',
   },
   nav: { how: 'How it works', pricing: 'Pricing', faq: 'FAQ', students: 'For students', demo: 'Demo' },
   cta: { pilot: (days) => `Start the free ${days}-day pilot`, pilotShort: 'Start the free pilot', demo: 'Request a demo', seeHow: 'See how it works' },
   hero: {
-    eyebrow: 'For academies and training centers',
-    titleStart: 'Question banks drafted from ',
-    titleHighlight: 'your own course material.',
-    lead: 'Upload a course as PDF or PowerPoint. Exama drafts questions and shows the passage each one comes from. Your team reviews, edits and approves them — nothing is published without a reviewer — and exports the approved questions to Moodle or CSV.',
-    note: (days) => `${days} days free. No card, no automatic charge. Your courses and questions stay yours.`,
-    chipsAria: 'What the workspace does',
-    chips: ['PDF and PowerPoint courses', 'A source for every question', 'Review before anything is used', 'Export to Moodle GIFT or CSV'],
+    eyebrow: 'For exam-prep academies and training centers',
+    titleStart: 'Turn your course material into test questions, ',
+    titleHighlight: 'each one with its source.',
+    lead: 'Upload a PDF or PowerPoint. Exama drafts the questions and shows the passage each one comes from. Your team reviews and approves every question before it is used, then exports them to Moodle or CSV.',
+    note: (days) => `Free for ${days} days · No card · Nothing is charged automatically`,
+    trustAria: 'How your material is handled',
+    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
+    shotAlt: 'The Exama review screen: the source passage from the course next to the drafted question, with approve and reject controls',
     flowAria: 'From course material to a reviewed question bank: material in, drafts with their source, review by your team, export',
     flowIn: 'Your material',
     inputs: ['Course PDFs', 'PowerPoint slides'],
@@ -42,7 +44,7 @@ export const enOrg: OrgCopy = {
         title: 'Exam-preparation academies',
         text: 'For competitive-exam (oposiciones) preparation, where every question must point to the text it tests.',
         icon: 'exam',
-        points: ['Multiple-choice questions with four options', 'Fields for the legal reference (law, article)', 'Questions organized by topic (tema) within each course'],
+        points: ['Multiple-choice questions with four options', 'Law, article and official-gazette reference fields, filled in by your team: the AI never invents a legal reference', 'Questions organized by topic (tema) within each course'],
       },
       {
         title: 'Training providers',
@@ -137,6 +139,8 @@ export const enOrg: OrgCopy = {
     title: (days) => `${days} days to try it with your own courses`,
     lead: 'The pilot starts the moment the organization account is created. It is the full workspace, with these allowances for the whole pilot:',
     includes: (l, perRequest) => [`${n(l.coursesPerMonth)} courses`, `${n(l.itemsPerMonth)} question drafts in total`, `${n(l.maxMembers)} admins or editors, unlimited reviewers`, `Up to ${n(perRequest)} drafts per request`],
+    startTitle: 'How the pilot starts',
+    start: ['Create the organization account: its name, its type, your name and email.', 'Confirm your email with the link we send you.', 'Upload a course and ask for your first drafts. Add colleagues as editors or reviewers once they have an Exama account.'],
     afterTitle: 'When the pilot ends',
     after: [
       'Nothing is charged and nothing is deleted.',
@@ -211,5 +215,15 @@ export const enOrg: OrgCopy = {
     orText: (days) => `The ${days}-day pilot is free and starts as soon as the organization account is created — no demo needed.`,
     back: '← Back to Exama for organizations',
   },
-  footer: { heading: 'Organizations', overview: 'For organizations', pricing: 'Plans for organizations', demo: 'Request a demo' },
+  footer: {
+    tagline: 'Test questions from your own course material, each with its source, reviewed by your team.',
+    product: 'For organizations',
+    account: 'Account',
+    how: 'How it works',
+    pricing: 'Pricing',
+    faq: 'FAQ',
+    demo: 'Request a demo',
+    signup: 'Create an organization account',
+    students: 'Exama for students',
+  },
 };

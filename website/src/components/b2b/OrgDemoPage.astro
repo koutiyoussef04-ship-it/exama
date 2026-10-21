@@ -7,7 +7,7 @@ import Base from '../../layouts/Base.astro';
 import Icon from '../Icon.astro';
 import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
-import { orgAlternatesFor, orgPathFor, type OrgLang } from '../../i18n';
+import { orgAlternatesFor, orgOgImage, orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
 interface Props {
@@ -19,7 +19,7 @@ const d = c.demo;
 const mailto = site.b2b.demoMailto(d.subject, d.body);
 ---
 
-<Base title={c.meta.demoTitle} description={c.meta.demoDescription} path={orgPathFor(lang, 'demo')} lang={lang} alternates={orgAlternatesFor('demo')} nav="org">
+<Base title={c.meta.demoTitle} description={c.meta.demoDescription} path={orgPathFor(lang, 'demo')} lang={lang} alternates={orgAlternatesFor('demo')} nav="org" ogImage={orgOgImage(lang)} ogAlt={c.meta.ogAlt}>
   <section class="section demo-page">
     <div class="container narrow">
       <p class="eyebrow">{c.footer.demo}</p>

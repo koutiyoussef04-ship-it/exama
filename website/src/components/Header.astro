@@ -45,7 +45,7 @@ const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
 
 <header class:list={['site-header', { 'site-header-org': !!org }]}>
   <div class="container header-bar">
-    <a class="brand" href={pathFor(lang)} aria-label={c.ui.homeAria}>
+    <a class="brand" href={org ? orgPathFor(orgLang) : pathFor(lang)} aria-label={org ? org.meta.title : c.ui.homeAria}>
       <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" loading="eager" />
       <Wordmark />
     </a>

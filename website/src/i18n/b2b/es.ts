@@ -9,22 +9,24 @@ const n = (v: number) => new Intl.NumberFormat('es-ES', { useGrouping: 'always' 
 
 export const esOrg: OrgCopy = {
   meta: {
-    title: 'Exama para organizaciones — Bancos de preguntas a partir de tu propio material',
+    title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
     description:
       'Para academias y centros de formación: sube tu material, recibe borradores de preguntas redactados por IA con su fuente, revísalos y apruébalos en equipo y expórtalos a Moodle o CSV. Piloto gratuito de 30 días.',
     demoTitle: 'Solicitar una demo — Exama para organizaciones',
+    ogAlt: 'Exama para organizaciones: preguntas tipo test a partir de tu temario, cada una con su fuente',
     demoDescription: 'Pide por correo una demostración del espacio de trabajo para organizaciones de Exama, o empieza tú mismo el piloto gratuito de 30 días.',
   },
   nav: { how: 'Cómo funciona', pricing: 'Precios', faq: 'Preguntas', students: 'Para estudiantes', demo: 'Demo' },
   cta: { pilot: (days) => `Empieza el piloto gratuito de ${days} días`, pilotShort: 'Empezar el piloto gratuito', demo: 'Solicitar una demo', seeHow: 'Ver cómo funciona' },
   hero: {
-    eyebrow: 'Para academias y centros de formación',
-    titleStart: 'Bancos de preguntas redactados a partir de ',
-    titleHighlight: 'tu propio material.',
-    lead: 'Sube un curso en PDF o PowerPoint. Exama redacta preguntas y muestra el pasaje del que sale cada una. Tu equipo las revisa, edita y aprueba —nada se publica sin un revisor— y exporta las aprobadas a Moodle o CSV.',
-    note: (days) => `${days} días gratis. Sin tarjeta y sin cargos automáticos. Tus cursos y preguntas siguen siendo tuyos.`,
-    chipsAria: 'Qué hace el espacio de trabajo',
-    chips: ['Cursos en PDF y PowerPoint', 'Una fuente para cada pregunta', 'Revisión antes de usar nada', 'Exportación a Moodle GIFT o CSV'],
+    eyebrow: 'Para academias de oposiciones y centros de formación',
+    titleStart: 'Convierte tu temario en preguntas tipo test, ',
+    titleHighlight: 'cada una con su fuente.',
+    lead: 'Sube un PDF o un PowerPoint. Exama redacta las preguntas y muestra el pasaje del que sale cada una. Tu equipo revisa y aprueba cada pregunta antes de usarla y después las exporta a Moodle o CSV.',
+    note: (days) => `Gratis ${days} días · Sin tarjeta · Sin cargos automáticos`,
+    trustAria: 'Cómo se trata tu material',
+    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
+    shotAlt: 'La pantalla de revisión de Exama: el pasaje del curso junto a la pregunta redactada, con los controles de aprobar y rechazar',
     flowAria: 'Del material del curso a un banco de preguntas revisado: entra el material, salen borradores con su fuente, los revisa tu equipo y se exportan',
     flowIn: 'Tu material',
     inputs: ['PDF del curso', 'Diapositivas PowerPoint'],
@@ -42,7 +44,7 @@ export const esOrg: OrgCopy = {
         title: 'Academias de oposiciones',
         text: 'Para la preparación de oposiciones, donde cada pregunta debe señalar el texto que evalúa.',
         icon: 'exam',
-        points: ['Preguntas tipo test con cuatro opciones', 'Campos para la referencia legal (norma, artículo)', 'Preguntas organizadas por tema dentro de cada curso'],
+        points: ['Preguntas tipo test con cuatro opciones', 'Campos de norma, artículo y referencia del BOE que rellena tu equipo: la IA nunca se inventa una referencia legal', 'Preguntas organizadas por tema dentro de cada curso'],
       },
       {
         title: 'Centros y empresas de formación',
@@ -137,6 +139,8 @@ export const esOrg: OrgCopy = {
     title: (days) => `${days} días para probarlo con tus propios cursos`,
     lead: 'El piloto empieza en el momento en que se crea la cuenta de la organización. Es el espacio de trabajo completo, con estos límites para todo el piloto:',
     includes: (l, perRequest) => [`${n(l.coursesPerMonth)} cursos`, `${n(l.itemsPerMonth)} borradores de preguntas en total`, `${n(l.maxMembers)} administradores o editores, revisores ilimitados`, `Hasta ${n(perRequest)} borradores por petición`],
+    startTitle: 'Cómo empieza el piloto',
+    start: ['Crea la cuenta de la organización: su nombre, su tipo, tu nombre y tu correo.', 'Confirma tu correo con el enlace que te enviamos.', 'Sube un curso y pide tus primeros borradores. Añade a tus compañeros como editores o revisores cuando tengan su cuenta de Exama.'],
     afterTitle: 'Cuando termina el piloto',
     after: [
       'No se cobra nada y no se borra nada.',
@@ -211,5 +215,15 @@ export const esOrg: OrgCopy = {
     orText: (days) => `El piloto de ${days} días es gratuito y empieza en cuanto se crea la cuenta de la organización; no hace falta demo.`,
     back: '← Volver a Exama para organizaciones',
   },
-  footer: { heading: 'Organizaciones', overview: 'Para organizaciones', pricing: 'Planes para organizaciones', demo: 'Solicitar una demo' },
+  footer: {
+    tagline: 'Preguntas tipo test a partir de tu propio material, cada una con su fuente y revisada por tu equipo.',
+    product: 'Para organizaciones',
+    account: 'Cuenta',
+    how: 'Cómo funciona',
+    pricing: 'Precios',
+    faq: 'Preguntas frecuentes',
+    demo: 'Solicitar una demo',
+    signup: 'Crear una cuenta de organización',
+    students: 'Exama para estudiantes',
+  },
 };

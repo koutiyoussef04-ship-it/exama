@@ -28,6 +28,13 @@ const p = c.pilot;
         <a class="btn btn-primary btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
       </div>
     </div>
+    <div class="pilot-side">
+    <div class="card pilot-start">
+      <h3>{p.startTitle}</h3>
+      <ol class="pilot-steps">
+        {p.start.map((line) => <li>{line}</li>)}
+      </ol>
+    </div>
     <div class="card pilot-after">
       <span class="card-icon"><Icon name="clock" size={24} /></span>
       <h3>{p.afterTitle}</h3>
@@ -36,6 +43,7 @@ const p = c.pilot;
           <li><Icon name="check" size={18} /><span>{line}</span></li>
         ))}
       </ul>
+    </div>
     </div>
   </div>
 </section>
