@@ -5,7 +5,7 @@ import { LANGS, ORG_LANGS, orgPathFor, pathFor } from '../i18n';
 
 /**
  * Only indexable pages belong here: the home page in every language (/, /es/, /fr/, /ar/), the organizations
- * pages (English and Spanish, with their demo page). /support
+ * pages (every language, with their demo page). /support
  * (every language) is a `noindex` interim page; add it when it goes live.
  * The Privacy Policy and Terms (every language) are listed automatically once their text is final
  * (LEGAL_IS_DRAFT = false in apps/mobile/src/i18n/legal.ts, then `npm run legal:export -w @study/mobile`).

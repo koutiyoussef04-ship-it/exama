@@ -18,7 +18,7 @@ interface Props {
 }
 const { lang, alternates, nav = 'student' } = Astro.props;
 const c = copy(lang);
-// The organizations pages exist in English and Spanish; from French or Arabic the link opens the English one.
+// The organizations pages exist in every language of the site.
 const orgLang = orgLangFor(lang);
 const orgHref = orgPathFor(orgLang);
 const orgLinkAttrs = isOrgLang(lang) ? {} : { hreflang: 'en' };
