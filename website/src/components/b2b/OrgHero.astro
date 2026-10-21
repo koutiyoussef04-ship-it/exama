@@ -1,0 +1,75 @@
+---
+import { Image } from 'astro:assets';
+import logoMark from '../../assets/brand/logo-mark.png';
+import Icon from '../Icon.astro';
+import { ORG_PILOT_DAYS, ORG_SECTIONS } from '../../data/b2b';
+import { site } from '../../config/site';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const { lang } = Astro.props;
+const c = orgCopy(lang);
+const h = c.hero;
+const chipIcons = ['pdf', 'quote', 'graded', 'export'];
+const inputIcons = ['pdf', 'slides'];
+const outputIcons = ['check', 'export', 'export'];
+---
+
+<section class="hero org-hero" aria-labelledby="hero-title">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">{h.eyebrow}</p>
+      <h1 id="hero-title">
+        {h.titleStart}<span class="grad-text">{h.titleHighlight}</span>
+      </h1>
+      <p class="lead">{h.lead}</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
+        <a class="btn btn-secondary btn-lg" href={`#${ORG_SECTIONS.how}`}>{c.cta.seeHow}</a>
+      </div>
+      <p class="cta-note">{h.note(ORG_PILOT_DAYS)}</p>
+
+      <ul class="chips" aria-label={h.chipsAria}>
+        {h.chips.map((label, i) => (
+          <li class="chip"><Icon name={chipIcons[i]!} size={18} />{label}</li>
+        ))}
+      </ul>
+    </div>
+
+    <div class="flow" role="img" aria-label={h.flowAria}>
+      <div class="flow-group flow-in">
+        <p class="flow-label">{h.flowIn}</p>
+        <ul>
+          {h.inputs.map((label, i) => (
+            <li><Icon name={inputIcons[i]!} size={18} /><span>{label}</span></li>
+          ))}
+        </ul>
+      </div>
+
+      <div class="flow-link" aria-hidden="true"><Icon name="arrowDown" size={20} /></div>
+
+      <div class="flow-core">
+        <Image src={logoMark} alt="" width={44} height={44} class="flow-mark" />
+        <div>
+          <strong>{h.flowCore}</strong>
+          <span>{h.flowCoreSub}</span>
+        </div>
+      </div>
+
+      <div class="flow-link" aria-hidden="true"><Icon name="arrowDown" size={20} /></div>
+
+      <div class="flow-group flow-out">
+        <p class="flow-label">{h.flowOut}</p>
+        <ul>
+          {h.outputs.map((label, i) => (
+            <li><Icon name={outputIcons[i]!} size={18} /><span>{label}</span></li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>

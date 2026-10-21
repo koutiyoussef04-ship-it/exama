@@ -1,0 +1,34 @@
+---
+import Icon from '../Icon.astro';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).audiences;
+---
+
+<section id="audiences" class="section" aria-labelledby="audiences-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="audiences-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+    <ul class="cards audiences">
+      {c.items.map((a) => (
+        <li class="card">
+          <span class="card-icon"><Icon name={a.icon} size={24} /></span>
+          <h3>{a.title}</h3>
+          <p>{a.text}</p>
+          <ul class="checks">
+            {a.points.map((p) => (
+              <li><Icon name="check" size={18} /><span>{p}</span></li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

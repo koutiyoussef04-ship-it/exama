@@ -2,6 +2,7 @@
  * The website's "start" links: https://app.exama.app/start?…  — pure, unit-tested (test/start-intent.test.ts).
  *
  *   mode=signup | signin   which form a signed-out visitor sees first (default: sign-up)
+ *   account=organization   sign-up with the organization (B2B workspace) form pre-selected (the website's "for organizations" pages)
  *   intent=plans           after signing up or in, continue to the plans screen (paywall)
  *   plan=basic|student|pro, period=monthly|yearly   pre-select that plan there
  *   lang=en|es|fr|ar       the website's language (used when the app has no saved language yet)
@@ -19,7 +20,7 @@ export const PENDING_START_KEY = 'pending_start';
 export const PENDING_START_TTL_MS = 60 * 60_000;
 
 export type StartIntent = { kind: 'plans'; tier: PaidTier | null; period: BillingPeriod | null; at: number };
-export type StartLink = { mode: 'signup' | 'signin'; intent: StartIntent | null; lang: Language | null };
+export type StartLink = { mode: 'signup' | 'signin'; account: 'organization' | null; intent: StartIntent | null; lang: Language | null };
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim().toLowerCase();
 
@@ -29,6 +30,7 @@ export function parseStartLink(params: Record<string, string | string[] | undefi
   const lang = one(params.lang);
   return {
     mode: one(params.mode) === 'signin' ? 'signin' : 'signup',
+    account: one(params.account) === 'organization' ? 'organization' : null,
     intent:
       one(params.intent) === 'plans'
         ? {

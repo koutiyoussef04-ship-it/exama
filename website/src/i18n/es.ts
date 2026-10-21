@@ -8,7 +8,7 @@ export const es: Copy = {
     ogAlt: 'Exama: convierte el material de tu curso en tu entrenador personal de exámenes con IA.',
   },
   ui: { skip: 'Saltar al contenido', menu: 'Menú', homeAria: 'Exama — inicio', language: 'Idioma', primaryNav: 'Principal', mobileNav: 'Móvil' },
-  nav: { how: 'Cómo funciona', materials: 'Materiales', pricing: 'Precios', faq: 'Preguntas', login: 'Iniciar sesión' },
+  nav: { how: 'Cómo funciona', materials: 'Materiales', pricing: 'Precios', faq: 'Preguntas', login: 'Iniciar sesión', organizations: 'Para organizaciones' },
   cta: {
     trial: (days) => `Empieza tu prueba gratuita de ${days} días`,
     free: 'Empieza gratis',
@@ -16,6 +16,7 @@ export const es: Copy = {
     choose: (plan) => `Elegir ${plan}`,
     startFree: 'Empezar gratis',
   },
+  audience: { text: '¿Eres una academia o un centro de formación? Exama también redacta bancos de preguntas a partir de tu propio material, revisados por tu equipo.', link: 'Exama para organizaciones' },
   hero: {
     eyebrow: 'Preparación de exámenes con IA para estudiantes',
     titleStart: 'Convierte el material de tu curso en tu ',
@@ -259,7 +260,7 @@ export const es: Copy = {
     product: 'Producto',
     legalHelp: 'Legal y ayuda',
     account: 'Cuenta',
-    links: { how: 'Cómo funciona', materials: 'Material compatible', pricing: 'Precios', faq: 'Preguntas frecuentes', privacy: 'Privacidad', terms: 'Condiciones', support: 'Ayuda', login: 'Iniciar sesión', signup: 'Crear una cuenta' },
+    links: { how: 'Cómo funciona', materials: 'Material compatible', pricing: 'Precios', faq: 'Preguntas frecuentes', privacy: 'Privacidad', terms: 'Condiciones', support: 'Ayuda', login: 'Iniciar sesión', signup: 'Crear una cuenta', organizations: 'Para organizaciones' },
   },
   support: {
     title: 'Ayuda',

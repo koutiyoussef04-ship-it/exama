@@ -15,8 +15,10 @@ export type PriceLine = { monthly: string; yearly: string; savingPct: number };
 export type Copy = {
   meta: { title: string; description: string; ogAlt: string };
   ui: { skip: string; menu: string; homeAria: string; language: string; primaryNav: string; mobileNav: string };
-  nav: { how: string; materials: string; pricing: string; faq: string; login: string };
+  nav: { how: string; materials: string; pricing: string; faq: string; login: string; organizations: string };
   cta: { trial: (days: number) => string; free: string; secondary: string; choose: (plan: string) => string; startFree: string };
+  /** The band under the hero that sends academies and training centers to the organizations page. */
+  audience: { text: string; link: string };
   hero: {
     eyebrow: string;
     titleStart: string;
@@ -75,7 +77,7 @@ export type Copy = {
     product: string;
     legalHelp: string;
     account: string;
-    links: { how: string; materials: string; pricing: string; faq: string; privacy: string; terms: string; support: string; login: string; signup: string };
+    links: { how: string; materials: string; pricing: string; faq: string; privacy: string; terms: string; support: string; login: string; signup: string; organizations: string };
   };
   support: { title: string; description: string; intro: string; openApp: string; emailLead: string; noEmail: string; faqLead: string; faqLink: string; back: string };
 };

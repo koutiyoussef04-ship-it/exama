@@ -1,7 +1,8 @@
 # Exama marketing website
 
-The public landing site for **https://exama.app**, in English, Spanish, French and Arabic. Its one job: turn
-visitors into students of the Exama app. Every button goes to the app's **`/start`** route
+The public landing site for **https://exama.app**, in English, Spanish, French and Arabic. Its job: turn
+visitors into students of the Exama app — and, since the organizations pages, send academies and training
+centers to the organization workspace (see "For organizations" below). Every button goes to the app's **`/start`** route
 (`https://app.exama.app/start?…`), which works for new and existing accounts alike: signed out it shows sign-up
 (with a link to sign in) or sign-in; after signing up or in — or straight away when already signed in — it
 continues where the button said (the plans screen, with the chosen plan pre-selected, for the pricing buttons).
@@ -18,7 +19,7 @@ This is a **separate, static site** next to the Exama app. It does not import, s
 | Framework | [Astro](https://astro.build) 7 — static output, zero client-side JavaScript framework |
 | Styling | one hand-written stylesheet (`src/styles/global.css`), system fonts, no web-font requests |
 | Runtime JS | none, except a small inline helper that closes the menus after a link is used |
-| Languages | `/` English, `/es/` Spanish, `/fr/` French, `/ar/` Arabic (right-to-left) — plus the legal and support pages in each |
+| Languages | `/` English, `/es/` Spanish, `/fr/` French, `/ar/` Arabic (right-to-left) — plus the legal and support pages in each; the organizations pages in English and Spanish |
 | Page weight | ~8 KB HTML + ~4 KB CSS (gzipped), plus a few tiny images |
 
 ```
@@ -42,20 +43,24 @@ npm test           # pricing check + typecheck + build + post-build verification
 | Script | What it does |
 |---|---|
 | `npm run typecheck` | `astro check` (TypeScript + Astro diagnostics) |
-| `npm run check:pricing` | Fails if the site's prices/trial length differ from the launch prices **or** from `packages/shared/src/billing.ts` |
+| `npm run check:pricing` | Fails if the site's prices/trial length differ from the launch prices **or** from `packages/shared/src/billing.ts`; same for the organization plans vs `packages/shared/src/organizations.ts` |
 | `npm run verify` | After a build, for every language: SEO tags and hreflang, `lang`/`dir`, one `<h1>`, alt text, the language selector, internal links/anchors, the exact app links (sign-up, sign-in, plans), prices, 7 FAQs = structured data, footer, no untranslated English, trial copy only when web checkout is live, no JS bundles, payload size, and **no fabricated social proof**. Run it with the same `PUBLIC_WEB_CHECKOUT_AVAILABLE` as the build |
 
 ## Where things live
 
 ```
-src/config/site.ts       domain, app URL, links into the app (/start), the web-checkout flag, OG image, legal/contact details (null until confirmed)
+src/config/site.ts       domain, app URL, links into the app (/start), the web-checkout flag, OG image, legal/contact details (null until confirmed), the B2B demo address
+src/data/b2b.ts          organization plans (allowances, prices ex-VAT, pilot length) — checked against packages/shared/src/organizations.ts
+src/i18n/b2b/            types.ts + en.ts / es.ts: ALL text of the organizations pages
+src/components/b2b/      the organizations page (OrgPage.astro = hero, audiences, how, review, team, pricing, pilot, FAQ, final CTA) and the demo page
+src/components/AudienceBand.astro   the band under the student hero that points academies to the organizations page
 src/i18n/                languages.ts (languages, URLs, direction), types.ts (the shape of the copy), en.ts / es.ts / fr.ts / ar.ts (ALL page text)
 src/data/content.ts      product facts shared by every language: trial length, prices, plan order, section anchors
 src/data/legal.ts        Privacy Policy + Terms (en/es/fr/ar) from legal.generated.json — exported from the app, never edited here
 src/components/*.astro   one component per page section (Hero, HowItWorks, …), each takes `lang`; Home.astro puts them together
 src/layouts/             Base.astro (head/SEO/hreflang/lang+dir), InfoPage.astro (support/404)
 src/components/LegalDocument.astro   one legal document in one language (language links, draft notice, hreflang)
-src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); 404, robots.txt, sitemap.xml
+src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); for-organizations/ (index, demo), es/para-organizaciones/ (index, demo); 404, robots.txt, sitemap.xml
 src/styles/global.css    design tokens (the app's palette) + all styles
 public/                  favicon, apple-touch-icon, og-image.png, _headers, screenshots/
 scripts/                 check-pricing.mjs, verify-build.mjs, og-image.html (source of og-image.png)
@@ -67,6 +72,34 @@ Nothing on the site may promise more than the app does. `src/data/content.ts` do
 claim comes from (`billing.ts`, `features.ts`, `limits.ts`, `materials.ts`, `grounding.ts`, the README's
 planner section). When the app changes — a price, a plan feature, a supported format — update
 `content.ts` and the four files in `src/i18n/`, then run `npm test`.
+
+### For organizations (B2B)
+
+`/for-organizations` and `/es/para-organizaciones` (each with a `/demo` page) present the organization
+workspace — question banks drafted from an organization's own PDF/PowerPoint courses, each draft with its
+source, reviewed by the organization's team, exported as Moodle GIFT or CSV — to academies and training
+centers. English and Spanish only (Spain first); the French and Arabic pages link to the English one with
+`hreflang="en"`. The student home gets a header link, an audience band under the hero and a footer link.
+
+- **Facts** come from `src/data/b2b.ts`, which mirrors the app's plan catalog
+  (`packages/shared/src/organizations.ts`): pilot 30 days — 5 courses, 150 question drafts and 3 admin/editor
+  seats **as totals**; Esencial €149/month · €1,490/year — 10 course uploads and 500 question drafts **per
+  calendar month**, 10 seats; Profesional €349/month · €3,490/year — 100 / 2,000 per month, 25 seats; Centro
+  custom; reviewers unlimited; at most 20 drafts per request. `npm run check:pricing` fails if any of it drifts
+  from the app. Prices are shown **excluding VAT** (`+ VAT` / `+ IVA` and a note).
+- **Buttons.** "Start the free 30-day pilot" → `https://app.exama.app/start?mode=signup&account=organization&lang=…`
+  (the app's `/start` route opens the sign-up with the organization form pre-selected; the pilot starts with the
+  account). Esencial, Profesional and Centro → the demo page. **There is no online checkout**: plans are
+  requested by email and activated by Exama; nothing is charged automatically, and the copy says so.
+- **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
+  with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
+- **Screenshots**: real captures of the workspace only. Save them as `public/screenshots/org-review`,
+  `org-queue` and `org-dashboard` (`.webp`, `.png` or `.jpg`, landscape, about 1280×800) and they appear in the
+  "Every question shows where it comes from" section automatically; until then the cards show icons.
+- **House rules**, enforced by `npm run verify` on these pages: no customer names, logos, counts, testimonials,
+  case studies, statistics, time savings or guarantees; no "buy"/"checkout"; "question drafts", never
+  "generations"; monthly wording on the paid plans; the exact app links; English + Spanish hreflang only;
+  FAQ = structured data; no tracking scripts.
 
 ### Languages
 

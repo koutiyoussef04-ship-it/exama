@@ -8,7 +8,7 @@ export const fr: Copy = {
     ogAlt: 'Exama : transformez vos supports de cours en coach d’examen IA personnel.',
   },
   ui: { skip: 'Aller au contenu', menu: 'Menu', homeAria: 'Exama — accueil', language: 'Langue', primaryNav: 'Navigation principale', mobileNav: 'Navigation mobile' },
-  nav: { how: 'Fonctionnement', materials: 'Supports', pricing: 'Tarifs', faq: 'FAQ', login: 'Se connecter' },
+  nav: { how: 'Fonctionnement', materials: 'Supports', pricing: 'Tarifs', faq: 'FAQ', login: 'Se connecter', organizations: 'Pour les organismes' },
   cta: {
     trial: (days) => `Commencez votre essai gratuit de ${days} jours`,
     free: 'Commencer gratuitement',
@@ -16,6 +16,7 @@ export const fr: Copy = {
     choose: (plan) => `Choisir ${plan}`,
     startFree: 'Commencer gratuitement',
   },
+  audience: { text: 'Vous êtes une académie ou un organisme de formation ? Exama rédige aussi des banques de questions à partir de vos propres supports, relues par votre équipe (en anglais ou en espagnol).', link: 'Exama pour les organismes' },
   hero: {
     eyebrow: 'La préparation aux examens par l’IA, pour les étudiants',
     titleStart: 'Transformez vos supports de cours en ',
@@ -259,7 +260,7 @@ export const fr: Copy = {
     product: 'Produit',
     legalHelp: 'Mentions et aide',
     account: 'Compte',
-    links: { how: 'Fonctionnement', materials: 'Supports compatibles', pricing: 'Tarifs', faq: 'FAQ', privacy: 'Confidentialité', terms: 'Conditions', support: 'Aide', login: 'Se connecter', signup: 'Créer un compte' },
+    links: { how: 'Fonctionnement', materials: 'Supports compatibles', pricing: 'Tarifs', faq: 'FAQ', privacy: 'Confidentialité', terms: 'Conditions', support: 'Aide', login: 'Se connecter', signup: 'Créer un compte', organizations: 'Pour les organismes' },
   },
   support: {
     title: 'Aide',
