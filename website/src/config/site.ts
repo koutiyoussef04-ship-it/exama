@@ -40,7 +40,20 @@ const links = {
   plans: (lang: Lang, plan?: 'basic' | 'student' | 'pro') => startUrl(lang, { mode: 'signup', intent: 'plans', ...(plan ? { plan, period: 'monthly' } : {}) }),
   /** The main call to action: plans (with the trial) when web checkout is live, otherwise a free account. */
   primary: (lang: Lang) => (webCheckoutAvailable ? links.plans(lang) : links.signUp(lang)),
+  /**
+   * Organization sign-up (the B2B pages): the same /start route, with the organization form pre-selected
+   * (apps/mobile/src/lib/start-intent.ts, `account=organization`). The 30-day pilot starts with the account;
+   * no card, no payment.
+   */
+  orgSignUp: (lang: Lang) => startUrl(lang, { mode: 'signup', account: 'organization' }),
 };
+
+/**
+ * Demo requests from the organizations pages go by email (a mailto link with a pre-filled subject and body,
+ * plus the address written out): no form, no backend, no third-party service. Confirmed address.
+ */
+const B2B_DEMO_EMAIL = 'examaweb@gmail.com';
+const demoMailto = (subject: string, body: string) => `mailto:${B2B_DEMO_EMAIL}?${new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20')}`;
 
 export const site = {
   name: 'Exama',
@@ -50,6 +63,7 @@ export const site = {
   appUrl: APP_URL,
   webCheckoutAvailable,
   links,
+  b2b: { demoEmail: B2B_DEMO_EMAIL, demoMailto },
   ogImage: { path: '/og-image.png', width: 1200, height: 630 },
   /**
    * Confirmed legal/contact details. `null` = not confirmed yet (never guess). They fill {{company}},

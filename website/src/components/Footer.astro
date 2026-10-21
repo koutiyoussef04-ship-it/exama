@@ -4,7 +4,7 @@ import logoMark from '../assets/brand/logo-mark.png';
 import Wordmark from './Wordmark.astro';
 import { SECTIONS } from '../data/content';
 import { site } from '../config/site';
-import { copy, homeAnchor, pathFor, type Lang } from '../i18n';
+import { copy, homeAnchor, isOrgLang, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
 
 interface Props {
   lang: Lang;
@@ -17,6 +17,8 @@ const product = [
   { label: c.footer.links.materials, href: homeAnchor(lang, SECTIONS.materials) },
   { label: c.footer.links.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
   { label: c.footer.links.faq, href: homeAnchor(lang, SECTIONS.faq) },
+  // The organizations page: in English and Spanish; the English one from the other languages.
+  { label: c.footer.links.organizations, href: orgPathFor(orgLangFor(lang)), attrs: isOrgLang(lang) ? {} : { hreflang: 'en' } },
 ];
 const legal = [
   { label: c.footer.links.privacy, href: pathFor(lang, 'privacy') },
@@ -43,7 +45,7 @@ const account = [
     <nav aria-label={c.footer.product}>
       <h2 class="footer-heading">{c.footer.product}</h2>
       <ul>
-        {product.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {product.map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
       </ul>
     </nav>
 

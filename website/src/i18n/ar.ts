@@ -8,7 +8,7 @@ export const ar: Copy = {
     ogAlt: 'Exama: حوّل مادة مقررك إلى مدرّب شخصي للاختبارات بالذكاء الاصطناعي.',
   },
   ui: { skip: 'انتقل إلى المحتوى', menu: 'القائمة', homeAria: 'Exama — الصفحة الرئيسية', language: 'اللغة', primaryNav: 'التنقل الرئيسي', mobileNav: 'تنقل الجوال' },
-  nav: { how: 'طريقة العمل', materials: 'المواد', pricing: 'الأسعار', faq: 'الأسئلة الشائعة', login: 'تسجيل الدخول' },
+  nav: { how: 'طريقة العمل', materials: 'المواد', pricing: 'الأسعار', faq: 'الأسئلة الشائعة', login: 'تسجيل الدخول', organizations: 'للمؤسسات' },
   cta: {
     trial: (days) => `ابدأ تجربتك المجانية لمدة ${days} أيام`,
     free: 'ابدأ مجانًا',
@@ -16,6 +16,7 @@ export const ar: Copy = {
     choose: (plan) => `اختر ${plan}`,
     startFree: 'ابدأ مجانًا',
   },
+  audience: { text: 'هل أنت أكاديمية أو مركز تدريب؟ تُعدّ Exama أيضًا بنوك أسئلة من موادك التعليمية الخاصة، يراجعها فريقك (بالإنجليزية أو الإسبانية).', link: 'Exama للمؤسسات' },
   hero: {
     eyebrow: 'التحضير للاختبارات بالذكاء الاصطناعي للطلاب',
     titleStart: 'حوّل مادة مقررك إلى ',
@@ -259,7 +260,7 @@ export const ar: Copy = {
     product: 'المنتج',
     legalHelp: 'الشؤون القانونية والمساعدة',
     account: 'الحساب',
-    links: { how: 'طريقة العمل', materials: 'المواد المدعومة', pricing: 'الأسعار', faq: 'الأسئلة الشائعة', privacy: 'الخصوصية', terms: 'الشروط', support: 'المساعدة', login: 'تسجيل الدخول', signup: 'إنشاء حساب' },
+    links: { how: 'طريقة العمل', materials: 'المواد المدعومة', pricing: 'الأسعار', faq: 'الأسئلة الشائعة', privacy: 'الخصوصية', terms: 'الشروط', support: 'المساعدة', login: 'تسجيل الدخول', signup: 'إنشاء حساب', organizations: 'للمؤسسات' },
   },
   support: {
     title: 'المساعدة',

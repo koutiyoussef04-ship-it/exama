@@ -1,0 +1,30 @@
+---
+import { ORG_PILOT_DAYS, ORG_SECTIONS } from '../../data/b2b';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).faq;
+const items = c.items(ORG_PILOT_DAYS);
+---
+
+<section id={ORG_SECTIONS.faq} class="section" aria-labelledby="faq-title">
+  <div class="container narrow">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="faq-title">{c.title}</h2>
+    </div>
+    <div class="faq">
+      {items.map((f) => (
+        <details>
+          <summary>{f.q}</summary>
+          <div class="faq-a">
+            {f.a.map((para) => <p>{para}</p>)}
+          </div>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>

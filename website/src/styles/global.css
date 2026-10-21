@@ -1346,3 +1346,213 @@ html[lang='ar'] .eyebrow {
   gap: 16px;
   margin-top: 24px;
 }
+
+/* ---------- For organizations (B2B pages) and the audience band on the student home ---------- */
+
+.audience-band {
+  background: var(--surface);
+  border-block: 1px solid var(--border);
+}
+.audience-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding-block: 18px;
+}
+.audience-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+.audience-inner p {
+  flex: 1 1 24rem;
+  margin: 0;
+  font-size: 0.98rem;
+  color: var(--muted);
+}
+.audience-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.audience-link:hover {
+  text-decoration: underline;
+}
+
+/* The organizations header carries one more link: tighter nav below 1200px so the button stays visible. */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .site-header-org .nav-desktop ul {
+    gap: 18px;
+  }
+  .site-header-org .nav-desktop a,
+  .site-header-org .header-login {
+    font-size: 0.9rem;
+  }
+}
+
+.audiences {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.audiences .checks {
+  margin-top: 18px;
+  gap: 10px;
+}
+.audiences .checks li {
+  color: var(--text);
+}
+
+@media (min-width: 1000px) {
+  .steps-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.checks-grid {
+  margin-top: 0;
+  margin-bottom: 36px;
+  max-width: 60rem;
+}
+@media (min-width: 760px) {
+  .checks-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 32px;
+  }
+}
+.org-screens {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 760px) {
+  .org-screens {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .org-screens .product-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+.shot-wide {
+  aspect-ratio: 16 / 10;
+}
+.shot-wide img {
+  object-position: top left;
+}
+
+.roles {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+.role {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.role dt {
+  font-weight: 700;
+  color: var(--navy);
+}
+.role dd {
+  margin: 0;
+  color: var(--muted);
+}
+.usage-card,
+.pilot-after {
+  align-self: start;
+}
+.usage-card h3,
+.pilot-after h3 {
+  margin-top: 16px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.pilot-after .checks {
+  margin-top: 16px;
+}
+.pilot-after .checks li,
+.usage-card p {
+  color: var(--muted);
+}
+#pilot .cta-row {
+  margin-top: 28px;
+}
+
+.org-pricing .price-per {
+  white-space: nowrap;
+}
+@media (min-width: 720px) {
+  .org-pricing {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1100px) {
+  .org-pricing {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.cta-center {
+  justify-content: center;
+}
+.btn-outline-light {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+.btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #fff;
+}
+
+.demo-page h1 {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+}
+.demo-page h2 {
+  margin-top: 40px;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.demo-page .checks {
+  margin-top: 16px;
+}
+.demo-card {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  margin-top: 28px;
+}
+.demo-card .btn {
+  max-width: 100%;
+}
+.demo-how,
+.demo-address {
+  margin: 0;
+  color: var(--muted);
+}
+.demo-address a {
+  font-weight: 650;
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+.demo-card .fineprint {
+  margin-top: 0;
+}
+.demo-or {
+  margin-top: 40px;
+}
+.demo-or h2 {
+  margin-top: 0;
+}
+.demo-or p {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.demo-or .btn {
+  margin-top: 16px;
+}

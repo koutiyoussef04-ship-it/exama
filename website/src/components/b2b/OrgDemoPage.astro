@@ -1,0 +1,52 @@
+---
+/**
+ * Demo request (/for-organizations/demo, /es/para-organizaciones/demo). No form, no backend, no third party:
+ * a mailto link with a pre-filled subject and body to the confirmed address, written out as well.
+ */
+import Base from '../../layouts/Base.astro';
+import Icon from '../Icon.astro';
+import { ORG_PILOT_DAYS } from '../../data/b2b';
+import { site } from '../../config/site';
+import { orgAlternatesFor, orgPathFor, type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const { lang } = Astro.props;
+const c = orgCopy(lang);
+const d = c.demo;
+const mailto = site.b2b.demoMailto(d.subject, d.body);
+---
+
+<Base title={c.meta.demoTitle} description={c.meta.demoDescription} path={orgPathFor(lang, 'demo')} lang={lang} alternates={orgAlternatesFor('demo')} nav="org">
+  <section class="section demo-page">
+    <div class="container narrow">
+      <p class="eyebrow">{c.footer.demo}</p>
+      <h1>{d.title}</h1>
+      <p class="lead">{d.intro}</p>
+
+      <div class="card demo-card">
+        <a class="btn btn-primary btn-lg" href={mailto} rel="nofollow"><Icon name="mail" size={20} />{d.emailButton}</a>
+        <p class="demo-how">{d.emailHow}</p>
+        <p class="demo-address">{d.addressLead} <a href={`mailto:${site.b2b.demoEmail}`}>{site.b2b.demoEmail}</a></p>
+        <p class="fineprint">{d.replyNote}</p>
+      </div>
+
+      <h2>{d.includeTitle}</h2>
+      <ul class="checks">
+        {d.include.map((line) => (
+          <li><Icon name="check" size={18} /><span>{line}</span></li>
+        ))}
+      </ul>
+
+      <div class="card demo-or">
+        <h2>{d.orTitle}</h2>
+        <p>{d.orText(ORG_PILOT_DAYS)}</p>
+        <a class="btn btn-secondary" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
+      </div>
+
+      <p class="back"><a href={orgPathFor(lang)}>{d.back}</a></p>
+    </div>
+  </section>
+</Base>

@@ -13,14 +13,18 @@ const NOW = Date.UTC(2026, 9, 16, 9, 0);
 test('known values only: mode, plan, period and language; anything else is ignored', () => {
   assert.deepEqual(parseStartLink({ intent: 'plans', plan: 'student', period: 'yearly', lang: 'ar' }, NOW), {
     mode: 'signup',
+    account: null,
     intent: { kind: 'plans', tier: 'student', period: 'yearly', at: NOW },
     lang: 'ar',
   });
   assert.equal(parseStartLink({ mode: 'signin' }, NOW).mode, 'signin');
+  assert.equal(parseStartLink({ mode: 'signup', account: 'organization' }, NOW).account, 'organization', 'the B2B pages open the organization sign-up');
+  assert.equal(parseStartLink({ account: 'student' }, NOW).account, null);
+  assert.equal(parseStartLink({ account: 'admin' } as never, NOW).account, null);
   assert.equal(parseStartLink({ mode: 'whatever' }, NOW).mode, 'signup');
   assert.equal(parseStartLink({}, NOW).intent, null, 'no intent: just sign up / sign in');
   const odd = parseStartLink({ intent: 'plans', plan: 'enterprise', period: 'weekly', lang: 'de', next: 'https://evil.example', redirect: '//evil.example' } as never, NOW);
-  assert.deepEqual(odd, { mode: 'signup', intent: { kind: 'plans', tier: null, period: null, at: NOW }, lang: null });
+  assert.deepEqual(odd, { mode: 'signup', account: null, intent: { kind: 'plans', tier: null, period: null, at: NOW }, lang: null });
   assert.equal(parseStartLink({ intent: 'https://evil.example' }, NOW).intent, null);
 });
 
@@ -44,7 +48,9 @@ test('the flow: /start remembers the destination for signed-out visitors; after 
   const start = src('app/start.tsx');
   assert.match(start, /if \(link\.intent && !user\) await kv\.set\(PENDING_START_KEY/);
   assert.match(start, /if \(user\) return <Redirect href=\{link\.intent \? startDestination\(link\.intent\) : '\/'\} \/>/);
-  assert.match(start, /link\.mode === 'signin' \? '\/sign-in' : '\/sign-up'/);
+  assert.match(start, /if \(link\.mode === 'signin'\) return <Redirect href="\/sign-in" \/>;/);
+  assert.match(start, /link\.account \? \{ pathname: '\/sign-up', params: \{ account: link\.account \} \} : '\/sign-up'/, 'account=organization reaches the sign-up form');
+  assert.match(src('app/sign-up.tsx'), /params\.account === 'organization' \? 'organization' : null/, 'the form pre-selects the organization step');
   const index = src('app/index.tsx');
   assert.match(index, /if \(gate !== 'proceed' \|\| mustVerify \|\| !pending\.intent\) return;/, 'only after onboarding (and verification, when enforced)');
   assert.match(index, /pending\.consume\(\);\s*router\.push\(to\);/, 'used once');

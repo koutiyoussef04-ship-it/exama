@@ -1,0 +1,80 @@
+---
+import Icon from '../Icon.astro';
+import { formatEuros } from '../../data/content';
+import { ORG_LIMITS, ORG_MAX_ITEMS_PER_REQUEST, ORG_PILOT_DAYS, ORG_PLAN_ORDER, ORG_PRICES, ORG_SECTIONS, orgYearlySavingPct, type OrgPaidPlan } from '../../data/b2b';
+import { site } from '../../config/site';
+import { orgPathFor, type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const { lang } = Astro.props;
+const c = orgCopy(lang).pricing;
+const demo = orgPathFor(lang, 'demo');
+const plans = ORG_PLAN_ORDER.map((id) => {
+  const paid = id in ORG_PRICES ? (id as OrgPaidPlan) : null;
+  const limits = id === 'centro' ? null : ORG_LIMITS[id];
+  return {
+    id,
+    ...c.plans[id],
+    features: c.plans[id].features(limits, ORG_MAX_ITEMS_PER_REQUEST),
+    price: paid ? { monthly: formatEuros(ORG_PRICES[paid].monthlyCents, lang), yearly: formatEuros(ORG_PRICES[paid].yearlyCents, lang), savingPct: orgYearlySavingPct(paid) } : null,
+    // Pilot: the organization sign-up (the pilot starts with the account). Paid plans and Centro: ask by email (demo page).
+    href: id === 'pilot' ? site.links.orgSignUp(lang) : demo,
+    recommended: id === 'esencial',
+  };
+});
+---
+
+<section id={ORG_SECTIONS.pricing} class="section" aria-labelledby="pricing-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="pricing-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+
+    <ul class="pricing org-pricing">
+      {plans.map((p) => (
+        <li class:list={['plan', { 'plan-recommended': p.recommended }]} data-plan={p.id}>
+          <div class="plan-top">
+            <h3>{p.name}</h3>
+          </div>
+          <p class="plan-tagline">{p.tagline}</p>
+
+          {p.price ? (
+            <div class="plan-price">
+              <p class="price-main"><span class="price-amount">{p.price.monthly}</span><span class="price-per">{c.perMonth} {c.plusVat}</span></p>
+              <p class="price-alt">{c.orYearly(p.price.yearly, p.price.savingPct)}</p>
+            </div>
+          ) : p.id === 'pilot' ? (
+            <div class="plan-price">
+              <p class="price-main"><span class="price-amount">{c.pilotPrice}</span></p>
+              <p class="price-alt">{c.pilotDuration(ORG_PILOT_DAYS)}</p>
+            </div>
+          ) : (
+            <div class="plan-price">
+              <p class="price-main"><span class="price-amount">{c.custom}</span></p>
+              <p class="price-alt">{c.customSub}</p>
+            </div>
+          )}
+
+          <ul class="plan-features">
+            {p.features.map((f) => (
+              <li>
+                <Icon name="check" size={18} />
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+
+          <a class:list={['btn', 'btn-block', p.id === 'pilot' || p.recommended ? 'btn-primary' : 'btn-secondary']} href={p.href}>{p.cta}</a>
+        </li>
+      ))}
+    </ul>
+
+    <p class="fineprint center">{c.vatNote}</p>
+    <p class="fineprint center">{c.billingNote}</p>
+  </div>
+</section>

@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
@@ -29,7 +29,9 @@ export default function SignUp() {
   // Optional marketing-email consent: unticked by default, never required, separate from the terms below the button.
   const [marketing, setMarketing] = useState(false);
   // First step: "How will you use Exama?" — student (the study app) or organization (the workspace).
-  const [accountType, setAccountType] = useState<AccountType | null>(null);
+  // Pre-answered by /start?account=organization (the website's "for organizations" pages).
+  const params = useLocalSearchParams<{ account?: string }>();
+  const [accountType, setAccountType] = useState<AccountType | null>(() => (params.account === 'organization' ? 'organization' : null));
   const [organizationName, setOrganizationName] = useState('');
   const [market, setMarket] = useState<OrganizationMarket | null>(null);
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.

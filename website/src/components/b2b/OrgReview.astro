@@ -1,0 +1,54 @@
+---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import Icon from '../Icon.astro';
+import { ORG_SECTIONS } from '../../data/b2b';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).review;
+
+/**
+ * Real workspace screens only. Drop genuine screenshots of the organization workspace (app.exama.app/org)
+ * into `public/screenshots/` named org-review, org-queue and org-dashboard (.webp, .png or .jpg) and they
+ * appear here automatically. Until a file exists, the card shows an icon — this site never mocks up screens.
+ */
+const EXTENSIONS = ['webp', 'png', 'jpg'];
+const screens = c.screens.map((s) => {
+  const ext = EXTENSIONS.find((e) => existsSync(join(process.cwd(), 'public', 'screenshots', `${s.id}.${e}`)));
+  return { ...s, src: ext ? `/screenshots/${s.id}.${ext}` : null };
+});
+---
+
+<section id={ORG_SECTIONS.review} class="section" aria-labelledby="review-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="review-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+    <ul class="checks checks-grid">
+      {c.points.map((p) => (
+        <li><Icon name="check" size={18} /><span>{p}</span></li>
+      ))}
+    </ul>
+    <ul class="product-grid org-screens">
+      {screens.map((s) => (
+        <li class="product-card">
+          {s.src ? (
+            <div class="shot shot-wide">
+              <img src={s.src} alt={s.alt} loading="lazy" decoding="async" />
+            </div>
+          ) : (
+            <span class="card-icon"><Icon name={s.icon} size={24} /></span>
+          )}
+          <h3>{s.title}</h3>
+          <p>{s.text}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

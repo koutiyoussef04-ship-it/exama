@@ -28,9 +28,16 @@ const SIGNUP = (lang) => start(lang, { mode: 'signup' });
 const SIGNIN = (lang) => start(lang, { mode: 'signin' });
 const PLANS = (lang, plan) => start(lang, { mode: 'signup', intent: 'plans', ...(plan ? { plan, period: 'monthly' } : {}) });
 const PRIMARY = (lang) => (TRIAL ? PLANS(lang) : SIGNUP(lang));
+/** The organizations pages: sign-up with the organization form pre-selected (the 30-day pilot starts with the account). */
+const ORG_SIGNUP = (lang) => start(lang, { mode: 'signup', account: 'organization' });
+const DEMO_EMAIL = 'examaweb@gmail.com';
 
 const LANGS = ['en', 'es', 'fr', 'ar'];
+const ORG_LANGS = ['en', 'es'];
 const homePath = (l) => (l === 'en' ? '/' : `/${l}/`);
+const orgPath = (l, page = '') => `${l === 'en' ? '/for-organizations' : '/es/para-organizaciones'}${page ? `/${page}` : ''}`;
+/** The organizations page a language links to: its own in English/Spanish, the English one from French/Arabic. */
+const orgLinkFor = (l) => orgPath(ORG_LANGS.includes(l) ? l : 'en');
 const pagePath = (l, page) => (l === 'en' ? `/${page}` : `/${l}/${page}`);
 const fileOf = (route) => (route === '/404' ? '404.html' : route === '/' ? 'index.html' : `${route.replace(/^\//, '').replace(/\/$/, '')}/index.html`);
 
@@ -46,6 +53,7 @@ const EXPECT = {
     prices: ['€0', '€9.99', '€79.99', '€14.99', '€119.99', '€24.99', '€199.99'],
     trialWords: /free trial|days free|\btrial\b/i,
     language: 'English',
+    orgNav: 'For organizations',
   },
   es: {
     title: 'Exama — Tu entrenador de exámenes con IA',
@@ -57,6 +65,7 @@ const EXPECT = {
     prices: ['0 €', '9,99 €', '79,99 €', '14,99 €', '119,99 €', '24,99 €', '199,99 €'],
     trialWords: /prueba gratuita|días gratis|periodo de prueba/i,
     language: 'Español',
+    orgNav: 'Para organizaciones',
   },
   fr: {
     title: 'Exama — Votre coach d’examen IA',
@@ -68,6 +77,7 @@ const EXPECT = {
     prices: ['0 €', '9,99 €', '79,99 €', '14,99 €', '119,99 €', '24,99 €', '199,99 €'],
     trialWords: /essai gratuit|jours gratuits|période d’essai/i,
     language: 'Français',
+    orgNav: 'Pour les organismes',
   },
   ar: {
     title: 'Exama — مدرّبك للاختبارات بالذكاء الاصطناعي',
@@ -79,8 +89,51 @@ const EXPECT = {
     prices: ['0 €', '9.99 €', '79.99 €', '14.99 €', '119.99 €', '24.99 €', '199.99 €'],
     trialWords: /تجربة|تجربتك|التجربة/,
     language: 'العربية',
+    orgNav: 'للمؤسسات',
   },
 };
+/** What the organizations pages must show, per language — independent of src/i18n/b2b. Prices exclude VAT. */
+const ORG_EXPECT = {
+  en: {
+    title: 'Exama for organizations — Question banks from your own course material',
+    demoTitle: 'Request a demo — Exama for organizations',
+    pilotCta: 'Start the free 30-day pilot',
+    pilotShort: 'Start the free pilot',
+    demoCta: 'Request a demo',
+    students: 'For students',
+    prices: ['€149', '€1,490', '€349', '€3,490'],
+    vat: /\+ VAT/,
+    vatNote: /Prices exclude VAT/,
+    monthlyWording: ['10 course uploads per month', '500 question drafts per month', '100 course uploads per month', '2,000 question drafts per month'],
+    pilotWording: ['5 courses', '150 question drafts in total', '3 admins or editors', 'Unlimited reviewers'],
+    noCheckout: /no online checkout/i,
+    notCharged: /nothing is charged automatically/i,
+    generations: /\bgenerations?\b/i,
+    emailButton: 'Email examaweb@gmail.com',
+    faqCount: 8,
+  },
+  es: {
+    title: 'Exama para organizaciones — Bancos de preguntas a partir de tu propio material',
+    demoTitle: 'Solicitar una demo — Exama para organizaciones',
+    pilotCta: 'Empieza el piloto gratuito de 30 días',
+    pilotShort: 'Empezar el piloto gratuito',
+    demoCta: 'Solicitar una demo',
+    students: 'Para estudiantes',
+    prices: ['149 €', '1.490 €', '349 €', '3.490 €'],
+    vat: /\+ IVA/,
+    vatNote: /Precios sin IVA/,
+    monthlyWording: ['10 cursos subidos al mes', '500 borradores de preguntas al mes', '100 cursos subidos al mes', '2.000 borradores de preguntas al mes'],
+    pilotWording: ['5 cursos', '150 borradores de preguntas en total', '3 administradores o editores', 'Revisores ilimitados'],
+    noCheckout: /no hay pago en línea/i,
+    notCharged: /no se cobra nada automáticamente/i,
+    generations: /\bgeneraciones?\b/i,
+    emailButton: 'Escribir a examaweb@gmail.com',
+    faqCount: 8,
+  },
+};
+/** Sales claims the organizations pages must never make: online purchase, guarantees, time savings, customers. */
+const ORG_FORBIDDEN = /(buy now|(?<!no online )checkout|pay online|comprar ahora|pago en línea disponible|guarantee|garantiza|garantía|saves? (you )?(up to )?\d+\s*(hours|hrs|minutes|days|weeks)|ahorra(n|s)? (hasta )?\d+ (horas|minutos|días|semanas)|hours? (saved|a week)|\d+\s*%\s*(faster|más rápido|less time|menos tiempo)|trusted by|our customers|nuestros clientes|clients?\b|clientes|case stud|caso de éxito|FUNDAE|bonificad)/i;
+
 /** English UI strings that must not leak into the translated pages. */
 const ENGLISH_LEAKS = ['See how it works', 'Get started free', 'Frequently asked questions', 'Skip to content', 'Recommended', 'How it works', 'Log in', 'Create an account', 'No payment needed'];
 
@@ -115,7 +168,11 @@ const legal = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url
 const legalPages = legal.languages.flatMap((lang) => ['privacy', 'terms'].map((doc) => ({ doc, lang, route: pagePath(lang, doc), file: fileOf(pagePath(lang, doc)) })));
 const homes = LANGS.map((lang) => ({ lang, route: homePath(lang), file: fileOf(homePath(lang)) }));
 const supports = LANGS.map((lang) => ({ lang, route: pagePath(lang, 'support'), file: fileOf(pagePath(lang, 'support')) }));
-const pages = Object.fromEntries([...homes, ...supports, { route: '/404', file: '404.html' }, ...legalPages].map((p) => [p.route, p.file]));
+const orgPages = ORG_LANGS.flatMap((lang) => [
+  { lang, page: '', route: orgPath(lang), file: fileOf(orgPath(lang)) },
+  { lang, page: 'demo', route: orgPath(lang, 'demo'), file: fileOf(orgPath(lang, 'demo')) },
+]);
+const pages = Object.fromEntries([...homes, ...supports, { route: '/404', file: '404.html' }, ...legalPages, ...orgPages].map((p) => [p.route, p.file]));
 
 console.log(`Build mode: ${TRIAL ? 'web checkout live — the 3-day trial is advertised' : 'web checkout NOT live — no trial or web-payment claims'}\n`);
 for (const [route, file] of Object.entries(pages)) check(existsSync(join(dist, file)), `page built: ${route}`);
@@ -172,6 +229,10 @@ for (const { lang, route, file } of homes) {
   );
   check(links.some((a) => a.label === e.login && a.href === SIGNIN(lang)), `"${e.login}" → sign-in for existing accounts`);
   check(/href="#how-it-works"[^>]*>/.test(html), 'secondary CTA → #how-it-works');
+  const orgLinks = links.filter((a) => a.href === orgLinkFor(lang));
+  check(orgLinks.some((a) => a.label === e.orgNav) && orgLinks.length >= 3, `"${e.orgNav}" → ${orgLinkFor(lang)} (header, audience band, footer: ${orgLinks.length}×)`);
+  check(ORG_LANGS.includes(lang) || orgLinks.every((a) => /hreflang="en"/.test(a.attrs)), 'links to the English organizations page carry hreflang="en"');
+  check(/class="audience-band"/.test(html), 'audience band under the hero');
 
   // Pricing: prices, and each plan button's destination and wording.
   for (const price of e.prices) check(body.includes(price), `pricing shows ${price}`);
@@ -247,6 +308,67 @@ for (const h of ['How it works', 'Supported material', 'Your material, not gener
   check(homeText.toLowerCase().includes(h.toLowerCase()), `section present: ${h}`);
 }
 
+// ---------- Organizations pages (/for-organizations, /es/para-organizaciones, + /demo) ----------
+for (const { lang, page, route, file } of orgPages) {
+  const e = ORG_EXPECT[lang];
+  const html = read(file);
+  const body = text(html);
+  const links = anchors(html);
+  console.log(`\nOrganizations page ${route} (${lang})`);
+  check(attr(html, /<title>([^<]*)<\/title>/) === (page ? e.demoTitle : e.title), `title is "${page ? e.demoTitle : e.title}"`);
+  check(!!attr(html, /<meta name="description" content="([^"]+)"/), 'meta description present');
+  check(attr(html, /<link rel="canonical" href="([^"]*)"/) === `https://exama.app${route}`, `canonical is https://exama.app${route}`);
+  check(new RegExp(`<html lang="${lang}" dir="ltr"`).test(html), `<html lang="${lang}" dir="ltr">`);
+  check(
+    ORG_LANGS.every((l) => html.includes(`<link rel="alternate" hreflang="${l}" href="https://exama.app${orgPath(l, page)}"`)) && html.includes(`hreflang="x-default" href="https://exama.app${orgPath('en', page)}"`),
+    'hreflang alternates: English + Spanish + x-default (no French/Arabic version)',
+  );
+  check(!/name="robots"/.test(html), 'indexable');
+  for (const p of ['og:title', 'og:description', 'og:url', 'og:image', 'og:locale']) check(new RegExp(`<meta property="${p}" content="[^"]+"`).test(html), `Open Graph: ${p}`);
+  check((html.match(/<h1[ >]/g) ?? []).length === 1, 'exactly one <h1>');
+  const levels = [...html.matchAll(/<h([1-6])[ >]/g)].map((m) => Number(m[1]));
+  check(levels.every((l, i) => i === 0 || l <= levels[i - 1] + 1), 'heading levels never skip downward');
+  // Language selector: only English and Spanish, the current one marked.
+  const menuStart = html.indexOf('class="lang-menu"');
+  const menu = menuStart < 0 ? '' : html.slice(menuStart, html.indexOf('</details>', menuStart));
+  check(new RegExp(`aria-current="page" lang="${lang}">${EXPECT[lang].language}<`).test(menu) && !/lang="fr"|lang="ar"/.test(menu), 'language selector: English/Spanish only, current marked');
+  // Navigation: back to the student site, and the organization sign-up as the main button.
+  check(links.some((a) => a.label === e.students && a.href === homePath(lang)), `"${e.students}" → ${homePath(lang)}`);
+  const pilot = links.filter((a) => a.label === e.pilotCta);
+  check(pilot.length >= (page ? 1 : 3) && pilot.every((a) => a.href === ORG_SIGNUP(lang)), `"${e.pilotCta}" → organization sign-up (${pilot.length}×${page ? '' : ': hero, pilot section, final CTA'}, nowhere else)`);
+  const short = links.filter((a) => a.label === e.pilotShort);
+  check(short.length >= 2 && short.every((a) => a.href === ORG_SIGNUP(lang)), `header "${e.pilotShort}" → organization sign-up (header + mobile menu)`);
+  check(links.filter((a) => a.href.startsWith(`${APP_URL}/start?`)).every((a) => a.href.endsWith(`&lang=${lang}`)), `links into the app open it in ${EXPECT[lang].language}`);
+  const ldTypes = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((m) => JSON.stringify(JSON.parse(m[1])).match(/"@type":"[A-Za-z]+"/g) ?? []);
+  check(!ldTypes.some((t) => /AggregateRating|Review|Offer|Product/.test(t)), 'structured data: no ratings, reviews, offers or products');
+  const hit = body.match(ORG_FORBIDDEN);
+  check(!hit, `no purchase, guarantee, time-saving or customer claims${hit ? ` (found "${hit[0]}")` : ''}`);
+  check(!e.generations.test(body), 'says "question drafts", never "generations"');
+  if (!page) {
+    for (const id of ['how-it-works', 'review', 'pricing', 'pilot', 'faq']) check(new RegExp(`id="${id}"`).test(html), `section #${id}`);
+    for (const price of e.prices) check(body.includes(price), `pricing shows ${price}`);
+    check(e.vat.test(body) && e.vatNote.test(body), 'prices are marked as excluding VAT, with the VAT note');
+    for (const w of [...e.monthlyWording, ...e.pilotWording]) check(body.includes(w), `allowance wording: "${w}"`);
+    check(e.noCheckout.test(body) && e.notCharged.test(body), 'says there is no online checkout and nothing is charged automatically');
+    const cards = html.split(/(?=<li class="plan[ "])/).slice(1);
+    const plan = (id) => anchors(cards.find((c) => c.includes(`data-plan="${id}"`)) ?? '').find((a) => /class="btn/.test(a.attrs));
+    check(plan('pilot')?.href === ORG_SIGNUP(lang), 'plan pilot → organization sign-up');
+    for (const id of ['esencial', 'profesional', 'centro']) check(plan(id)?.href === orgPath(lang, 'demo'), `plan ${id} → the demo page (requested by email, never bought online)`);
+    const questions = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map((m) => text(m[1]).trim());
+    const faqLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1])).find((d) => d['@type'] === 'FAQPage');
+    check(questions.length === e.faqCount && faqLd?.mainEntity.length === e.faqCount && faqLd.mainEntity.every((q, i) => q.name === questions[i]), `FAQ: ${e.faqCount} questions, mirrored in the structured data`);
+    check(links.some((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')), `"${e.demoCta}" → ${orgPath(lang, 'demo')}`);
+    // Screenshots: real captures only (public/screenshots/org-*.{webp,png,jpg}); until they exist, icon cards.
+    const shots = (html.match(/\/screenshots\/org-[a-z-]+\.(webp|png|jpg)/g) ?? []).length;
+    console.log(`  • workspace screenshots on the page: ${shots} of 3${shots < 3 ? ' (icon cards until real captures are added)' : ''}`);
+  } else {
+    const mail = links.filter((a) => a.href.startsWith(`mailto:${DEMO_EMAIL}`));
+    check(mail.some((a) => a.label === e.emailButton && /subject=/.test(a.href) && /body=/.test(a.href)), `"${e.emailButton}" → mailto:${DEMO_EMAIL} with subject and body`);
+    check(mail.some((a) => a.label === DEMO_EMAIL), 'the address is written out as a link too');
+    check(!/<form\b/.test(html), 'no form (requests go by email)');
+  }
+}
+
 // ---------- Support and 404 ----------
 console.log('\nSupport & 404');
 for (const { lang, route, file } of supports) {
@@ -288,12 +410,13 @@ console.log('\nSitemap');
 check(/Sitemap: https:\/\/exama\.app\/sitemap\.xml/.test(read('robots.txt')), 'robots.txt points to the sitemap');
 const sitemap = read('sitemap.xml');
 check(LANGS.every((l) => sitemap.includes(`<loc>https://exama.app${homePath(l)}</loc>`)), 'sitemap lists the home page in all 4 languages');
+check(orgPages.every((p) => sitemap.includes(`<loc>https://exama.app${p.route}</loc>`)), 'sitemap lists the organizations pages (English and Spanish, with the demo page)');
 check(!/support/.test(sitemap), 'sitemap leaves out the interim support pages');
 check(legalPages.every((p) => sitemap.includes(`<loc>https://exama.app${p.route}</loc>`) === !legal.isDraft), `sitemap ${legal.isDraft ? 'leaves out' : 'lists'} the legal pages (${legal.isDraft ? 'draft' : 'final'} text)`);
 
 // ---------- Every page: alt text, no fabricated proof, no JS ----------
 console.log('\nIntegrity');
-const PROOF = /(trusted by|testimonial|★|\b\d[\d,.]*\s*\+?\s*(students|users|universities|learners|schools|estudiantes|usuarios|étudiants|utilisateurs)\b|\b\d(\.\d)?\s*\/\s*5\b|\brated\b|as seen (in|on)|lorem ipsum|testimonio|témoignage)/i;
+const PROOF = /(trusted by|testimonial|★|\b\d[\d,.]*\s*\+?\s*(students|users|universities|learners|schools|estudiantes|usuarios|étudiants|utilisateurs|organizations|organizaciones|academies|academias|centers|centros|teachers|profesores|customers|clientes)\b|\b\d(\.\d)?\s*\/\s*5\b|\brated\b|as seen (in|on)|lorem ipsum|testimonio|témoignage|case study|caso de éxito|used by|usado por|confían en)/i;
 for (const [route, file] of Object.entries(pages)) {
   const html = read(file);
   const imgs = html.match(/<img\b[^>]*>/g) ?? [];
@@ -313,15 +436,15 @@ const idsOf = (file) => {
   if (!idCache.has(file)) idCache.set(file, new Set([...read(file).matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])));
   return idCache.get(file);
 };
-const startRe = /^https:\/\/app\.exama\.app\/start\?mode=(signup|signin)(&intent=plans(&plan=(basic|student|pro)&period=monthly)?)?&lang=(en|es|fr|ar)$/;
+const startRe = /^https:\/\/app\.exama\.app\/start\?mode=(signup|signin)((&intent=plans(&plan=(basic|student|pro)&period=monthly)?)|(&account=organization))?&lang=(en|es|fr|ar)$/;
 let bad = 0;
 let badExternal = 0;
 for (const [route, file] of Object.entries(pages)) {
   const isLegal = legalPages.some((p) => p.file === file);
   for (const { href } of anchors(read(file))) {
     if (/^(https?:|mailto:)/.test(href)) {
-      // Home, support and 404 pages only link out to the app (its home or its /start route).
-      if (!isLegal && !href.startsWith('mailto:') && href !== APP_URL && !startRe.test(href)) {
+      // Home, support, organizations and 404 pages only link out to the app (its home or its /start route) and the demo email.
+      if (!isLegal && !href.startsWith(`mailto:${DEMO_EMAIL}`) && href !== APP_URL && !startRe.test(href)) {
         badExternal++;
         console.error(`  unexpected external link on ${route}: ${href}`);
       }
@@ -336,7 +459,7 @@ for (const [route, file] of Object.entries(pages)) {
   }
 }
 check(bad === 0, 'all internal links and #anchors resolve');
-check(badExternal === 0, `outside the legal texts, the only external links are ${APP_URL} and its /start route (sign-up, sign-in, plans)`);
+check(badExternal === 0, `outside the legal texts, the only external links are ${APP_URL}, its /start route (sign-up, sign-in, plans, organization sign-up) and mailto:${DEMO_EMAIL}`);
 
 // ---------- Weight & right-to-left styles ----------
 console.log('\nPerformance & styles');

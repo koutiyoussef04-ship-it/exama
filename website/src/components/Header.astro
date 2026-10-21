@@ -3,28 +3,47 @@ import { Image } from 'astro:assets';
 import logoMark from '../assets/brand/logo-mark.png';
 import Icon from './Icon.astro';
 import Wordmark from './Wordmark.astro';
+import { ORG_SECTIONS } from '../data/b2b';
 import { SECTIONS, TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
-import { copy, homeAnchor, LANG_NAMES, pathFor, type Lang } from '../i18n';
+import { copy, homeAnchor, isOrgLang, LANG_NAMES, orgAnchor, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
+import { orgCopy } from '../i18n/b2b';
 
 interface Props {
   lang: Lang;
   /** The same page in every language (language selector). */
   alternates: { lang: Lang; path: string }[];
+  /** The student site (default) or the organizations pages: different sections, a different main button. */
+  nav?: 'student' | 'org';
 }
-const { lang, alternates } = Astro.props;
+const { lang, alternates, nav = 'student' } = Astro.props;
 const c = copy(lang);
-const navLinks = [
-  { label: c.nav.how, href: homeAnchor(lang, SECTIONS.how) },
-  { label: c.nav.materials, href: homeAnchor(lang, SECTIONS.materials) },
-  { label: c.nav.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
-  { label: c.nav.faq, href: homeAnchor(lang, SECTIONS.faq) },
-];
-const ctaLabel = site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
-const ctaHref = site.links.primary(lang);
+// The organizations pages exist in English and Spanish; from French or Arabic the link opens the English one.
+const orgLang = orgLangFor(lang);
+const orgHref = orgPathFor(orgLang);
+const orgLinkAttrs = isOrgLang(lang) ? {} : { hreflang: 'en' };
+const org = nav === 'org' ? orgCopy(orgLang) : null;
+const navLinks = org
+  ? [
+      { label: org.nav.how, href: orgAnchor(orgLang, ORG_SECTIONS.how) },
+      { label: org.nav.pricing, href: orgAnchor(orgLang, ORG_SECTIONS.pricing) },
+      { label: org.nav.faq, href: orgAnchor(orgLang, ORG_SECTIONS.faq) },
+      { label: org.nav.demo, href: orgPathFor(orgLang, 'demo') },
+      // Back to the student site: in the mobile menu only (the logo already links there; the bar is full).
+      { label: org.nav.students, href: pathFor(lang), attrs: {}, menuOnly: true },
+    ]
+  : [
+      { label: c.nav.how, href: homeAnchor(lang, SECTIONS.how) },
+      { label: c.nav.materials, href: homeAnchor(lang, SECTIONS.materials) },
+      { label: c.nav.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
+      { label: c.nav.faq, href: homeAnchor(lang, SECTIONS.faq) },
+      { label: c.nav.organizations, href: orgHref, attrs: orgLinkAttrs },
+    ];
+const ctaLabel = org ? org.cta.pilotShort : site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
+const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
 ---
 
-<header class="site-header">
+<header class:list={['site-header', { 'site-header-org': !!org }]}>
   <div class="container header-bar">
     <a class="brand" href={pathFor(lang)} aria-label={c.ui.homeAria}>
       <Image src={logoMark} alt="" width={36} height={36} class="brand-mark" loading="eager" />
@@ -33,7 +52,7 @@ const ctaHref = site.links.primary(lang);
 
     <nav class="nav-desktop" aria-label={c.ui.primaryNav}>
       <ul>
-        {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {navLinks.filter((l) => !('menuOnly' in l)).map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
       </ul>
     </nav>
 
@@ -62,7 +81,7 @@ const ctaHref = site.links.primary(lang);
       </summary>
       <nav class="menu-panel" aria-label={c.ui.mobileNav}>
         <ul>
-          {navLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+          {navLinks.map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
           <li><a href={site.links.signIn(lang)}>{c.nav.login}</a></li>
         </ul>
         <a class="btn btn-primary btn-block" href={ctaHref}>{ctaLabel}</a>

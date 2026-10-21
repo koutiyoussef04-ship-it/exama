@@ -18,9 +18,11 @@ interface Props {
   lang?: Lang;
   /** The same page in every language: <link rel="alternate" hreflang> and the language selector. */
   alternates?: { lang: Lang; path: string }[];
+  /** Which navigation the header shows: the student site (default) or the organizations pages. */
+  nav?: 'student' | 'org';
 }
 
-const { lang = 'en', path = '/', noindex = false, jsonLd = [], alternates = alternatesFor('') } = Astro.props;
+const { lang = 'en', path = '/', noindex = false, jsonLd = [], alternates = alternatesFor(''), nav = 'student' } = Astro.props;
 const c = copy(lang);
 const title = Astro.props.title ?? c.meta.title;
 const description = Astro.props.description ?? c.meta.description;
@@ -66,7 +68,7 @@ const ogImage = absoluteUrl(site.ogImage.path);
   </head>
   <body>
     <a class="skip-link" href="#main">{c.ui.skip}</a>
-    <Header lang={lang} alternates={alternates} />
+    <Header lang={lang} alternates={alternates} nav={nav} />
     <main id="main">
       <slot />
     </main>

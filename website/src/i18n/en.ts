@@ -8,7 +8,7 @@ export const en: Copy = {
     ogAlt: 'Exama — turn your course material into your personal AI exam coach.',
   },
   ui: { skip: 'Skip to content', menu: 'Menu', homeAria: 'Exama — home', language: 'Language', primaryNav: 'Primary', mobileNav: 'Mobile' },
-  nav: { how: 'How it works', materials: 'Materials', pricing: 'Pricing', faq: 'FAQ', login: 'Log in' },
+  nav: { how: 'How it works', materials: 'Materials', pricing: 'Pricing', faq: 'FAQ', login: 'Log in', organizations: 'For organizations' },
   cta: {
     trial: (days) => `Start your ${days}-day free trial`,
     free: 'Get started free',
@@ -16,6 +16,7 @@ export const en: Copy = {
     choose: (plan) => `Choose ${plan}`,
     startFree: 'Start free',
   },
+  audience: { text: 'Are you an academy or a training center? Exama also drafts question banks from your own course material, reviewed by your team.', link: 'Exama for organizations' },
   hero: {
     eyebrow: 'AI exam preparation for students',
     titleStart: 'Turn your course material into your ',
@@ -259,7 +260,7 @@ export const en: Copy = {
     product: 'Product',
     legalHelp: 'Legal & help',
     account: 'Account',
-    links: { how: 'How it works', materials: 'Supported material', pricing: 'Pricing', faq: 'FAQ', privacy: 'Privacy', terms: 'Terms', support: 'Support', login: 'Log in', signup: 'Create an account' },
+    links: { how: 'How it works', materials: 'Supported material', pricing: 'Pricing', faq: 'FAQ', privacy: 'Privacy', terms: 'Terms', support: 'Support', login: 'Log in', signup: 'Create an account', organizations: 'For organizations' },
   },
   support: {
     title: 'Support',

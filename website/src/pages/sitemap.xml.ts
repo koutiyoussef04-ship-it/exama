@@ -1,16 +1,18 @@
 import type { APIRoute } from 'astro';
 import { absoluteUrl } from '../config/site';
 import { LEGAL_IS_DRAFT, LEGAL_LANGS, legalPath } from '../data/legal';
-import { LANGS, pathFor } from '../i18n';
+import { LANGS, ORG_LANGS, orgPathFor, pathFor } from '../i18n';
 
 /**
- * Only indexable pages belong here: the home page in every language (/, /es/, /fr/, /ar/). /support
+ * Only indexable pages belong here: the home page in every language (/, /es/, /fr/, /ar/), the organizations
+ * pages (English and Spanish, with their demo page). /support
  * (every language) is a `noindex` interim page; add it when it goes live.
  * The Privacy Policy and Terms (every language) are listed automatically once their text is final
  * (LEGAL_IS_DRAFT = false in apps/mobile/src/i18n/legal.ts, then `npm run legal:export -w @study/mobile`).
  */
 const LEGAL_PATHS = LEGAL_IS_DRAFT ? [] : LEGAL_LANGS.flatMap((lang) => [legalPath('privacy', lang), legalPath('terms', lang)]);
-const PATHS = [...LANGS.map((lang) => pathFor(lang)), ...LEGAL_PATHS];
+const ORG_PATHS = ORG_LANGS.flatMap((lang) => [orgPathFor(lang), orgPathFor(lang, 'demo')]);
+const PATHS = [...LANGS.map((lang) => pathFor(lang)), ...ORG_PATHS, ...LEGAL_PATHS];
 
 export const GET: APIRoute = () => {
   const urls = PATHS.map((p) => `  <url><loc>${absoluteUrl(p)}</loc></url>`).join('\n');

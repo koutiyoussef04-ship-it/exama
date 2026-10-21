@@ -1,0 +1,31 @@
+---
+import Icon from '../Icon.astro';
+import { ORG_SECTIONS } from '../../data/b2b';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).how;
+---
+
+<section id={ORG_SECTIONS.how} class="section section-alt" aria-labelledby="how-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="how-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+    <ol class="steps steps-4">
+      {c.steps.map((s, i) => (
+        <li class="step">
+          <span class="step-num" aria-hidden="true">{i + 1}</span>
+          <span class="step-icon"><Icon name={s.icon} size={22} /></span>
+          <h3>{s.title}</h3>
+          <p>{s.text}</p>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>

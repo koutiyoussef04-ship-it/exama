@@ -66,6 +66,63 @@ if (!existsSync(billingPath)) {
   if (!failures) ok('app billing.ts: all six plan prices match the site');
 }
 
+// ---- 3. organizations (B2B) plans: site data vs the app's catalog ----
+console.log('\nOrganizations (B2B) plans');
+const ORG_EXPECTED = {
+  pilot: { coursesPerMonth: 5, itemsPerMonth: 150, maxMembers: 3, prices: null },
+  esencial: { coursesPerMonth: 10, itemsPerMonth: 500, maxMembers: 10, prices: { monthlyCents: 14900, yearlyCents: 149000 } },
+  profesional: { coursesPerMonth: 100, itemsPerMonth: 2000, maxMembers: 25, prices: { monthlyCents: 34900, yearlyCents: 349000 } },
+};
+const ORG_EXPECTED_PILOT_DAYS = 30;
+const ORG_EXPECTED_PER_REQUEST = 20;
+const b2b = readFileSync(join(root, 'src/data/b2b.ts'), 'utf8');
+const limitsOf = (src, plan) => {
+  const m = src.match(new RegExp(`${plan}:\\s*\\{[^}]*?coursesPerMonth:\\s*([\\d_]+),\\s*itemsPerMonth:\\s*([\\d_]+),(?:\\s*maxItemsPerRequest:\\s*[\\d_]+,)?\\s*maxMembers:\\s*([\\d_]+)`));
+  return m ? { coursesPerMonth: Number(m[1].replace(/_/g, '')), itemsPerMonth: Number(m[2].replace(/_/g, '')), maxMembers: Number(m[3].replace(/_/g, '')) } : null;
+};
+const pricesOf = (src, plan) => {
+  const m = src.match(new RegExp(`${plan}:\\s*\\{\\s*monthlyCents:\\s*([\\d_]+),\\s*yearlyCents:\\s*([\\d_]+)\\s*\\}`));
+  return m ? { monthlyCents: Number(m[1].replace(/_/g, '')), yearlyCents: Number(m[2].replace(/_/g, '')) } : null;
+};
+const sameLimits = (a, b) => a && b && a.coursesPerMonth === b.coursesPerMonth && a.itemsPerMonth === b.itemsPerMonth && a.maxMembers === b.maxMembers;
+const samePrices = (a, b) => (a === null && b === null) || (a && b && a.monthlyCents === b.monthlyCents && a.yearlyCents === b.yearlyCents);
+const fmt = (l) => `${l.coursesPerMonth} courses · ${l.itemsPerMonth} drafts · ${l.maxMembers} admins/editors`;
+for (const [plan, want] of Object.entries(ORG_EXPECTED)) {
+  const limits = limitsOf(b2b, plan);
+  const prices = plan === 'pilot' ? null : pricesOf(b2b, plan);
+  if (!sameLimits(limits, want)) fail(`${plan}: site allowances are ${limits ? fmt(limits) : 'unparseable'}, expected ${fmt(want)}`);
+  else if (plan !== 'pilot' && !samePrices(prices, want.prices)) fail(`${plan}: site prices are ${prices?.monthlyCents}/${prices?.yearlyCents} cents, expected ${want.prices.monthlyCents}/${want.prices.yearlyCents}`);
+  else ok(`${plan}: ${fmt(want)}${want.prices ? ` · €${want.prices.monthlyCents / 100}/month · €${want.prices.yearlyCents / 100}/year (ex-VAT)` : ' · free'}`);
+}
+const pilotDays = b2b.match(/export const ORG_PILOT_DAYS = (\d+);/);
+if (!pilotDays || Number(pilotDays[1]) !== ORG_EXPECTED_PILOT_DAYS) fail(`pilot length: site has ${pilotDays?.[1] ?? '?'}, expected ${ORG_EXPECTED_PILOT_DAYS}`);
+else ok(`pilot: ${ORG_EXPECTED_PILOT_DAYS} days`);
+const perRequest = b2b.match(/export const ORG_MAX_ITEMS_PER_REQUEST = (\d+);/);
+if (!perRequest || Number(perRequest[1]) !== ORG_EXPECTED_PER_REQUEST) fail(`drafts per request: site has ${perRequest?.[1] ?? '?'}, expected ${ORG_EXPECTED_PER_REQUEST}`);
+
+const orgPath = join(root, '..', 'packages', 'shared', 'src', 'organizations.ts');
+if (!existsSync(orgPath)) {
+  console.log('• packages/shared/src/organizations.ts not found (site built outside the monorepo) — app cross-check skipped.');
+} else {
+  const catalog = readFileSync(orgPath, 'utf8');
+  const before = failures;
+  for (const plan of Object.keys(ORG_EXPECTED)) {
+    const appLimits = limitsOf(catalog, plan);
+    const siteLimits = limitsOf(b2b, plan);
+    if (!sameLimits(appLimits, siteLimits)) fail(`app organizations.ts ${plan}: ${appLimits ? fmt(appLimits) : 'not found'}, site has ${siteLimits ? fmt(siteLimits) : 'unparseable'}`);
+    if (plan !== 'pilot') {
+      const m = catalog.match(new RegExp(`${plan}:[^}]*\\}[^}]*prices:\\s*\\{\\s*monthly:\\s*([\\d_]+),\\s*yearly:\\s*([\\d_]+)\\s*\\}`));
+      const appPrices = m ? { monthlyCents: Number(m[1].replace(/_/g, '')), yearlyCents: Number(m[2].replace(/_/g, '')) } : null;
+      if (!samePrices(appPrices, pricesOf(b2b, plan))) fail(`app organizations.ts ${plan} prices: ${appPrices ? `${appPrices.monthlyCents}/${appPrices.yearlyCents}` : 'not found'}, site differs`);
+    }
+    const appPerRequest = catalog.match(new RegExp(`${plan}:[^}]*maxItemsPerRequest:\\s*(\\d+)`));
+    if (!appPerRequest || Number(appPerRequest[1]) !== ORG_EXPECTED_PER_REQUEST) fail(`app organizations.ts ${plan}: maxItemsPerRequest is ${appPerRequest?.[1] ?? '?'}, site says ${ORG_EXPECTED_PER_REQUEST}`);
+  }
+  const appDays = catalog.match(/export const ORGANIZATION_PILOT_DAYS = (\d+);/);
+  if (!appDays || Number(appDays[1]) !== ORG_EXPECTED_PILOT_DAYS) fail(`app organizations.ts ORGANIZATION_PILOT_DAYS is ${appDays?.[1] ?? '?'}, site says ${ORG_EXPECTED_PILOT_DAYS}`);
+  if (failures === before) ok('app organizations.ts: pilot, Esencial and Profesional allowances, prices, pilot length and drafts per request match the site');
+}
+
 if (failures) {
   console.error(`\n${failures} pricing check(s) failed.`);
   process.exit(1);

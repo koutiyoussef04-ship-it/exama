@@ -27,10 +27,10 @@ export const PRICES = {
 } as const;
 export type PaidTier = keyof typeof PRICES;
 
-/** Euro amounts as each language writes them: €9.99 (en), 9,99 € (es, fr), 9.99 € (ar, Western digits). */
+/** Euro amounts as each language writes them: €9.99 (en), 9,99 € (es, fr), 9.99 € (ar, Western digits); thousands always grouped (1.490 €). */
 const PRICE_LOCALE: Record<Lang, string> = { en: 'en-IE', es: 'es-ES', fr: 'fr-FR', ar: 'ar-u-nu-latn' };
 export const formatEuros = (cents: number, lang: Lang = 'en') =>
-  new Intl.NumberFormat(PRICE_LOCALE[lang], { style: 'currency', currency: 'EUR', minimumFractionDigits: cents % 100 ? 2 : 0 })
+  new Intl.NumberFormat(PRICE_LOCALE[lang], { style: 'currency', currency: 'EUR', minimumFractionDigits: cents % 100 ? 2 : 0, useGrouping: 'always' })
     .format(cents / 100)
     .replace(/‏|؜/g, '');
 /** Yearly saving vs 12 monthly payments, in whole percent — derived from PRICES, never typed by hand. */
