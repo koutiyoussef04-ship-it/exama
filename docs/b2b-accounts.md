@@ -48,7 +48,9 @@ An organization sign-up either:
 
 The B2B owner is `users.b2b_role = 'owner'` on an organization account. A database check refuses the role on any other account type.
 
-- **Dashboard:** `/b2b-admin/*` (overview, organizations, organization detail, plan / pilot / suspension changes, organization accounts). `requireB2BOwner` reads the role from the database on every request and answers `404` to everyone else. Requests are written to `admin_audit_log` with a `b2b …` action. The app shows the dashboard under Account → Administration and in the workspace sidebar. Hiding it elsewhere is cosmetic.
+- **Dashboard:** `/b2b-admin/*` (overview, organizations, organization detail, plan / pilot / suspension changes, organization accounts), in English, Spanish, French and Arabic like the rest of the app. The route's owner check (`ownerOnlyAudited` in `routes/b2b-admin.ts`) reads the role from the database on every request and answers `404` to everyone else.
+- **Audit:** every request is written to `admin_audit_log` with a `b2b …` action. Changes also record what they set (`params.change`, e.g. `{"status":"suspended"}`). Refused attempts by other accounts are recorded with `allowed = false`. No passwords, tokens or hashes are ever stored there.
+- **Where the owner finds it:** sign in with **Organization account** selected. The dashboard is in the workspace sidebar, under Account → Administration, and on the empty workspace screen. Hiding it elsewhere is cosmetic. Signing in with **Student account** (same email) never shows it.
 - **Unlimited usage:** this applies when the B2B owner itself acts. Course uploads, draft generation, reprocessing, the organization cap and the admin/editor seat limit are not refused. Usage is still recorded in the ledger. The per-request size cap (`maxItemsPerRequest`) and the anti-abuse rate limits still apply. Other members of the same organization are bound by its plan.
 - **Granting the role:** only the server command below grants it. Sign-up never does, configuration never does, and an email address never does.
 
@@ -57,9 +59,12 @@ The B2B owner is `users.b2b_role = 'owner'` on an organization account. A databa
 Run on the API server (Render → exama-api → Shell), after migration 0024 has been applied:
 
 ```
+npm run owner:check:prod -w @study/api -- you@example.com
 npm run b2b:owner:prod -w @study/api -- --email you@example.com --check
 npm run b2b:owner:prod -w @study/api -- --email you@example.com
 ```
+
+`owner:check` shows both identities of the address: whether the student account resolves to owner (full) access, and whether the organization account holds the B2B owner role.
 
 What the command does:
 
@@ -68,7 +73,9 @@ What the command does:
 - **Already the owner:** nothing changes.
 - **Never:** it never touches the student account with the same email, and never accepts, prints or stores a password. A `--password` flag is refused. Output masks the email.
 
-The owner then sets a password in the app:
+If the organization account already existed (for example, created through public sign-up), the owner keeps signing in with that account's own password: choose **Organization account** on the sign-in form.
+
+If the command created the account, the owner sets a password in the app:
 
 1. Sign in.
 2. Choose **Organization account**.

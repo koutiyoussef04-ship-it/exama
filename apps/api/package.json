@@ -15,6 +15,7 @@
     "transcription:check": "tsx --env-file=.env scripts/transcription-check.ts",
     "analytics:report": "tsx --env-file=.env scripts/analytics-report.ts",
     "owner:check": "tsx --env-file=.env scripts/owner-check.ts",
+    "owner:check:prod": "tsx scripts/owner-check.ts",
     "account:release-email": "tsx --env-file=.env scripts/release-email-hold.ts",
     "b2b:owner": "tsx --env-file=.env scripts/b2b-owner.ts",
     "b2b:owner:prod": "tsx scripts/b2b-owner.ts",

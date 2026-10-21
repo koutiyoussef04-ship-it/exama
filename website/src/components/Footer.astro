@@ -46,7 +46,7 @@ const productLinks = org && isOrgLang(lang)
 const accountLinks = org
   ? [
       { label: org.footer.signup, href: site.links.orgSignUp(lang) },
-      { label: c.footer.links.login, href: site.links.signIn(lang) },
+      { label: c.footer.links.login, href: site.links.orgSignIn(lang) },
     ]
   : account;
 ---

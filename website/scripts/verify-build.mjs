@@ -30,6 +30,8 @@ const PLANS = (lang, plan) => start(lang, { mode: 'signup', intent: 'plans', ...
 const PRIMARY = (lang) => (TRIAL ? PLANS(lang) : SIGNUP(lang));
 /** The organizations pages: sign-up with the organization form pre-selected (the 30-day pilot starts with the account). */
 const ORG_SIGNUP = (lang) => start(lang, { mode: 'signup', account: 'organization' });
+/** …and their "Log in" links: the sign-in form on "Organization account" (separate identity from the student account). */
+const ORG_SIGNIN = (lang) => start(lang, { mode: 'signin', account: 'organization' });
 const DEMO_EMAIL = 'examaweb@gmail.com';
 
 const LANGS = ['en', 'es', 'fr', 'ar'];
@@ -390,6 +392,8 @@ for (const { lang, page, route, file } of orgPages) {
   const short = links.filter((a) => a.label === e.pilotShort);
   check(short.length >= 2 && short.every((a) => a.href === ORG_SIGNUP(lang)), `header "${e.pilotShort}" → organization sign-up (header + mobile menu)`);
   check(links.filter((a) => a.href.startsWith(`${APP_URL}/start?`)).every((a) => a.href.endsWith(`&lang=${lang}`)), `links into the app open it in ${EXPECT[lang].language}`);
+  const logins = links.filter((a) => a.label === EXPECT[lang].login);
+  check(logins.length >= 3 && logins.every((a) => a.href === ORG_SIGNIN(lang)), `"${EXPECT[lang].login}" → organization sign-in (${logins.length}×: header, menu, footer), never the student one`);
   const ldTypes = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((m) => JSON.stringify(JSON.parse(m[1])).match(/"@type":"[A-Za-z]+"/g) ?? []);
   check(!ldTypes.some((t) => /AggregateRating|Review|Offer|Product/.test(t)), 'structured data: no ratings, reviews, offers or products');
   const hit = body.match(ORG_FORBIDDEN);

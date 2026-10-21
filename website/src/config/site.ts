@@ -46,6 +46,11 @@ const links = {
    * no card, no payment.
    */
   orgSignUp: (lang: Lang) => startUrl(lang, { mode: 'signup', account: 'organization' }),
+  /**
+   * Organization sign-in (the "Log in" links of the B2B pages): the sign-in form opens on "Organization account", so staff —
+   * and the B2B owner — sign in to their organization identity, not to a student account with the same email.
+   */
+  orgSignIn: (lang: Lang) => startUrl(lang, { mode: 'signin', account: 'organization' }),
 };
 
 /**

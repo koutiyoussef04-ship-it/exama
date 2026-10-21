@@ -92,6 +92,8 @@ language (header link, audience band under the hero, footer link).
   (the app's `/start` route opens the sign-up with the organization form pre-selected; the pilot starts with the
   account). Esencial, Profesional and Centro → the demo page. **There is no online checkout**: plans are
   requested by email and activated by Exama; nothing is charged automatically, and the copy says so.
+  "Log in" (header, menu, footer) → `…/start?mode=signin&account=organization&lang=…`: the sign-in form opens on
+  "Organization account", because the organization identity is separate from a student account with the same email.
 - **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
   with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
 - **Screenshots**: real captures of the workspace only — `public/screenshots/org-review.jpg`, `org-queue.jpg`

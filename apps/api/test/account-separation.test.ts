@@ -350,3 +350,55 @@ test('B2B owner role cannot be obtained by signing up: the sign-up body never se
   const writers = files(srcDir).filter((f) => /b2bRole\s*:\s*'owner'|b2b_role\s*=\s*'owner'/.test(code(f)) && !f.pathname.endsWith('/db/schema.ts'));
   assert.deepEqual(writers.map((f) => f.pathname.split('/src/')[1]), [], 'no server code sets the role');
 });
+
+test('B2B dashboard actions: plan, pilot extension, suspension and reactivation work and are audited; refused attempts are audited too', async () => {
+  const owner = await registerOrg(`actions-owner-${RUN}@example.com`, ORG_PW);
+  // The role as the provisioning command sets it (that command itself is covered above).
+  await sql`update users set b2b_role = 'owner' where id = ${owner.body.user.id}`;
+  const customer = await registerOrg(`actions-customer-${RUN}@example.com`, ORG_PW, 'actions');
+  const orgId = customer.body.user.organizations[0].id;
+  const t = owner.body.token;
+  const patch = (body: unknown, token = t) => call<B2BOrganizationDetail>(`/b2b-admin/organizations/${orgId}`, { ...json('PATCH', body), token });
+
+  const before = (await call<B2BOrganizationDetail>(`/b2b-admin/organizations/${orgId}`, { token: t })).body;
+  assert.equal(before.plan, 'pilot');
+  // Pilot extension: a new end date.
+  const newEnd = new Date(Date.parse(before.pilotEndsAt!) + 14 * 86_400_000).toISOString();
+  const extended = await patch({ pilotEndsAt: newEnd });
+  assert.equal(extended.status, 200, JSON.stringify(extended.body));
+  assert.equal(Date.parse(extended.body.pilotEndsAt!), Date.parse(newEnd));
+  // Suspension: the organization becomes read-only for its members; reactivation restores it.
+  assert.equal((await patch({ status: 'suspended' })).body.status, 'suspended');
+  assert.equal((await call(`/orgs/${orgId}`, { ...json('PATCH', { name: 'Renamed' }), token: customer.body.token })).body.code, 'org_suspended');
+  assert.equal((await call(`/orgs/${orgId}`, { token: customer.body.token })).status, 200, 'still readable');
+  assert.equal((await patch({ status: 'active' })).body.status, 'active');
+  assert.equal((await call(`/orgs/${orgId}`, { ...json('PATCH', { name: `Sep actions renamed ${RUN}` }), token: customer.body.token })).status, 200);
+  // Plan assignment: the paid plan's allowances apply; the pilot end is cleared.
+  const paid = await patch({ plan: 'profesional', billingPeriod: 'yearly' });
+  assert.deepEqual([paid.body.plan, paid.body.billingPeriod, paid.body.pilotEndsAt], ['profesional', 'yearly', null]);
+  assert.equal(paid.body.limits.coursesPerMonth, 100);
+  // Invalid changes are refused without changing anything.
+  assert.equal((await patch({ plan: 'pilot', billingPeriod: 'monthly' })).status, 400);
+  assert.equal((await patch({ status: 'deleted' })).status, 400);
+
+  // Every allowed change is audited with what it set; the customer's attempts are refused (404) and audited as refused.
+  assert.equal((await patch({ status: 'suspended' }, customer.body.token)).status, 404);
+  assert.equal((await call('/b2b-admin/overview', { token: customer.body.token })).status, 404);
+  const rows = (await sql`select actor_user_id, action, params, allowed, status from admin_audit_log where actor_user_id in (${owner.body.user.id}, ${customer.body.user.id}) and action like 'b2b %' order by created_at`) as unknown as { actor_user_id: string; action: string; params: Record<string, string>; allowed: boolean; status: number }[];
+  const changes = rows.filter((r) => r.actor_user_id === owner.body.user.id && r.action === 'b2b PATCH /b2b-admin/organizations/:id');
+  assert.deepEqual(changes.map((r) => [r.status, JSON.parse(r.params.change ?? '{}')]), [
+    [200, { pilotEndsAt: newEnd }],
+    [200, { status: 'suspended' }],
+    [200, { status: 'active' }],
+    [200, { plan: 'profesional', billingPeriod: 'yearly' }],
+    [400, { plan: 'pilot', billingPeriod: 'monthly' }],
+    [400, {}],
+  ], 'each change attempt, with what it set (an invalid body is refused before it is parsed, so it records no fields)');
+  assert.ok(changes.every((r) => r.allowed && r.params.organizationId === orgId));
+  const refused = rows.filter((r) => r.actor_user_id === customer.body.user.id);
+  assert.deepEqual(refused.map((r) => [r.action, r.allowed, r.status]), [
+    [`b2b PATCH /b2b-admin/organizations/${orgId}`, false, 404],
+    ['b2b GET /b2b-admin/overview', false, 404],
+  ]);
+  assert.ok(!JSON.stringify(rows).match(/password|token|hash/i), 'the audit trail holds no secrets');
+});

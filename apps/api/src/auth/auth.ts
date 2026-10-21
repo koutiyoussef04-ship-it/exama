@@ -152,13 +152,3 @@ export const studentAreaOnly = createMiddleware(async (c, next) => {
   return next();
 });
 
-/**
- * Requires `requireAuth` before it. The B2B owner dashboard: an ORGANIZATION account whose b2b_role is
- * 'owner', read from the database on every request (never from the token or the client). Anyone else gets
- * 404, so the dashboard's existence is not revealed.
- */
-export const requireB2BOwner = createMiddleware<AuthEnv>(async (c, next) => {
-  const [row] = await db.select({ accountType: users.accountType, b2bRole: users.b2bRole }).from(users).where(eq(users.id, c.var.userId));
-  if (!row || row.accountType !== 'organization' || row.b2bRole !== 'owner') throw new HttpError(404, 'Not found', 'not_found');
-  await next();
-});
