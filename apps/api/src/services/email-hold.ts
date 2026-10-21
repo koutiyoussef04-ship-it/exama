@@ -17,9 +17,13 @@
  * - support can lift a restriction early: `npm run account:release-email -w @study/api -- someone@example.com`.
  *
  * Changing JWT_SECRET makes existing records stop matching (they still expire on schedule).
+ *
+ * Holds are per account type (student and organization accounts are separate identities): deleting a student
+ * account never blocks an organization sign-up with the same address, and the reverse. Student holds keep the
+ * original hash input, so records written before the split still match.
  */
 import { createHmac } from 'node:crypto';
-import { DELETED_EMAIL_HOLD_DAYS, normalizeEmail } from '@study/shared';
+import { DELETED_EMAIL_HOLD_DAYS, normalizeEmail, type AccountType } from '@study/shared';
 import { and, eq, gt, lte } from 'drizzle-orm';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
@@ -29,33 +33,35 @@ import { HttpError } from '../lib/errors.js';
 export const HOLD_MS = DELETED_EMAIL_HOLD_DAYS * 86_400_000;
 type Db = Pick<typeof db, 'insert' | 'select' | 'delete'>;
 
-export const emailHoldHash = (email: string) =>
-  createHmac('sha256', config.JWT_SECRET).update(`deleted-email-hold:${normalizeEmail(email)}`).digest('hex');
+export const emailHoldHash = (email: string, accountType: AccountType = 'student') =>
+  createHmac('sha256', config.JWT_SECRET)
+    .update(accountType === 'student' ? `deleted-email-hold:${normalizeEmail(email)}` : `deleted-email-hold:${accountType}:${normalizeEmail(email)}`)
+    .digest('hex');
 
 /** Called inside the account-deletion transaction. Returns when the restriction ends (deletion + 30 days). */
-export async function holdDeletedEmail(tx: Db, email: string, now = new Date()): Promise<Date> {
+export async function holdDeletedEmail(tx: Db, email: string, now = new Date(), accountType: AccountType = 'student'): Promise<Date> {
   const expiresAt = new Date(now.getTime() + HOLD_MS);
   await tx
     .insert(deletedEmailHolds)
-    .values({ emailHash: emailHoldHash(email), expiresAt })
+    .values({ emailHash: emailHoldHash(email, accountType), expiresAt })
     .onConflictDoUpdate({ target: deletedEmailHolds.emailHash, set: { expiresAt } });
   return expiresAt;
 }
 
 /** Sign-up check: 409 signup_email_unavailable while a restriction is active — deliberately without details. */
-export async function assertEmailNotHeld(email: string, now = new Date()): Promise<void> {
+export async function assertEmailNotHeld(email: string, accountType: AccountType = 'student', now = new Date()): Promise<void> {
   const [hold] = await db
     .select({ expiresAt: deletedEmailHolds.expiresAt })
     .from(deletedEmailHolds)
-    .where(and(eq(deletedEmailHolds.emailHash, emailHoldHash(email)), gt(deletedEmailHolds.expiresAt, now)));
+    .where(and(eq(deletedEmailHolds.emailHash, emailHoldHash(email, accountType)), gt(deletedEmailHolds.expiresAt, now)));
   if (hold) throw new HttpError(409, 'This email address can’t be used to create an account right now. Use a different email address, or contact support.', 'signup_email_unavailable');
 }
 
 /** Support: lift an active restriction early (e.g. an account deleted by mistake). Returns whether one existed. */
-export async function releaseEmailHold(email: string, now = new Date()): Promise<boolean> {
+export async function releaseEmailHold(email: string, now = new Date(), accountType: AccountType = 'student'): Promise<boolean> {
   const rows = await db
     .delete(deletedEmailHolds)
-    .where(and(eq(deletedEmailHolds.emailHash, emailHoldHash(email)), gt(deletedEmailHolds.expiresAt, now)))
+    .where(and(eq(deletedEmailHolds.emailHash, emailHoldHash(email, accountType)), gt(deletedEmailHolds.expiresAt, now)))
     .returning({ h: deletedEmailHolds.emailHash });
   return rows.length > 0;
 }

@@ -18,10 +18,15 @@
  * and leaves the earlier code valid (30 minutes, 5 attempts, as before). Answers stay identical for
  * unknown emails: they get the same cooldown (kept in memory — there is nothing to store), so the
  * remaining time never tells known and unknown addresses apart.
+ *
+ * Student and organization accounts are separate identities (services/accounts.ts): a request names the
+ * account type (absent: the student account if there is one, otherwise the organization account), the code
+ * belongs to that one account (its hash includes the account id), and resetting one never changes the other.
  */
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
-import { PASSWORD_RESET_CODE_LENGTH, type AuthResponse, type Language } from '@study/shared';
+import { PASSWORD_RESET_CODE_LENGTH, type AccountType, type AuthResponse, type Language } from '@study/shared';
+import { findAccount, toUser } from './accounts.js';
 import { listMemberships } from './organizations.js';
 import { track } from '../analytics/index.js';
 import { hashPassword, signToken } from '../auth/auth.js';
@@ -52,7 +57,7 @@ export function resetRateLimits() {
 }
 
 /**
- * email → when its cooldown ends (ms). Gives unknown emails the same cooldown as real accounts (so the
+ * account type + email → when its cooldown ends (ms). Gives unknown emails the same cooldown as real accounts (so the
  * answers can't tell them apart) and also covers a request whose email the per-account limiter skipped.
  * Per process, like the rate limiters above; for real accounts the database is the lasting record.
  */
@@ -86,16 +91,25 @@ const EMAIL: Record<Language, { subject: string; body: (code: string, minutes: n
   },
 };
 
+/** Organization accounts: the email says which of the address's accounts the code is for. */
+const ORG_NOTE: Record<Language, { subject: string; line: string }> = {
+  en: { subject: ' (organization account)', line: 'This code is for your Exama organization account.' },
+  fr: { subject: ' (compte organisation)', line: 'Ce code concerne votre compte organisation Exama.' },
+  es: { subject: ' (cuenta de organización)', line: 'Este código es para tu cuenta de organización de Exama.' },
+  ar: { subject: ' (حساب المؤسسة)', line: 'هذا الرمز خاص بحساب المؤسسة في Exama.' },
+};
+
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-function resetEmail(to: string, code: string, language: Language) {
+function resetEmail(to: string, code: string, language: Language, accountType: AccountType = 'student') {
   const t = EMAIL[language];
-  const text = t.body(code, RESET_CODE_TTL_MINUTES);
+  const org = accountType === 'organization' ? ORG_NOTE[language] : null;
+  const text = (org ? `${org.line}\n\n` : '') + t.body(code, RESET_CODE_TTL_MINUTES);
   const dir = language === 'ar' ? 'rtl' : 'ltr';
   const html = `<div dir="${dir}" style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:16px;line-height:1.5;color:#15173F">${text
     .split('\n\n')
     .map((p) => `<p>${escapeHtml(p).replace(code, `<strong style="font-size:28px;letter-spacing:4px">${code}</strong>`)}</p>`)
     .join('')}</div>`;
-  return { to, subject: t.subject, text, html };
+  return { to, subject: t.subject + (org?.subject ?? ''), text, html };
 }
 
 /**
@@ -103,15 +117,16 @@ function resetEmail(to: string, code: string, language: Language) {
  * caller must wait before asking again: the full cooldown after a request that was handled, the time
  * left when one was already running. `now` is injectable for tests only.
  */
-export async function requestPasswordReset(email: string, language: Language, clientKey: string, now = Date.now()): Promise<{ retryAfterSeconds: number }> {
+export async function requestPasswordReset(email: string, language: Language, clientKey: string, now = Date.now(), accountType?: AccountType): Promise<{ retryAfterSeconds: number }> {
   resetRequestLimiter.take(clientKey);
   const fresh = { retryAfterSeconds: toSeconds(COOLDOWN_MS) };
-  const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.email, email));
-  const inMemory = remainingFromMemory(email, now);
+  const user = await findAccount(email, accountType);
+  const memoryKey = `${accountType ?? user?.accountType ?? 'student'}:${email}`;
+  const inMemory = remainingFromMemory(memoryKey, now);
   if (!user) {
     // Same answer as for an existing account, including the cooldown.
     if (inMemory > 0) return { retryAfterSeconds: toSeconds(inMemory) };
-    startMemoryCooldown(email, now);
+    startMemoryCooldown(memoryKey, now);
     return fresh;
   }
 
@@ -128,7 +143,7 @@ export async function requestPasswordReset(email: string, language: Language, cl
     const remaining = Math.max(inMemory, last ? last.createdAt.getTime() + COOLDOWN_MS - now : 0);
     // Cooldown running: no new code, no email, and the earlier code stays valid.
     if (remaining > 0) return { kind: 'throttled', ms: remaining };
-    startMemoryCooldown(email, now);
+    startMemoryCooldown(memoryKey, now);
     if (!resetEmailLimiter.tryTake(user.id, now)) return { kind: 'skipped' }; // don't flood an inbox; still the same answer
     // A new code replaces any older unused one.
     await tx.update(passwordResetCodes).set({ usedAt: new Date(now) }).where(and(eq(passwordResetCodes.userId, user.id), isNull(passwordResetCodes.usedAt)));
@@ -145,13 +160,13 @@ export async function requestPasswordReset(email: string, language: Language, cl
 
   void track('password_reset_requested', user.id, {});
   // Not awaited: the response time must not depend on whether an email was sent.
-  void sendMail(resetEmail(user.email, code, language)).catch((err) => console.error('[password-reset] email failed:', err instanceof Error ? err.message : err));
+  void sendMail(resetEmail(user.email, code, language, user.accountType)).catch((err) => console.error('[password-reset] email failed:', err instanceof Error ? err.message : err));
   return fresh;
 }
 
-export async function confirmPasswordReset(email: string, code: string, password: string, clientKey: string, nowMs = Date.now()): Promise<AuthResponse> {
+export async function confirmPasswordReset(email: string, code: string, password: string, clientKey: string, nowMs = Date.now(), accountType?: AccountType): Promise<AuthResponse> {
   resetConfirmLimiter.take(clientKey);
-  const [user] = await db.select().from(users).where(eq(users.email, email));
+  const user = await findAccount(email, accountType);
   if (!user) {
     hashCode('00000000-0000-0000-0000-000000000000', code); // similar work for unknown emails
     throw invalidCode();
@@ -195,5 +210,5 @@ export async function confirmPasswordReset(email: string, code: string, password
   });
   if (!claimed) throw invalidCode();
   void track('password_reset_completed', user.id, {});
-  return { token: await signToken(user.id, changedAt), user: { id: user.id, email: user.email, name: user.name, accountType: user.accountType, organizations: await listMemberships(user.id) } };
+  return { token: await signToken(user.id, changedAt, user.accountType), user: toUser(user, await listMemberships(user.id)) };
 }

@@ -95,6 +95,7 @@ test('the Free course-limit message is used for Free only (trial and paid plans 
 
 // ---- Account type (student vs organization) ----
 import { canSubmitSignup as canSubmit2, organizationFieldsComplete, signupRequest as request2 } from '../src/lib/signup-form';
+import { registerSchema } from '@study/shared';
 
 test('account type: students need nothing more; an organization sign-up needs the organization name and kind', () => {
   assert.equal(canSubmit2(form()), true, 'no account type = student (older flows)');
@@ -133,4 +134,24 @@ test('sign-up screen: the "How will you use Exama?" step comes first; organizati
     assert.ok(layout.includes(`name="${screen}"`), `${screen} registered behind the signed-in guard`);
   }
   assert.ok(layout.indexOf('name="org/index"') > layout.indexOf('<Stack.Protected guard={!!user}>'), 'org screens need a session');
+});
+
+test('organization accounts can join an existing organization: no organization fields, no organization in the request', () => {
+  const join = form({ accountType: 'organization', joinExisting: true });
+  assert.equal(canSubmit2(join), true, 'neither name nor market needed');
+  assert.equal(organizationFieldsComplete({ accountType: 'organization', joinExisting: true }), true);
+  const body = request2({ ...join, ageRange: null }, { language: 'en' });
+  assert.deepEqual(body, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'en', accountType: 'organization' });
+  assert.equal(registerSchema.safeParse(body).success, true, 'the API accepts an organization account without an organization');
+  // Creating one still needs both.
+  assert.equal(canSubmit2(form({ accountType: 'organization', joinExisting: false, organizationName: 'Academia Norte' })), false);
+});
+
+test('sign-in: the account type is chosen on the form and sent; reset and sign-up keep it', () => {
+  const src = readFileSync(new URL('../src/app/sign-in.tsx', import.meta.url), 'utf8');
+  assert.ok(src.includes('await signIn({ email: email.trim(), password, accountType });'), 'the sign-in names the identity');
+  assert.ok(src.includes("params.account === 'organization' ? 'organization' : 'student'"), 'defaults to student; the organization link pre-selects organization');
+  assert.ok(src.includes("pathname: '/forgot-password', params: { ...(email.trim() ? { email: email.trim() } : {}), ...accountParams }"));
+  const reset = readFileSync(new URL('../src/app/forgot-password.tsx', import.meta.url), 'utf8');
+  assert.ok(reset.includes('language: appLanguage, accountType });') && reset.includes('password, accountType });'), 'request and confirm name the identity');
 });

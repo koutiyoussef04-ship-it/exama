@@ -48,7 +48,8 @@ test('the flow: /start remembers the destination for signed-out visitors; after 
   const start = src('app/start.tsx');
   assert.match(start, /if \(link\.intent && !user\) await kv\.set\(PENDING_START_KEY/);
   assert.match(start, /if \(user\) return <Redirect href=\{link\.intent \? startDestination\(link\.intent\) : '\/'\} \/>/);
-  assert.match(start, /if \(link\.mode === 'signin'\) return <Redirect href="\/sign-in" \/>;/);
+  // Sign-in keeps the account type (student / organization are separate identities): ?account=organization pre-selects it.
+  assert.match(start, /if \(link\.mode === 'signin'\) return <Redirect href=\{link\.account \? \{ pathname: '\/sign-in', params: \{ account: link\.account \} \} : '\/sign-in'\} \/>;/);
   assert.match(start, /link\.account \? \{ pathname: '\/sign-up', params: \{ account: link\.account \} \} : '\/sign-up'/, 'account=organization reaches the sign-up form');
   assert.match(src('app/sign-up.tsx'), /params\.account === 'organization' \? 'organization' : null/, 'the form pre-selects the organization step');
   const index = src('app/index.tsx');
@@ -56,7 +57,7 @@ test('the flow: /start remembers the destination for signed-out visitors; after 
   assert.match(index, /pending\.consume\(\);\s*router\.push\(to\);/, 'used once');
   // Both forms link to each other, so an existing account can sign in from the website's button.
   assert.match(src('app/sign-up.tsx'), /<Link href="\/sign-in" replace/);
-  assert.match(src('app/sign-in.tsx'), /<Link href="\/sign-up"/);
+  assert.match(src('app/sign-in.tsx'), /<Link href=\{\{ pathname: '\/sign-up', params: accountParams \}\}/);
   // The plans screen pre-selects the website's plan, but never over a current paid plan, and starts nothing by itself.
   const paywall = src('app/paywall.tsx');
   assert.match(paywall, /!entitlement\.data\?\.isPremium && \(PAID_TIERS as readonly string\[\]\)\.includes\(params\.tier/);

@@ -34,6 +34,8 @@ export default function SignUp() {
   const [accountType, setAccountType] = useState<AccountType | null>(() => (params.account === 'organization' ? 'organization' : null));
   const [organizationName, setOrganizationName] = useState('');
   const [market, setMarket] = useState<OrganizationMarket | null>(null);
+  // Organization accounts: create a new organization, or join one whose admin will add this account by email.
+  const [orgMode, setOrgMode] = useState<'create' | 'join'>('create');
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.
   const [blocked, setBlocked] = useState<boolean | null>(null);
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function SignUp() {
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
-  const form = { name, email, password, confirmPassword, ageRange, accountType, organizationName, market };
+  const form = { name, email, password, confirmPassword, ageRange, accountType, organizationName, market, joinExisting: orgMode === 'join' };
   const canSubmit = canSubmitSignup(form) && !loading;
   const showMismatch = mismatch || showPasswordMismatch(form);
 
@@ -78,7 +80,7 @@ export default function SignUp() {
       // The app language is used for the verification email, and is the language of the consent wording the person saw.
       const pending = await signUp(signupRequest({ ...form, ageRange }, { language: appLanguage, marketing }));
       // No account until the emailed link is opened: show "check your email" for this address.
-      if (pending) router.replace({ pathname: '/verify-email', params: { email: pending.email, pending: '1' } });
+      if (pending) router.replace({ pathname: '/verify-email', params: { email: pending.email, pending: '1', ...(isOrganizationSignup(form) ? { account: 'organization' } : {}) } });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'age_requirement_not_met') decline();
       else setError(e);
@@ -124,9 +126,20 @@ export default function SignUp() {
             <Text style={link}>{t('auth.accountType.change')}</Text>
           </Pressable>
         </View>
-        <Body muted>{isOrganization ? t('auth.signUpIntroOrganization') : t('auth.signUpIntro')}</Body>
+        {!(isOrganization && orgMode === 'join') && <Body muted>{isOrganization ? t('auth.signUpIntroOrganization') : t('auth.signUpIntro')}</Body>}
         {pending.intent && !isOrganization && <Body style={{ fontWeight: '600' }}>{t('auth.continueToPlans')}</Body>}
         {isOrganization && (
+          <Chips
+            options={[
+              { value: 'create' as const, label: t('auth.orgMode.create') },
+              { value: 'join' as const, label: t('auth.orgMode.join') },
+            ]}
+            value={orgMode}
+            onChange={setOrgMode}
+          />
+        )}
+        {isOrganization && orgMode === 'join' && <Body muted style={{ fontSize: 13 }}>{t('auth.orgMode.joinHint')}</Body>}
+        {isOrganization && orgMode === 'create' && (
           <View style={{ gap: space(3) }}>
             <Field label={t('auth.organizationName')} placeholder={t('auth.organizationNamePlaceholder')} value={organizationName} onChangeText={setOrganizationName} autoCapitalize="words" returnKeyType="next" />
             <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">

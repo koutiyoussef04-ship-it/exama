@@ -194,6 +194,8 @@ function NewLink({ checkAgain = false, initialEmail = '', sentJustNow = false }:
   const { appLanguage } = usePreferences();
   const qc = useQueryClient();
   const state = useEmailVerification();
+  // Signed out: which of the address's accounts the link is for (organization sign-ups pass it along).
+  const accountParam = useLocalSearchParams<{ account?: string }>().account;
   const [email, setEmail] = useState(initialEmail);
   // Right after sign-up the server has just sent the link: the same one-minute wait applies.
   const [retryAt, setRetryAt] = useState(() => (sentJustNow ? Date.now() + 60_000 : 0));
@@ -227,7 +229,7 @@ function NewLink({ checkAgain = false, initialEmail = '', sentJustNow = false }:
         waitFor(r.retryAfterSeconds);
         setNotice(r.sent ? { text: t('verify.resent'), ok: true } : null);
       } else {
-        const r = await api.requestVerification(email.trim(), appLanguage);
+        const r = await api.requestVerification(email.trim(), appLanguage, accountParam === 'organization' ? 'organization' : undefined);
         waitFor(r.retryAfterSeconds);
         setNotice({ text: t('verify.requested', { email: email.trim() }), ok: true });
       }

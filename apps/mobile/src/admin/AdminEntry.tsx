@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Card, ListRow, SectionLabel } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { B2B_ADMIN_ROUTE, showB2BAdminEntry } from '@/lib/b2b-admin';
 import { ADMIN_ROUTE, adminAccessQueryKey, showAdminEntry } from './access';
 
 export function AdminEntry() {
@@ -21,6 +22,15 @@ export function AdminEntry() {
     retry: false,
     staleTime: 5 * 60_000,
   });
+  // The B2B owner (organization account) gets its own dashboard; never the student owner's.
+  if (showB2BAdminEntry(user)) {
+    return (
+      <Card style={{ gap: 0 }}>
+        <SectionLabel>{t('account.administration')}</SectionLabel>
+        <ListRow label={t('b2bAdmin.entry')} onPress={() => router.push(B2B_ADMIN_ROUTE)} last />
+      </Card>
+    );
+  }
   if (!user || !showAdminEntry(access.data)) return null;
   return (
     <Card style={{ gap: 0 }}>

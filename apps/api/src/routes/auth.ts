@@ -24,6 +24,7 @@ import { users } from '../db/schema.js';
 import { config } from '../config.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { deleteAccount } from '../services/account.js';
+import { findAccount } from '../services/accounts.js';
 import { listMemberships } from '../services/organizations.js';
 import { assertNoPendingSignup, completeSignup, createAccount, resendPendingSignup, startSignup, toUser } from '../services/signup.js';
 import { assertEmailNotHeld } from '../services/email-hold.js';
@@ -64,42 +65,45 @@ export const authRoutes = new Hono<AuthEnv>()
       return c.json<SignupPending>(await startSignup({ ...details, password: input.password, language: input.language ?? 'en' }, clientKey(c)), 202);
     }
     // Development/tests only (SIGNUP_EMAIL_VERIFICATION=false): the account and a session at once, as before.
-    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, input.email));
-    if (existing) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
-    // Deleted in the last 30 days (same normalized address): 409 signup_email_unavailable, without saying why.
-    await assertEmailNotHeld(input.email);
+    // Taken = an account of the SAME type (a student account and an organization account with one email are separate).
+    if (await findAccount(input.email, input.accountType)) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
+    // Deleted in the last 30 days (same normalized address and account type): 409 signup_email_unavailable, without saying why.
+    await assertEmailNotHeld(input.email, input.accountType);
     const passwordHash = await hashPassword(input.password);
     const { user, organizations } = await db.transaction((tx) => createAccount(tx, { ...details, passwordHash }, null));
     void track('signup_completed', user.id, { account_type: user.accountType });
     // In the background: sign-up never waits for, or fails because of, the email.
     void sendVerificationAfterSignup(user, input.language ?? 'en');
-    return c.json<AuthResponse>({ token: await signToken(user.id), user: toUser(user, organizations) }, 201);
+    return c.json<AuthResponse>({ token: await signToken(user.id, null, user.accountType), user: toUser(user, organizations) }, 201);
   })
+  // `accountType` (sent by the app's sign-in form) selects exactly that identity: the organization sign-in never
+  // signs into the student account with the same email, and vice versa. Absent (older app versions): the student
+  // account if the email has one, otherwise the organization account — as before the split.
   .post('/login', async (c) => {
     const input = parseBody(loginSchema, await c.req.json());
-    const [user] = await db.select().from(users).where(eq(users.email, input.email));
+    const user = await findAccount(input.email, input.accountType);
     if (!user) {
       // A sign-up waiting for its email link (right password): say so instead of "incorrect password".
-      await assertNoPendingSignup(input.email, input.password);
+      await assertNoPendingSignup(input.email, input.password, input.accountType);
       throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
     }
     if (!(await verifyPassword(input.password, user.passwordHash))) {
       throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
     }
     void track('login_completed', user.id, {});
-    return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt), user: toUser(user, await listMemberships(user.id)) });
+    return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt, user.accountType), user: toUser(user, await listMemberships(user.id)) });
   })
   // Forgot password → a one-time code by email. Always 202: never reveals whether the email has an account.
   // `retryAfterSeconds`: how long until another code can be requested (15-minute cooldown per account).
   .post('/password-reset/request', async (c) => {
     const input = parseBody(passwordResetRequestSchema, await c.req.json().catch(() => ({})));
-    const { retryAfterSeconds } = await requestPasswordReset(input.email, input.language ?? 'en', clientKey(c));
+    const { retryAfterSeconds } = await requestPasswordReset(input.email, input.language ?? 'en', clientKey(c), Date.now(), input.accountType);
     return c.json({ ok: true, retryAfterSeconds }, 202);
   })
   // Code + new password → new password set, older sessions ended, signed in.
   .post('/password-reset/confirm', async (c) => {
     const input = parseBody(passwordResetConfirmSchema, await c.req.json().catch(() => ({})));
-    return c.json<AuthResponse>(await confirmPasswordReset(input.email, input.code, input.password, clientKey(c)));
+    return c.json<AuthResponse>(await confirmPasswordReset(input.email, input.code, input.password, clientKey(c), Date.now(), input.accountType));
   })
   // ---- Email verification ----
   .get('/email-verification', requireAuth, async (c) => c.json<EmailVerificationState>(await getVerificationState(c.var.userId)))
@@ -119,7 +123,7 @@ export const authRoutes = new Hono<AuthEnv>()
   // Signed out: always 202 with the same body, whether or not the email has an account.
   .post('/email-verification/request', async (c) => {
     const input = parseBody(requestVerificationSchema, await c.req.json().catch(() => ({})));
-    return c.json(await requestVerification(input.email, input.language ?? 'en', clientKey(c), Date.now(), resendPendingSignup), 202);
+    return c.json(await requestVerification(input.email, input.language ?? 'en', clientKey(c), Date.now(), resendPendingSignup, input.accountType), 202);
   })
   .get('/me', requireAuth, async (c) => {
     const [user] = await db.select().from(users).where(eq(users.id, c.var.userId));

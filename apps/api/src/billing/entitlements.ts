@@ -20,12 +20,16 @@ import { expireIfLapsed, getSubscription, isTrialPeriod, trialStartedAt, type Ex
 type UsageKind = (typeof usageLedger.$inferInsert)['kind'];
 type Tx = Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
 
-/** Owner accounts: matched on the authenticated user's id or stored email, from server config only. */
+/**
+ * Owner accounts (the student product's owner): matched on the authenticated user's id or stored email, from server
+ * config only. An email match counts for the STUDENT account only: an organization account with the same address is a
+ * separate identity and never becomes the student owner (the B2B owner is users.b2b_role, see services/accounts.ts).
+ */
 export async function isOwner(userId: string, exec: Exec = db): Promise<boolean> {
   if (config.OWNER_USER_IDS.includes(userId)) return true;
   if (config.OWNER_EMAILS.length === 0) return false;
-  const [u] = await exec.select({ email: users.email }).from(users).where(eq(users.id, userId));
-  return !!u && config.OWNER_EMAILS.includes(u.email.toLowerCase());
+  const [u] = await exec.select({ email: users.email, accountType: users.accountType }).from(users).where(eq(users.id, userId));
+  return !!u && u.accountType === 'student' && config.OWNER_EMAILS.includes(u.email.toLowerCase());
 }
 
 export const monthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

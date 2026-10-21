@@ -28,6 +28,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { createMiddleware } from 'hono/factory';
 import {
+  type AccountType,
   EMAIL_VERIFICATION_RESEND_SECONDS,
   EMAIL_VERIFICATION_TTL_HOURS,
   type EmailVerificationState,
@@ -37,6 +38,7 @@ import {
 } from '@study/shared';
 import { track } from '../analytics/index.js';
 import { verifyToken } from '../auth/auth.js';
+import { findAccount } from './accounts.js';
 import { config } from '../config.js';
 import { db } from '../db/client.js';
 import { emailVerificationTokens, users } from '../db/schema.js';
@@ -277,23 +279,29 @@ export async function resendVerification(userId: string, language: Language, cli
   return { sent: true, retryAfterSeconds: toSeconds(COOLDOWN_MS) };
 }
 
-/** Signed out: same answer for every email (known, unknown, verified); a link is only sent when it makes sense. */
+/**
+ * Signed out: same answer for every email (known, unknown, verified); a link is only sent when it makes sense.
+ * `accountType`: which of the address's accounts (student / organization, separate identities); absent → the student
+ * account if there is one, otherwise the organization account.
+ */
 export async function requestVerification(
   email: string,
   language: Language,
   clientKey: string,
   now = Date.now(),
   /** No account with this email: e.g. a sign-up still waiting for its link (services/signup.ts). Not awaited. */
-  onNoAccount?: (email: string, language: Language, now: number) => Promise<void>,
+  onNoAccount?: (email: string, language: Language, now: number, accountType?: AccountType) => Promise<void>,
+  accountType?: AccountType,
 ): Promise<{ retryAfterSeconds: number }> {
   requestLimiter.take(clientKey);
-  const inMemory = Math.max(0, (cooldownUntil.get(email) ?? 0) - now);
+  const memoryKey = `${accountType ?? '*'}:${email}`;
+  const inMemory = Math.max(0, (cooldownUntil.get(memoryKey) ?? 0) - now);
   if (inMemory > 0) return { retryAfterSeconds: toSeconds(inMemory) };
-  startMemoryCooldown(email, now);
+  startMemoryCooldown(memoryKey, now);
   const fresh = { retryAfterSeconds: toSeconds(COOLDOWN_MS) };
 
-  const [u] = await db.select(accountColumns).from(users).where(eq(users.email, email));
-  if (!u && onNoAccount) void onNoAccount(email, language, now).catch(logFailure);
+  const u = await findAccount(email, accountType);
+  if (!u && onNoAccount) void onNoAccount(email, language, now, accountType).catch(logFailure);
   if (!u || u.emailVerifiedAt || !verificationAvailable() || !emailLimiter.tryTake(u.id, now)) return fresh;
   const issued = await issueToken(u.id, now);
   if (!('token' in issued)) return fresh;

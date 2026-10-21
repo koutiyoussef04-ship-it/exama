@@ -5,12 +5,15 @@
  * 404 — the same answer as for an organization that doesn't exist — so ids can't be probed.
  *
  * Inside an organization: reviewer ⊂ editor ⊂ admin (see ORGANIZATION_ROLES in @study/shared).
+ *
+ * Only ORGANIZATION accounts are members. A student account is a separate identity (even with the same email) and
+ * never reaches an organization, even if a membership row pointing at it exists from before the split.
  */
 import { and, eq } from 'drizzle-orm';
 import { createMiddleware } from 'hono/factory';
 import { roleAtLeast, type OrganizationMarket, type OrganizationRole } from '@study/shared';
 import { db } from '../db/client.js';
-import { organizationMembers, organizations } from '../db/schema.js';
+import { organizationMembers, organizations, users } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import type { AuthEnv } from './auth.js';
 
@@ -26,7 +29,8 @@ export async function getMembership(userId: string, orgId: string): Promise<OrgC
     .select({ id: organizations.id, name: organizations.name, market: organizations.market, status: organizations.status, role: organizationMembers.role })
     .from(organizationMembers)
     .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
-    .where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId)));
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
+    .where(and(eq(organizationMembers.organizationId, orgId), eq(organizationMembers.userId, userId), eq(users.accountType, 'organization')));
   return row ?? null;
 }
 

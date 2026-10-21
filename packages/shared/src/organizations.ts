@@ -12,6 +12,10 @@ import { z } from 'zod';
 export const ACCOUNT_TYPES = ['student', 'organization'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
+/** B2B staff roles, held only by organization accounts and granted only by the server-side provisioning command. */
+export const B2B_ROLES = ['owner'] as const;
+export type B2BRole = (typeof B2B_ROLES)[number];
+
 /** Which market an organization serves. Behaviour differences come from `marketProfile`, never from ad-hoc checks. */
 export const ORGANIZATION_MARKETS = ['training_provider', 'academy'] as const;
 export type OrganizationMarket = (typeof ORGANIZATION_MARKETS)[number];

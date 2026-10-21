@@ -1,7 +1,9 @@
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
+import type { AccountType } from '@study/shared';
+import { Chips } from '@/components/planner';
 import { Body, Button, colors, ErrorText, Field, Screen, space, Title } from '@/components/ui';
 import { isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
@@ -17,6 +19,11 @@ export default function SignIn() {
   const { signIn, sessionExpired } = useAuth();
   const { appLanguage } = usePreferences();
   const pending = usePendingStart();
+  // Student and organization accounts are separate (one email can have both): the sign-in says which one.
+  // Pre-selected by /start?mode=signin&account=organization (the website's "for organizations" pages).
+  const params = useLocalSearchParams<{ account?: string }>();
+  const [accountType, setAccountType] = useState<AccountType>(() => (params.account === 'organization' ? 'organization' : 'student'));
+  const accountParams = accountType === 'organization' ? { account: 'organization' } : {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -29,10 +36,10 @@ export default function SignIn() {
     setLoading(true);
     setError(null);
     try {
-      await signIn({ email: email.trim(), password });
+      await signIn({ email: email.trim(), password, accountType });
     } catch (e) {
       // A sign-up that was never confirmed: there is no account yet, only the emailed link.
-      if (e instanceof ApiError && e.code === 'signup_pending') return router.push({ pathname: '/verify-email', params: { email: email.trim(), pending: '1' } });
+      if (e instanceof ApiError && e.code === 'signup_pending') return router.push({ pathname: '/verify-email', params: { email: email.trim(), pending: '1', ...accountParams } });
       setError(e);
     } finally {
       setLoading(false);
@@ -70,6 +77,20 @@ export default function SignIn() {
             {t('errors.codes.session_expired')}
           </Body>
         )}
+        <View style={{ gap: space(2) }}>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">
+            {t('auth.signInAs.question')}
+          </Text>
+          <Chips
+            options={[
+              { value: 'student' as const, label: t('auth.signInAs.student') },
+              { value: 'organization' as const, label: t('auth.signInAs.organization') },
+            ]}
+            value={accountType}
+            onChange={setAccountType}
+          />
+          {accountType === 'organization' && <Body muted style={{ fontSize: 13 }}>{t('auth.signInAs.organizationHint')}</Body>}
+        </View>
         <Field
           label={t('auth.email')}
           value={email}
@@ -95,14 +116,14 @@ export default function SignIn() {
           onSubmitEditing={submit}
         />
         <Link
-          href={{ pathname: '/forgot-password', params: email.trim() ? { email: email.trim() } : {} }}
+          href={{ pathname: '/forgot-password', params: { ...(email.trim() ? { email: email.trim() } : {}), ...accountParams } }}
           style={{ color: colors.primary, fontSize: 14, fontWeight: '600', alignSelf: 'flex-end', paddingVertical: space(1) }}
         >
           {t('auth.forgotPassword')}
         </Link>
         <ErrorText error={error} />
         <Button title={t('auth.signIn')} onPress={submit} loading={loading} disabled={!canSubmit} />
-        <Link href="/sign-up" style={{ color: colors.primary, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: space(3) }}>
+        <Link href={{ pathname: '/sign-up', params: accountParams }} style={{ color: colors.primary, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: space(3) }}>
           {t('auth.noAccount')}
         </Link>
         {/* Development only: which API the app calls, to debug phone ↔ PC connectivity. */}

@@ -6,7 +6,7 @@ It is backed by `GET /admin/*` on the API. The UI is English-only and internal.
 ## Access and security
 
 - **Server-side authorization on every endpoint.** `apps/api/src/routes/admin.ts` runs `requireAuth` and then `requireOwner`.
-  - `requireOwner` uses `isOwner()`, the same `OWNER_USER_IDS` / `OWNER_EMAILS` server configuration as owner access.
+  - `requireOwner` uses `isOwner()`, the same `OWNER_USER_IDS` / `OWNER_EMAILS` server configuration as owner access. An email match counts for student accounts only (an organization account with the same address is a separate identity). The B2B owner has its own dashboard, `/b2b-admin` — see `docs/b2b-accounts.md`.
   - No client role or hidden URL grants anything.
   - Everyone else gets **403**, including on `/admin/access`. That endpoint is what the app asks before it shows the Account entry or the screen.
 - **Read-only.** There are no write endpoints: no deletion, cancellation, refunds or entitlement changes.

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { mockSetStateSchema, PLANS, RECOMMENDED_PLAN_ID, STRIPE_TRIAL_DAYS, TRIAL_DAYS, type BillingCatalog, type BillingRedirect, type Entitlement } from '@study/shared';
-import { requireAuth, type AuthEnv } from '../auth/auth.js';
+import { requireAccountType, requireAuth, type AuthEnv } from '../auth/auth.js';
 import { appleVerifier, billingProvider, billingProviders, googlePlayApi, providerForPlatform, stripeBilling } from '../billing/index.js';
 import { handleAppleNotification } from '../billing/providers/apple.js';
 import { decodePushMessage, handleGoogleNotification, verifyPubSubToken } from '../billing/providers/google.js';
@@ -73,6 +73,14 @@ export const billingRoutes = new Hono<AuthEnv>()
     return c.json(await handleStripeWebhook(ctx, raw, c.req.header('stripe-signature')));
   })
   .use(requireAuth)
+  // Student plans are bought by student accounts only: an organization account (a separate identity, billed by hand
+  // through its organization's B2B plan) can read its status but never buys, restores or cancels a student plan.
+  .use('/purchase', requireAccountType('student'))
+  .use('/restore', requireAccountType('student'))
+  .use('/stripe/checkout', requireAccountType('student'))
+  .use('/stripe/portal', requireAccountType('student'))
+  .use('/cancel', requireAccountType('student'))
+  .use('/mock/state', requireAccountType('student'))
   .get('/status', async (c) => c.json<Entitlement>(await getEntitlement(c.var.userId)))
   // Body: { store: 'apple' | 'google' | 'mock', ...proof } — see packages/shared/src/billing.ts.
   .post('/purchase', async (c) => {

@@ -5,6 +5,10 @@
  * Account type: a student (the study app) or an organization (a training provider or an oposiciones
  * academy, which opens the organization workspace). The choice is sent with the request; the server stores
  * it and decides which experience applies — the app only asks the question.
+ *
+ * An organization account either creates a new organization (name + market) or joins an existing one: then it is
+ * created without an organization, and that organization's admin adds it by email. Student and organization accounts are
+ * separate identities: the same email can have one of each.
  */
 import { MARKETING_CONSENT_VERSION, type AccountType, type AgeRange, type Language, type OrganizationMarket, type RegisterInput, type SignupAgeAnswer } from '@study/shared';
 
@@ -23,6 +27,8 @@ export type SignupForm = {
   accountType?: AccountType | null;
   organizationName?: string;
   market?: OrganizationMarket | null;
+  /** Organization accounts: join an existing organization (an admin adds you) instead of creating one. */
+  joinExisting?: boolean;
 };
 
 /** Both password fields are filled in and identical. */
@@ -32,8 +38,8 @@ export const passwordsMatch = (f: Pick<SignupForm, 'password' | 'confirmPassword
 export const showPasswordMismatch = (f: Pick<SignupForm, 'password' | 'confirmPassword'>) => f.confirmPassword.length > 0 && f.password !== f.confirmPassword;
 
 /** An organization sign-up also needs the organization's name and kind. */
-export const organizationFieldsComplete = (f: Pick<SignupForm, 'accountType' | 'organizationName' | 'market'>) =>
-  (f.accountType ?? 'student') !== 'organization' || ((f.organizationName ?? '').trim().length >= MIN_ORGANIZATION_NAME_LENGTH && !!f.market);
+export const organizationFieldsComplete = (f: Pick<SignupForm, 'accountType' | 'organizationName' | 'market' | 'joinExisting'>) =>
+  (f.accountType ?? 'student') !== 'organization' || !!f.joinExisting || ((f.organizationName ?? '').trim().length >= MIN_ORGANIZATION_NAME_LENGTH && !!f.market);
 
 /** Every required field is complete and valid, including the two matching passwords. */
 export const canSubmitSignup = (f: SignupForm) =>
@@ -51,7 +57,10 @@ export const isOrganizationSignup = (f: Pick<SignupForm, 'accountType'>) => (f.a
 export function signupRequest(f: Omit<SignupForm, 'ageRange'> & { ageRange: AgeRange | null }, opts: { language: Language; marketing?: boolean }): RegisterInput {
   const base = { name: f.name.trim(), email: f.email.trim(), password: f.password, language: opts.language };
   // Organizations: no age group. (The marketing box is a student-app consent; it is not recorded for staff.)
-  if (isOrganizationSignup(f)) return { ...base, accountType: 'organization', organizationName: (f.organizationName ?? '').trim(), market: f.market ?? undefined };
+  if (isOrganizationSignup(f)) {
+    if (f.joinExisting) return { ...base, accountType: 'organization' };
+    return { ...base, accountType: 'organization', organizationName: (f.organizationName ?? '').trim(), market: f.market ?? undefined };
+  }
   return {
     ...base,
     ageRange: f.ageRange ?? undefined,

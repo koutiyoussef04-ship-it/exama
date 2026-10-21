@@ -14,6 +14,7 @@ import { Badge, Body, Button, Card, colors, EmptyState, ErrorState, Loading, Pro
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatNumber } from '@/lib/billing';
+import { showB2BAdminEntry } from '@/lib/b2b-admin';
 import { canEdit, useCurrentOrg } from '@/lib/org';
 
 export default function OrgDashboard() {
@@ -29,6 +30,7 @@ export default function OrgDashboard() {
         <EmptyState title={t('org.dashboard.empty')}>
           <Body muted style={{ textAlign: 'center' }}>{canCreate ? t('org.dashboard.emptyCreate') : t('org.dashboard.emptyAdded')}</Body>
           {canCreate && <Button title={t('org.dashboard.create')} onPress={() => router.push('/org/new')} />}
+          {showB2BAdminEntry(user) && <Button variant="secondary" title={t('b2bAdmin.entry')} onPress={() => router.push('/b2b-admin')} />}
           <TextButton title={t('org.nav.account')} onPress={() => router.push('/account')} />
         </EmptyState>
       </Screen>

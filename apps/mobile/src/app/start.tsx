@@ -33,7 +33,7 @@ export default function Start() {
 
   if (!ready) return <Loading />;
   if (user) return <Redirect href={link.intent ? startDestination(link.intent) : '/'} />;
-  if (link.mode === 'signin') return <Redirect href="/sign-in" />;
+  if (link.mode === 'signin') return <Redirect href={link.account ? { pathname: '/sign-in', params: { account: link.account } } : '/sign-in'} />;
   // ?account=organization: the sign-up form opens on the organization step (no account-type question).
   return <Redirect href={link.account ? { pathname: '/sign-up', params: { account: link.account } } : '/sign-up'} />;
 }

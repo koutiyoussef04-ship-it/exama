@@ -6,7 +6,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { AiLanguage, DocumentDetail, DocumentSummary } from '@study/shared';
 import { track } from '../analytics/index.js';
-import { assertCanCreate, loadOrgPlan, reserveOrgCourseUpload } from '../billing/org-limits.js';
+import { assertActorCanCreate, reserveOrgCourseUpload } from '../billing/org-limits.js';
 import type { OrgContext } from '../auth/org-access.js';
 import { db } from '../db/client.js';
 import { documents } from '../db/schema.js';
@@ -35,7 +35,7 @@ export async function getOrgDocument(orgId: string, id: string): Promise<Documen
 export const orgDocumentDetail = (doc: DocumentRow): DocumentDetail => toDetail(doc);
 
 export async function createOrgDocument(org: OrgContext, actorUserId: string, file: { name: string; type: string; bytes: Uint8Array }, aiLanguage: AiLanguage) {
-  assertCanCreate(await loadOrgPlan(org.id)); // fail before the file is stored; checked again under the usage lock
+  await assertActorCanCreate(org.id, actorUserId); // fail before the file is stored; checked again under the usage lock
   const doc = await createDocument(actorUserId, file, {
     organizationId: org.id,
     aiLanguage,
@@ -45,10 +45,10 @@ export async function createOrgDocument(org: OrgContext, actorUserId: string, fi
   return doc;
 }
 
-export async function reprocessOrgDocument(orgId: string, id: string) {
+export async function reprocessOrgDocument(orgId: string, id: string, actorUserId: string) {
   const doc = await getOrgDocument(orgId, id);
   if (doc.status !== 'failed') throw new HttpError(409, 'Only failed courses can be retried', 'document_not_failed');
-  assertCanCreate(await loadOrgPlan(orgId));
+  await assertActorCanCreate(orgId, actorUserId);
   const [updated] = await db
     .update(documents)
     .set({ status: 'processing', error: null, errorCode: null })

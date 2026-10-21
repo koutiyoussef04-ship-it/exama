@@ -68,6 +68,9 @@ function RootNavigator() {
         <Stack.Screen name="org/bank" options={{ headerShown: false, title: t('nav.orgBank') }} />
         <Stack.Screen name="org/export" options={{ headerShown: false, title: t('nav.orgExport') }} />
         <Stack.Screen name="org/members" options={{ headerShown: false, title: t('nav.orgMembers') }} />
+        {/* B2B owner dashboard: the server allows only the B2B owner's organization account (404 for everyone else). */}
+        <Stack.Screen name="b2b-admin/index" options={{ title: t('nav.b2bAdmin') }} />
+        <Stack.Screen name="b2b-admin/[id]" options={{ title: t('nav.b2bAdminOrganization') }} />
       </Stack.Protected>
       {/* Available signed in or out (linked from sign-up and the paywall). */}
       <Stack.Screen name="language" options={{ title: t('nav.language') }} />
