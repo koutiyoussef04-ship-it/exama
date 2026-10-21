@@ -13,18 +13,20 @@ import {
   type AuthResponse,
   type EmailVerificationState,
   type ResendVerificationResult,
+  type SignupPending,
   type User,
   type VerifyEmailResult,
 } from '@study/shared';
 import { hashPassword, requireAuth, signToken, verifyPassword, type AuthEnv } from '../auth/auth.js';
 import { track } from '../analytics/index.js';
 import { db } from '../db/client.js';
-import { userOnboarding, users } from '../db/schema.js';
+import { users } from '../db/schema.js';
+import { config } from '../config.js';
 import { HttpError, parseBody } from '../lib/errors.js';
 import { deleteAccount } from '../services/account.js';
-import { createOrganization, listMemberships } from '../services/organizations.js';
+import { listMemberships } from '../services/organizations.js';
+import { assertNoPendingSignup, completeSignup, createAccount, resendPendingSignup, startSignup, toUser } from '../services/signup.js';
 import { assertEmailNotHeld } from '../services/email-hold.js';
-import { grantMarketingConsent } from '../services/marketing-consent.js';
 import { getVerificationState, requestVerification, resendVerification, sendVerificationAfterSignup, verifyEmail } from '../services/email-verification.js';
 import { confirmPasswordReset, requestPasswordReset } from '../services/password-reset.js';
 
@@ -32,48 +34,42 @@ import { confirmPasswordReset, requestPasswordReset } from '../services/password
 const clientKey = (c: { req: { header: (n: string) => string | undefined } }) =>
   c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'local';
 
-const toUser = (u: typeof users.$inferSelect, organizations: User['organizations'] = []): User => ({ id: u.id, email: u.email, name: u.name, accountType: u.accountType, organizations });
 
 export const authRoutes = new Hono<AuthEnv>()
   .post('/register', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { ageRange?: unknown } | null;
+    const body = (await c.req.json().catch(() => ({}))) as { ageRange?: unknown; accountType?: unknown } | null;
     // Minimum age (13), checked first: nothing is looked up, created, emailed, logged or tracked for an
     // under-13 answer, and the answer itself is not kept.
     if (body?.ageRange === 'under_13') {
       throw new HttpError(403, `You need to be at least ${MINIMUM_SIGNUP_AGE} to create an Exama account.`, 'age_requirement_not_met');
     }
-    // Older app versions don't ask the age question: they can't create accounts until they update.
-    if (body?.ageRange === undefined || body.ageRange === null || body.ageRange === '') {
+    // Students state an age group (older app versions don't ask: they can't create accounts until they update).
+    // Organization (staff) sign-ups are not asked.
+    const organization = body?.accountType === 'organization';
+    if (!organization && (body?.ageRange === undefined || body.ageRange === null || body.ageRange === '')) {
       throw new HttpError(400, 'Please update Exama to create an account.', 'age_range_required');
     }
     const input = parseBody(registerSchema, body);
+    const details = {
+      email: input.email,
+      name: input.name,
+      accountType: input.accountType,
+      ageRange: input.accountType === 'organization' ? null : (input.ageRange ?? null),
+      organizationName: input.organizationName ?? null,
+      market: input.market ?? null,
+      marketingConsent: input.accountType === 'student' && input.marketingConsent ? input.marketingConsent : null,
+    };
+    // Default (and always in production): no account until the email is confirmed — see services/signup.ts.
+    if (config.SIGNUP_EMAIL_VERIFICATION) {
+      return c.json<SignupPending>(await startSignup({ ...details, password: input.password, language: input.language ?? 'en' }, clientKey(c)), 202);
+    }
+    // Development/tests only (SIGNUP_EMAIL_VERIFICATION=false): the account and a session at once, as before.
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, input.email));
     if (existing) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
     // Deleted in the last 30 days (same normalized address): 409 signup_email_unavailable, without saying why.
     await assertEmailNotHeld(input.email);
     const passwordHash = await hashPassword(input.password);
-    // The onboarding row is created with the account (same transaction): only new accounts are ever asked.
-    // An organization sign-up also creates the organization and its first admin membership here, so an
-    // organization account never exists without its organization (and vice versa).
-    const { user, organizations } = await db.transaction(async (tx) => {
-      // New accounts are asked to confirm their email (see services/email-verification.ts).
-      const [created] = await tx
-        .insert(users)
-        .values({ email: input.email, name: input.name, passwordHash, emailVerificationRequired: true, ageRange: input.ageRange, accountType: input.accountType })
-        .returning();
-      if (input.accountType === 'organization') {
-        // Staff never see the student questionnaire.
-        await tx.insert(userOnboarding).values({ userId: created.id, status: 'skipped', finishedAt: new Date() }).onConflictDoNothing();
-        const org = await createOrganization(tx, created.id, { name: input.organizationName!, market: input.market! });
-        return { user: created, organizations: [{ id: org.id, name: org.name, market: org.market, role: 'admin' as const }] };
-      }
-      await tx.insert(userOnboarding).values({ userId: created.id }).onConflictDoNothing();
-      // Marketing consent: only when the client sent an explicit, valid `{ version, language }` (the box was ticked). Omitted, null or false
-      // records nothing. Same transaction as the account: no account without its consent, no consent without its account. The time and
-      // source are the server's.
-      if (input.marketingConsent) await grantMarketingConsent(created.id, input.marketingConsent, 'signup', tx);
-      return { user: created, organizations: [] };
-    });
+    const { user, organizations } = await db.transaction((tx) => createAccount(tx, { ...details, passwordHash }, null));
     void track('signup_completed', user.id, { account_type: user.accountType });
     // In the background: sign-up never waits for, or fails because of, the email.
     void sendVerificationAfterSignup(user, input.language ?? 'en');
@@ -82,7 +78,12 @@ export const authRoutes = new Hono<AuthEnv>()
   .post('/login', async (c) => {
     const input = parseBody(loginSchema, await c.req.json());
     const [user] = await db.select().from(users).where(eq(users.email, input.email));
-    if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+    if (!user) {
+      // A sign-up waiting for its email link (right password): say so instead of "incorrect password".
+      await assertNoPendingSignup(input.email, input.password);
+      throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
+    }
+    if (!(await verifyPassword(input.password, user.passwordHash))) {
       throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
     }
     void track('login_completed', user.id, {});
@@ -106,7 +107,8 @@ export const authRoutes = new Hono<AuthEnv>()
   // (the link may be opened on another device).
   .post('/email-verification/verify', async (c) => {
     const { token } = parseBody(verifyEmailSchema, await c.req.json().catch(() => ({})));
-    return c.json<VerifyEmailResult>(await verifyEmail(token, clientKey(c)));
+    // A pending sign-up's link creates the account and signs in; otherwise it is an existing account's link.
+    return c.json<VerifyEmailResult>((await completeSignup(token, clientKey(c))) ?? (await verifyEmail(token, null)));
   })
   // Signed in: a new link (60 s cooldown, 5 an hour; 503 email_send_failed if it couldn't be sent).
   .post('/email-verification/resend', requireAuth, async (c) => {
@@ -117,7 +119,7 @@ export const authRoutes = new Hono<AuthEnv>()
   // Signed out: always 202 with the same body, whether or not the email has an account.
   .post('/email-verification/request', async (c) => {
     const input = parseBody(requestVerificationSchema, await c.req.json().catch(() => ({})));
-    return c.json(await requestVerification(input.email, input.language ?? 'en', clientKey(c)), 202);
+    return c.json(await requestVerification(input.email, input.language ?? 'en', clientKey(c), Date.now(), resendPendingSignup), 202);
   })
   .get('/me', requireAuth, async (c) => {
     const [user] = await db.select().from(users).where(eq(users.id, c.var.userId));

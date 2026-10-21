@@ -18,10 +18,10 @@ import { marketProfile } from '@study/shared';
 import { AIError, studyAI, type GeneratedQuestion } from '../../ai/index.js';
 import { resolveOutputLanguage } from '../../ai/language.js';
 import { withAIUsage } from '../../ai/usage.js';
-import { releaseOrgReservation, reserveOrgItems, resolveOrgLimits, settleOrgReservation } from '../../billing/org-limits.js';
+import { releaseOrgReservation, reserveOrgItems, settleOrgReservation } from '../../billing/org-limits.js';
 import type { OrgContext } from '../../auth/org-access.js';
 import { db } from '../../db/client.js';
-import { bankItemRevisions, bankItems, documentChunks, organizations, questionSources } from '../../db/schema.js';
+import { bankItemRevisions, bankItems, documentChunks, questionSources } from '../../db/schema.js';
 import { HttpError } from '../../lib/errors.js';
 import { MaterialIndex, validateQuestions } from '../../lib/grounding.js';
 import { usableChunks } from '../chunks.js';
@@ -90,9 +90,7 @@ export async function generateDraftItems(org: OrgContext, actorUserId: string, d
     throw new HttpError(422, 'Not enough text in the selected material to write questions from', 'insufficient_source', { chars: totalChars });
   }
 
-  const [orgRow] = await db.select({ limits: organizations.limits }).from(organizations).where(eq(organizations.id, org.id));
-  const limits = resolveOrgLimits(orgRow?.limits);
-  const reservation = await reserveOrgItems(org.id, actorUserId, request.count, limits);
+  const reservation = await reserveOrgItems(org.id, actorUserId, request.count);
   const count = reservation.amount;
 
   try {

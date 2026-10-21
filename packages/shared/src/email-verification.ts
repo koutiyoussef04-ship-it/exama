@@ -37,7 +37,16 @@ export type EmailVerificationState = {
   restricted: boolean;
 };
 
-export type VerifyEmailResult = { status: 'verified' };
+/**
+ * `auth`: present when the link completed a sign-up — the account was created just now and this is its session
+ * (opening the link proves the inbox, so the person is signed in on the device that opened it).
+ */
+export type VerifyEmailResult = { status: 'verified'; auth?: { token: string; user: import('./index').User } };
+
+/** Sign-up answer while the email is not confirmed yet: no account exists, nothing is signed in. */
+export type SignupPending = { status: 'verification_pending'; email: string; retryAfterSeconds: number };
+/** Verification emails per address and hour during sign-up (first email included). */
+export const SIGNUP_EMAILS_PER_HOUR = 5;
 
 /** `sent: false` = nothing was sent now (wait `retryAfterSeconds`, or already verified). */
 export type ResendVerificationResult = { sent: boolean; retryAfterSeconds: number; alreadyVerified?: boolean };

@@ -111,7 +111,11 @@ test('the request carries the account type only for organizations, with the trim
   const student = request2({ ...form(), ageRange: '18_24' }, { language: 'es' });
   assert.ok(!('accountType' in student) && !('organizationName' in student) && !('market' in student));
   const org = request2({ ...form({ accountType: 'organization', organizationName: '  Academia Norte ', market: 'training_provider' }), ageRange: '25_34' }, { language: 'es' });
-  assert.deepEqual(org, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'es', ageRange: '25_34', accountType: 'organization', organizationName: 'Academia Norte', market: 'training_provider' });
+  assert.deepEqual(org, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'es', accountType: 'organization', organizationName: 'Academia Norte', market: 'training_provider' }, 'organizations send no age group');
+  const orgNoAge = request2({ ...form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy' }), ageRange: null }, { language: 'es', marketing: true });
+  assert.ok(!('ageRange' in orgNoAge) && !('marketingConsent' in orgNoAge));
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy', ageRange: null })), true, 'organizations are not asked their age group');
+  assert.equal(canSubmit2(form({ ageRange: null })), false, 'students still are');
   assert.ok(!JSON.stringify(org).includes('confirm'));
 });
 

@@ -48,7 +48,9 @@ export function errorMessage(err: unknown): string {
     if (err.status === 0) return t('errors.network');
     if (err.status === 402 && err.body && typeof err.body === 'object' && 'feature' in err.body) return limitMessage(err.body as LimitErrorBody);
     if (err.code && i18n.exists(`errors.codes.${err.code}`)) {
-      const details = (err.body as { details?: { maxMb?: number; maxDays?: number; max?: number; provider?: BillingProviderId } } | undefined)?.details;
+      const details = (err.body as { details?: { maxMb?: number; maxDays?: number; max?: number; provider?: BillingProviderId; period?: string } } | undefined)?.details;
+      // An organization's pilot allowances are totals for the whole pilot, not monthly.
+      if (err.code === 'org_limit_reached' && details?.period === 'pilot') return t('errors.codes.org_pilot_limit_reached', { max: details.max ?? 0 });
       // A subscription bought on the web: there is no store to name.
       if (err.code === 'subscribed_elsewhere' && details?.provider === 'stripe') return t('errors.codes.subscribed_on_web');
       return t(`errors.codes.${err.code}` as 'errors.codes.file_too_large', {

@@ -47,14 +47,19 @@ export type OrganizationMembershipSummary = { id: string; name: string; market: 
 
 export type OrganizationMember = { userId: string; email: string; name: string; role: OrganizationRole; joinedAt: string };
 
-/** Per-organization allowances (pilot defaults in the API; the owner can change them per organization). */
+/**
+ * Per-organization allowances: the plan's defaults (ORGANIZATION_PLAN_CATALOG) with any owner overrides on top.
+ * "PerMonth" counts are per calendar month on paid plans and for the WHOLE pilot on the pilot plan.
+ */
 export type OrganizationLimits = {
-  /** Courses (uploads) per calendar month. */
+  /** Courses (uploads) per calendar month (pilot: in total). */
   coursesPerMonth: number;
-  /** AI-generated draft questions per calendar month. */
+  /** AI-generated draft questions per calendar month (pilot: in total). */
   itemsPerMonth: number;
   /** Draft questions per generation request. */
   maxItemsPerRequest: number;
+  /** Members of every role (admins, editors and reviewers). */
+  maxMembers: number;
 };
 
 export type OrganizationUsage = {
@@ -62,9 +67,45 @@ export type OrganizationUsage = {
   itemsThisMonth: number;
   /** Estimated AI cost this month, in micro-USD, from `ai_usage` (null when unknown). */
   aiCostMicroUsdThisMonth: number | null;
+  /** What the course/draft counts cover: the calendar month, or the whole pilot. */
+  period: 'month' | 'pilot';
 };
 
-export type Organization = {
+// ---- Plans (B2B). Billing is manual (invoice / bank transfer): nothing here charges anyone. The owner assigns
+// the plan from the admin tools after the customer has agreed to it; a new organization starts on the pilot.
+
+export const ORGANIZATION_PLANS = ['pilot', 'esencial', 'profesional', 'centro'] as const;
+export type OrganizationPlan = (typeof ORGANIZATION_PLANS)[number];
+export const ORGANIZATION_BILLING_PERIODS = ['monthly', 'yearly'] as const;
+export type OrganizationBillingPeriod = (typeof ORGANIZATION_BILLING_PERIODS)[number];
+/** Length of the free pilot, from the organization's creation. */
+export const ORGANIZATION_PILOT_DAYS = 30;
+
+export type OrganizationPlanInfo = {
+  limits: OrganizationLimits;
+  /** List prices in euro cents, VAT excluded; null = free (pilot) or custom (centro). */
+  prices: { monthly: number; yearly: number } | null;
+};
+
+export const ORGANIZATION_PLAN_CATALOG: Record<OrganizationPlan, OrganizationPlanInfo> = {
+  pilot: { limits: { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 }, prices: null },
+  esencial: { limits: { coursesPerMonth: 10, itemsPerMonth: 500, maxItemsPerRequest: 20, maxMembers: 10 }, prices: { monthly: 14_900, yearly: 149_000 } },
+  profesional: { limits: { coursesPerMonth: 100, itemsPerMonth: 2_000, maxItemsPerRequest: 20, maxMembers: 25 }, prices: { monthly: 34_900, yearly: 349_000 } },
+  // Custom terms: starts from Profesional's allowances; the owner sets the agreed ones per organization.
+  centro: { limits: { coursesPerMonth: 100, itemsPerMonth: 2_000, maxItemsPerRequest: 20, maxMembers: 25 }, prices: null },
+};
+
+/** Plan and pilot state of an organization (read-only for its members; the owner changes it). */
+export type OrganizationPlanState = {
+  plan: OrganizationPlan;
+  billingPeriod: OrganizationBillingPeriod | null;
+  /** Pilot only: when it ends (ISO). */
+  pilotEndsAt: string | null;
+  /** The pilot has ended: no new courses or AI drafts; everything already there can still be read, reviewed and exported. */
+  pilotExpired: boolean;
+};
+
+export type Organization = OrganizationPlanState & {
   id: string;
   name: string;
   market: OrganizationMarket;
@@ -104,17 +145,23 @@ export const marketProfile = (market: OrganizationMarket): MarketProfile => MARK
 
 export const adminUpdateOrganizationSchema = z.object({
   status: z.enum(['active', 'suspended']).optional(),
+  /** Assign a plan (after the customer agreed to it; billing is manual). Leaving the pilot clears its end date. */
+  plan: z.enum(ORGANIZATION_PLANS).optional(),
+  billingPeriod: z.enum(ORGANIZATION_BILLING_PERIODS).nullable().optional(),
+  /** Pilot only: a new end date (ISO), e.g. to extend a pilot. */
+  pilotEndsAt: z.iso.datetime({ offset: true }).optional(),
   limits: z
     .object({
       coursesPerMonth: z.number().int().min(0).max(100_000).optional(),
       itemsPerMonth: z.number().int().min(0).max(1_000_000).optional(),
       maxItemsPerRequest: z.number().int().min(1).max(100).optional(),
+      maxMembers: z.number().int().min(1).max(10_000).optional(),
     })
     .optional(),
 });
 export type AdminUpdateOrganizationInput = z.input<typeof adminUpdateOrganizationSchema>;
 
-export type AdminOrganization = {
+export type AdminOrganization = OrganizationPlanState & {
   id: string;
   name: string;
   market: OrganizationMarket;

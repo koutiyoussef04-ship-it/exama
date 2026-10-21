@@ -5,7 +5,7 @@ import { Image, KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'r
 import { Body, Button, colors, ErrorText, Field, Screen, space, Title } from '@/components/ui';
 import { isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
-import { API_URL } from '@/lib/api';
+import { API_URL, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { usePreferences } from '@/lib/preferences';
 import { usePendingStart } from '@/lib/use-pending-start';
@@ -31,6 +31,8 @@ export default function SignIn() {
     try {
       await signIn({ email: email.trim(), password });
     } catch (e) {
+      // A sign-up that was never confirmed: there is no account yet, only the emailed link.
+      if (e instanceof ApiError && e.code === 'signup_pending') return router.push({ pathname: '/verify-email', params: { email: email.trim(), pending: '1' } });
       setError(e);
     } finally {
       setLoading(false);

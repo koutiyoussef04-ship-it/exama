@@ -22,6 +22,7 @@ function loadConfigWith(overrides: Record<string, string | undefined>, file = sc
     OWNER_EMAILS: undefined,
     OWNER_USER_IDS: undefined,
     NODE_ENV: undefined,
+    SIGNUP_EMAIL_VERIFICATION: undefined,
     TRANSCRIPTION_PROVIDER: undefined,
     ASSEMBLYAI_API_KEY: undefined,
     MEDIA_MAX_UPLOAD_MB: undefined,
@@ -246,6 +247,17 @@ test('email: log provider refused in production; resend needs a key and a sender
   const unset = loadConfigWith(prod);
   assert.equal(unset.code, 0, unset.err);
   assert.match(unset.err, /EMAIL_PROVIDER is disabled/, 'production without email warns loudly');
+});
+
+test('sign-up verification: on by default; the immediate flow (false) is refused in production', () => {
+  const prod = { NODE_ENV: 'production', AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test', JWT_SECRET: 'p'.repeat(48) };
+  const off = loadConfigWith({ ...prod, SIGNUP_EMAIL_VERIFICATION: 'false' });
+  assert.equal(off.code, 1);
+  assert.match(off.err, /SIGNUP_EMAIL_VERIFICATION=false is for development and tests only/);
+  const unset = loadConfigWith(prod);
+  assert.equal(unset.code, 0, unset.err);
+  assert.match(unset.err, /new sign-ups are refused/, 'production without email: sign-ups fail closed, loudly');
+  assert.equal(loadConfigWith({ SIGNUP_EMAIL_VERIFICATION: 'false' }).code, 0, 'development may turn it off');
 });
 
 test('email verification: off by default; turning it on needs working email and a link origin (never locks students out)', () => {

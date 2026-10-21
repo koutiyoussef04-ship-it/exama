@@ -13,7 +13,7 @@ import { SmallButton, StatCard, useIsWide, WorkspaceShell, type OrgContext } fro
 import { Badge, Body, Button, Card, colors, EmptyState, ErrorState, Loading, ProgressBar, Screen, SectionLabel, space, TextButton } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatNumber } from '@/lib/billing';
+import { formatDate, formatNumber } from '@/lib/billing';
 import { canEdit, useCurrentOrg } from '@/lib/org';
 
 export default function OrgDashboard() {
@@ -91,6 +91,12 @@ function Overview({ data: o, go }: { data: OrganizationOverview; go: (p: '/org/c
   const l = o.limits;
   return (
     <>
+      {o.plan === 'pilot' && o.pilotEndsAt && (
+        <Card style={{ gap: space(2), ...(o.pilotExpired && { borderColor: colors.warning }) }}>
+          <Badge label={t(o.pilotExpired ? 'org.plan.pilotEndedBadge' : 'org.plan.pilotBadge')} tone={o.pilotExpired ? 'warning' : 'primary'} />
+          <Body muted>{o.pilotExpired ? t('org.plan.pilotEnded', { date: formatDate(o.pilotEndsAt) }) : t('org.plan.pilotActive', { date: formatDate(o.pilotEndsAt) })}</Body>
+        </Card>
+      )}
       {o.status === 'suspended' && (
         <Card style={{ borderColor: colors.warning, gap: space(2) }}>
           <Badge label={t('org.dashboard.suspendedBadge')} tone="warning" />
@@ -106,13 +112,15 @@ function Overview({ data: o, go }: { data: OrganizationOverview; go: (p: '/org/c
       </View>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: space(3) }}>
         <Card style={{ flex: 1, gap: space(3) }}>
-          <SectionLabel>{t('org.dashboard.usage')}</SectionLabel>
+          <SectionLabel>{t(u.period === 'pilot' ? 'org.plan.usagePilot' : 'org.dashboard.usage')}</SectionLabel>
           <UsageRow label={t('org.dashboard.usageCourses')} used={u.coursesThisMonth} limit={l.coursesPerMonth} />
           <UsageRow label={t('org.dashboard.usageItems')} used={u.itemsThisMonth} limit={l.itemsPerMonth} />
           <Body muted style={{ fontSize: 13 }}>{t('org.dashboard.perRequest', { count: l.maxItemsPerRequest })}</Body>
+          <Body muted style={{ fontSize: 13 }}>{t('org.plan.seats', { max: l.maxMembers })}</Body>
         </Card>
         <Card style={{ flex: 1, gap: space(2), justifyContent: 'center' }}>
-          <SectionLabel>{t(`org.market.${o.market}`)}</SectionLabel>
+          <SectionLabel>{t(`org.plan.name.${o.plan}`)}</SectionLabel>
+          <Body style={{ fontSize: 14 }}>{t(`org.market.${o.market}`)}</Body>
           <Body muted style={{ fontSize: 14 }}>{t('org.dashboard.noAutoApproval')}</Body>
         </Card>
       </View>

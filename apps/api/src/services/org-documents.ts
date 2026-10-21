@@ -6,10 +6,10 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { AiLanguage, DocumentDetail, DocumentSummary } from '@study/shared';
 import { track } from '../analytics/index.js';
-import { reserveOrgCourseUpload, resolveOrgLimits } from '../billing/org-limits.js';
+import { assertCanCreate, loadOrgPlan, reserveOrgCourseUpload } from '../billing/org-limits.js';
 import type { OrgContext } from '../auth/org-access.js';
 import { db } from '../db/client.js';
-import { documents, organizations } from '../db/schema.js';
+import { documents } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
 import { storage } from '../storage/index.js';
 import { createDocument, processDocument, toDetail, toSummary } from './documents.js';
@@ -35,12 +35,11 @@ export async function getOrgDocument(orgId: string, id: string): Promise<Documen
 export const orgDocumentDetail = (doc: DocumentRow): DocumentDetail => toDetail(doc);
 
 export async function createOrgDocument(org: OrgContext, actorUserId: string, file: { name: string; type: string; bytes: Uint8Array }, aiLanguage: AiLanguage) {
-  const [row] = await db.select({ limits: organizations.limits }).from(organizations).where(eq(organizations.id, org.id));
-  const limits = resolveOrgLimits(row?.limits);
+  assertCanCreate(await loadOrgPlan(org.id)); // fail before the file is stored; checked again under the usage lock
   const doc = await createDocument(actorUserId, file, {
     organizationId: org.id,
     aiLanguage,
-    reserve: (tx) => reserveOrgCourseUpload(tx, org.id, actorUserId, limits),
+    reserve: (tx) => reserveOrgCourseUpload(tx, org.id, actorUserId),
   });
   void track('upload_succeeded', actorUserId, { document_id: doc.id, file_size_kb: Math.round(doc.sizeBytes / 1024), ai_language: aiLanguage });
   return doc;
@@ -49,6 +48,7 @@ export async function createOrgDocument(org: OrgContext, actorUserId: string, fi
 export async function reprocessOrgDocument(orgId: string, id: string) {
   const doc = await getOrgDocument(orgId, id);
   if (doc.status !== 'failed') throw new HttpError(409, 'Only failed courses can be retried', 'document_not_failed');
+  assertCanCreate(await loadOrgPlan(orgId));
   const [updated] = await db
     .update(documents)
     .set({ status: 'processing', error: null, errorCode: null })
