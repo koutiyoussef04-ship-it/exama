@@ -92,10 +92,15 @@ test('the same email registers independently as a student and as an organization
     assert.equal(ls.body.user.id, s.body.user.id);
     assert.deepEqual(ls.body.user.organizations, []);
   }
-  // Separate credentials: one identity's password never opens the other.
-  assert.equal((await login(email, STUDENT_PW, 'organization')).status, 401);
-  assert.equal((await login(email, ORG_PW, 'student')).status, 401);
-  assert.equal((await login(email, ORG_PW)).status, 401, 'no type → the student account, whose password this is not');
+  // Separate credentials: one identity's password never opens the other. With the right password for the OTHER type the
+  // answer is 403 wrong_account_type (no token), so the app can offer that sign-in; the caller already holds that password.
+  const wrongS = await login(email, STUDENT_PW, 'organization');
+  assert.deepEqual([wrongS.status, wrongS.body.code, (wrongS.body as unknown as { details: { accountType: string } }).details.accountType, 'token' in wrongS.body], [403, 'wrong_account_type', 'student', false]);
+  const wrongO = await login(email, ORG_PW, 'student');
+  assert.deepEqual([wrongO.status, wrongO.body.code, (wrongO.body as unknown as { details: { accountType: string } }).details.accountType, 'token' in wrongO.body], [403, 'wrong_account_type', 'organization', false]);
+  assert.equal((await login(email, ORG_PW)).status, 401, 'no type → the student account, whose password this is not (older apps: nothing new is revealed)');
+  // A wrong password for both: plain 401, whichever type is chosen — nothing says whether either account exists.
+  assert.deepEqual([(await login(email, 'not-either-password', 'student')).status, (await login(email, 'not-either-password', 'organization')).status], [401, 401]);
 
   // Each session is its own identity.
   const meS = await call<User>('/auth/me', { token: s.body.token });
@@ -111,7 +116,30 @@ test('an organization-only email still signs in without a type (older apps), as 
   const l = await login(email, ORG_PW);
   assert.equal(l.status, 200);
   assert.equal(l.body.user.id, o.body.user.id);
-  assert.equal((await login(email, ORG_PW, 'student')).status, 401, 'but not through the student sign-in');
+  const viaStudent = await login(email, ORG_PW, 'student');
+  assert.deepEqual([viaStudent.status, viaStudent.body.code, 'token' in viaStudent.body], [403, 'wrong_account_type', false], 'but not through the student sign-in: pointed back to the organization one, no session');
+});
+
+test('choosing a type is not authenticating: a single-identity email gets 401 for the other type (no hint), and the hint only follows a correct password', async () => {
+  // Student only.
+  const sEmail = `only-student-${RUN}@example.com`;
+  assert.equal((await registerStudent(sEmail)).status, 201);
+  const noOrg = await login(sEmail, STUDENT_PW, 'organization');
+  assert.deepEqual([noOrg.status, noOrg.body.code, (noOrg.body as unknown as { details: { accountType: string } }).details.accountType], [403, 'wrong_account_type', 'student'], 'right password, wrong type: pointed to the student sign-in, no session');
+  assert.equal((await login(sEmail, 'wrong-password', 'organization')).status, 401, 'wrong password: nothing about the student account is revealed');
+  assert.equal((await login(sEmail, 'wrong-password', 'student')).status, 401);
+  // Organization only.
+  const oEmail = `only-org-${RUN}@example.com`;
+  assert.equal((await registerOrg(oEmail, ORG_PW, 'only')).status, 201);
+  const noStudent = await login(oEmail, ORG_PW, 'student');
+  assert.deepEqual([noStudent.status, noStudent.body.code, (noStudent.body as unknown as { details: { accountType: string } }).details.accountType, 'token' in noStudent.body], [403, 'wrong_account_type', 'organization', false]);
+  assert.equal((await login(oEmail, 'wrong-password', 'student')).status, 401);
+  // No account at all: 401 for both types, same body as a wrong password.
+  const nobody = `nobody-${RUN}@example.com`;
+  const n1 = await login(nobody, STUDENT_PW, 'student');
+  const n2 = await login(nobody, STUDENT_PW, 'organization');
+  assert.deepEqual([n1.status, n2.status, n1.body.code, n2.body.code], [401, 401, 'invalid_credentials', 'invalid_credentials']);
+  assert.deepEqual(n1.body, (await login(sEmail, 'wrong-password', 'organization')).body, 'an unknown email and a wrong password are indistinguishable');
 });
 
 test('sessions: a token only works as the identity it was issued for; older tokens without the type claim stay valid', async () => {
@@ -253,8 +281,11 @@ test('B2B owner: provisioned only by the server command (idempotent, no password
   // The database refuses the role on a student account.
   await assert.rejects(sql`update users set b2b_role = 'owner' where id = ${student.body.user.id}`, /users_b2b_role_check/);
 
-  // No usable password: the owner sets one with an emailed code through the organization sign-in.
-  assert.equal((await login(email, STUDENT_PW, 'organization')).status, 401);
+  // No usable password: the owner sets one with an emailed code through the organization sign-in. The student password
+  // does not open the organization account; it only earns the hint that it belongs to the student account (no session).
+  const withStudentPw = await login(email, STUDENT_PW, 'organization');
+  assert.deepEqual([withStudentPw.status, withStudentPw.body.code, 'token' in withStudentPw.body], [403, 'wrong_account_type', false]);
+  assert.equal((await login(email, 'any-other-password', 'organization')).status, 401);
   await call('/auth/password-reset/request', json('POST', { email, accountType: 'organization' }));
   const code = mailCode(email, (subject) => subject.includes('organization account'));
   assert.ok(code);

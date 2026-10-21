@@ -22,6 +22,7 @@ const en = {
     tagline: 'Your course material, turned into a personal tutor',
   },
   nav: {
+    switchAccount: 'Switch account',
     b2bAdmin: 'B2B dashboard',
     b2bAdminOrganization: 'Organization',
     flashcards: 'Flashcards',
@@ -94,6 +95,10 @@ const en = {
       student: 'Student account',
       organization: 'Organization account',
       organizationHint: 'Exama for organizations. A student account with the same email is a separate account with its own password.',
+      switchTo: {
+        student: 'Sign in to the student account instead',
+        organization: 'Sign in to the organization account instead',
+      },
     },
     orgMode: {
       create: 'Create a new organization',
@@ -501,6 +506,7 @@ const en = {
     trialTotals: 'These are totals for the whole trial (ends {{date}}). Deleting a course doesn’t give an upload back.',
     settings: 'Settings',
     appLanguage: 'App language',
+    switchAccount: 'Switch account',
     studyLanguage: 'Study language (AI)',
     helpLegal: 'Help & legal',
     signOut: 'Sign out',
@@ -1441,6 +1447,30 @@ const en = {
       noAiErrors: 'No AI errors.',
     },
   },
+  switchAccount: {
+    title: 'Switch account',
+    heading: {
+      student: 'Go to your student account',
+      organization: 'Go to your organization account',
+    },
+    current: {
+      student: 'You are signed in to the student account of {{email}}.',
+      organization: 'You are signed in to the organization account of {{email}}.',
+    },
+    explain: {
+      student: 'The student account is a separate account. To use it, sign out of the organization account first, then sign in as a student with the student account’s password.',
+      organization: 'The organization account is a separate account. To use it, sign out of the student account first, then sign in as an organization with the organization account’s password.',
+    },
+    separate: 'The two accounts are never merged, and signing in to one never signs you in to the other.',
+    proceed: {
+      student: 'Sign out and sign in as a student',
+      organization: 'Sign out and sign in as an organization',
+    },
+    stay: {
+      student: 'Stay in the student account',
+      organization: 'Stay in the organization account',
+    },
+  },
   errors: {
     network: 'Can’t reach Exama. Check your internet connection and try again.',
     picker: 'We couldn’t open that file. Choose a PDF or PowerPoint (.pptx) that is saved on this device, then try again.',
@@ -1481,6 +1511,7 @@ const en = {
       session_expired: 'Your session has expired. Please sign in again.',
       account_deleted: 'This account no longer exists.',
       invalid_credentials: 'Incorrect email or password.',
+      wrong_account_type: 'This email and password belong to your other account type. Nothing was signed in: choose that account type to continue.',
       email_taken: 'An account with this email already exists.',
       unsubscribe_link_invalid: 'This unsubscribe link isn’t valid.',
       signup_email_unavailable: 'This email address can’t be used to create an account right now. Use a different email address, or contact support if you think this is a mistake.',

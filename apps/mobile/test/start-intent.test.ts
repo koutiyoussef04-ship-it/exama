@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { parseStartLink, PENDING_START_TTL_MS, readPendingStart, startDestination } from '../src/lib/start-intent';
+import { parseStartLink, PENDING_START_TTL_MS, readPendingStart, startDestination, startRedirect } from '../src/lib/start-intent';
 
 const src = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 const NOW = Date.UTC(2026, 9, 16, 9, 0);
@@ -19,7 +19,7 @@ test('known values only: mode, plan, period and language; anything else is ignor
   });
   assert.equal(parseStartLink({ mode: 'signin' }, NOW).mode, 'signin');
   assert.equal(parseStartLink({ mode: 'signup', account: 'organization' }, NOW).account, 'organization', 'the B2B pages open the organization sign-up');
-  assert.equal(parseStartLink({ account: 'student' }, NOW).account, null);
+  assert.equal(parseStartLink({ mode: 'signin', account: 'student' }, NOW).account, 'student', 'every "Log in" on the website names its account type');
   assert.equal(parseStartLink({ account: 'admin' } as never, NOW).account, null);
   assert.equal(parseStartLink({ mode: 'whatever' }, NOW).mode, 'signup');
   assert.equal(parseStartLink({}, NOW).intent, null, 'no intent: just sign up / sign in');
@@ -44,13 +44,45 @@ test('a stored destination lasts one hour and must be well-formed', () => {
   assert.deepEqual(readPendingStart(JSON.stringify({ kind: 'plans', tier: 'x', period: 'y', at: NOW }), NOW), { kind: 'plans', tier: null, period: null, at: NOW });
 });
 
+test('where /start sends people: the named account type is kept, and a session of the OTHER identity is never reused', () => {
+  const link = (p: Record<string, string>) => parseStartLink(p, NOW);
+  const student = { accountType: 'student' as const };
+  const organization = { accountType: 'organization' as const };
+  // Signed out: the form on the named type. A student link, an untyped link and an organization link.
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'student' }), null), { pathname: '/sign-in', params: { account: 'student' } });
+  assert.deepEqual(startRedirect(link({ mode: 'signin' }), null), '/sign-in');
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'organization' }), null), { pathname: '/sign-in', params: { account: 'organization' } });
+  assert.deepEqual(startRedirect(link({ mode: 'signup', account: 'organization' }), null), { pathname: '/sign-up', params: { account: 'organization' } });
+  assert.deepEqual(startRedirect(link({ mode: 'signup', account: 'student' }), null), '/sign-up', 'the student sign-up is the plain form');
+  assert.deepEqual(startRedirect(link({}), null), '/sign-up');
+  // Signed in to the identity the link names (or to any, when it names none): straight in, or to the plans screen.
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'student' }), student), '/');
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'organization' }), organization), '/');
+  assert.deepEqual(startRedirect(link({ mode: 'signin' }), organization), '/', 'an untyped link keeps whatever session there is');
+  assert.deepEqual(startRedirect(link({ intent: 'plans', plan: 'pro' }), student), { pathname: '/paywall', params: { trigger: 'website_cta', tier: 'pro' } });
+  // Signed in to the OTHER identity: the switch-account screen — never the current session, never an automatic sign-in.
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'organization' }), student), { pathname: '/switch-account', params: { account: 'organization' } }, 'an organization link never lands in a student session');
+  assert.deepEqual(startRedirect(link({ mode: 'signin', account: 'student' }), organization), { pathname: '/switch-account', params: { account: 'student' } });
+  assert.deepEqual(startRedirect(link({ mode: 'signup', account: 'organization' }), student), { pathname: '/switch-account', params: { account: 'organization' } });
+  assert.deepEqual(startRedirect(link({ intent: 'plans', account: 'organization' }), student), { pathname: '/switch-account', params: { account: 'organization' } }, 'a destination never overrides the identity check');
+});
+
+test('the switch-account screen signs out before the other sign-in and never merges or carries a session', () => {
+  const sw = src('app/switch-account.tsx');
+  assert.match(sw, /if \(!user\) return <Redirect href=\{\{ pathname: '\/sign-in'/, 'signed out: just the sign-in on the requested type');
+  assert.match(sw, /if \(user\.accountType === target\) return <Redirect href="\/" \/>/, 'already that identity: nothing to switch');
+  assert.match(sw, /await signOut\(\);\s*router\.replace\(\{ pathname: '\/sign-in', params: \{ account: target \} \}\);/, 'sign out, then the sign-in form on the other type — the person types that account’s password');
+  assert.doesNotMatch(sw, /signIn\(|signInWith\(|api\.login/, 'the screen never signs anyone in');
+  assert.match(src('app/account.tsx'), /pathname: '\/switch-account'/, 'reachable from the Account screen');
+  const signIn = src('app/sign-in.tsx');
+  assert.match(signIn, /e\.code === 'wrong_account_type'\) setOtherType/, '403 wrong_account_type: the other sign-in is offered, nothing is signed in');
+  assert.match(signIn, /await signIn\(\{ email: email\.trim\(\), password, accountType: as \}\)/, 'the session is requested for the chosen type only');
+});
+
 test('the flow: /start remembers the destination for signed-out visitors; after sign-up/in and onboarding the course list continues there once', () => {
   const start = src('app/start.tsx');
   assert.match(start, /if \(link\.intent && !user\) await kv\.set\(PENDING_START_KEY/);
-  assert.match(start, /if \(user\) return <Redirect href=\{link\.intent \? startDestination\(link\.intent\) : '\/'\} \/>/);
-  // Sign-in keeps the account type (student / organization are separate identities): ?account=organization pre-selects it.
-  assert.match(start, /if \(link\.mode === 'signin'\) return <Redirect href=\{link\.account \? \{ pathname: '\/sign-in', params: \{ account: link\.account \} \} : '\/sign-in'\} \/>;/);
-  assert.match(start, /link\.account \? \{ pathname: '\/sign-up', params: \{ account: link\.account \} \} : '\/sign-up'/, 'account=organization reaches the sign-up form');
+  assert.match(start, /return <Redirect href=\{startRedirect\(link, user\)\} \/>/, 'every destination comes from startRedirect (tested above)');
   assert.match(src('app/sign-up.tsx'), /params\.account === 'organization' \? 'organization' : null/, 'the form pre-selects the organization step');
   const index = src('app/index.tsx');
   assert.match(index, /if \(gate !== 'proceed' \|\| mustVerify \|\| !pending\.intent\) return;/, 'only after onboarding (and verification, when enforced)');

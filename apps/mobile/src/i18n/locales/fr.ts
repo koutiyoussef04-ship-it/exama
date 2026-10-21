@@ -19,6 +19,7 @@ const fr: LocaleDict = {
     tagline: 'Vos supports de cours, transformés en tuteur personnel',
   },
   nav: {
+    switchAccount: 'Changer de compte',
     b2bAdmin: 'Tableau de bord B2B',
     b2bAdminOrganization: 'Organisation',
     flashcards: 'Flashcards',
@@ -91,6 +92,10 @@ const fr: LocaleDict = {
       student: 'Compte étudiant',
       organization: 'Compte organisation',
       organizationHint: 'Exama pour les organisations. Un compte étudiant avec la même adresse e-mail est un compte distinct, avec son propre mot de passe.',
+      switchTo: {
+        student: 'Se connecter au compte étudiant à la place',
+        organization: 'Se connecter au compte organisation à la place',
+      },
     },
     orgMode: {
       create: 'Créer une nouvelle organisation',
@@ -497,6 +502,7 @@ const fr: LocaleDict = {
     trialTotals: 'Ce sont les totaux pour tout l’essai (fin le {{date}}). Supprimer un cours ne rend pas d’import.',
     settings: 'Réglages',
     appLanguage: 'Langue de l’app',
+    switchAccount: 'Changer de compte',
     studyLanguage: 'Langue d’étude (IA)',
     helpLegal: 'Aide et mentions légales',
     signOut: 'Se déconnecter',
@@ -1435,6 +1441,30 @@ const fr: LocaleDict = {
       noAiErrors: 'Aucune erreur IA.',
     },
   },
+  switchAccount: {
+    title: 'Changer de compte',
+    heading: {
+      student: 'Aller à votre compte étudiant',
+      organization: 'Aller à votre compte organisation',
+    },
+    current: {
+      student: 'Vous êtes connecté au compte étudiant de {{email}}.',
+      organization: 'Vous êtes connecté au compte organisation de {{email}}.',
+    },
+    explain: {
+      student: 'Le compte étudiant est un compte distinct. Pour l’utiliser, déconnectez-vous d’abord du compte organisation, puis connectez-vous comme étudiant avec le mot de passe du compte étudiant.',
+      organization: 'Le compte organisation est un compte distinct. Pour l’utiliser, déconnectez-vous d’abord du compte étudiant, puis connectez-vous comme organisation avec le mot de passe du compte organisation.',
+    },
+    separate: 'Les deux comptes ne sont jamais fusionnés, et se connecter à l’un ne vous connecte jamais à l’autre.',
+    proceed: {
+      student: 'Se déconnecter et se connecter comme étudiant',
+      organization: 'Se déconnecter et se connecter comme organisation',
+    },
+    stay: {
+      student: 'Rester sur le compte étudiant',
+      organization: 'Rester sur le compte organisation',
+    },
+  },
   errors: {
     network: 'Impossible de joindre Exama. Vérifiez votre connexion internet et réessayez.',
     picker: 'Impossible d’ouvrir ce fichier. Choisissez un PDF ou une présentation PowerPoint (.pptx) enregistré sur cet appareil, puis réessayez.',
@@ -1475,6 +1505,7 @@ const fr: LocaleDict = {
       session_expired: 'Votre session a expiré. Veuillez vous reconnecter.',
       account_deleted: 'Ce compte n’existe plus.',
       invalid_credentials: 'E-mail ou mot de passe incorrect.',
+      wrong_account_type: 'Cet e-mail et ce mot de passe correspondent à votre autre type de compte. Aucune session n’a été ouverte : choisissez ce type de compte pour continuer.',
       email_taken: 'Un compte existe déjà avec cet e-mail.',
       unsubscribe_link_invalid: 'Ce lien de désabonnement n’est pas valide.',
       signup_email_unavailable: 'Cette adresse e-mail ne peut pas être utilisée pour créer un compte pour le moment. Utilisez une autre adresse ou contactez l’assistance si vous pensez qu’il s’agit d’une erreur.',

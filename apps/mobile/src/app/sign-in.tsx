@@ -19,31 +19,41 @@ export default function SignIn() {
   const { signIn, sessionExpired } = useAuth();
   const { appLanguage } = usePreferences();
   const pending = usePendingStart();
-  // Student and organization accounts are separate (one email can have both): the sign-in says which one.
-  // Pre-selected by /start?mode=signin&account=organization (the website's "for organizations" pages).
+  // Student and organization accounts are separate (one email can have both): the sign-in says which one, and the
+  // server only ever issues a session for the chosen type. Pre-selected by /start?mode=signin&account=student|organization
+  // (every "Log in" on the website names the type); opened directly, it starts on the student account.
   const params = useLocalSearchParams<{ account?: string }>();
   const [accountType, setAccountType] = useState<AccountType>(() => (params.account === 'organization' ? 'organization' : 'student'));
   const accountParams = accountType === 'organization' ? { account: 'organization' } : {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
+  // The server said these credentials belong to the OTHER account type (403 wrong_account_type): offer that sign-in
+  // explicitly. Nothing was signed in; the user chooses.
+  const [otherType, setOtherType] = useState<AccountType | null>(null);
   const [loading, setLoading] = useState(false);
   const passwordRef = useRef<TextInput>(null);
   const canSubmit = !!email.trim() && !!password && !loading;
 
-  const submit = async () => {
+  const submit = async (as: AccountType = accountType) => {
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
+    setOtherType(null);
     try {
-      await signIn({ email: email.trim(), password, accountType });
+      await signIn({ email: email.trim(), password, accountType: as });
     } catch (e) {
       // A sign-up that was never confirmed: there is no account yet, only the emailed link.
-      if (e instanceof ApiError && e.code === 'signup_pending') return router.push({ pathname: '/verify-email', params: { email: email.trim(), pending: '1', ...accountParams } });
+      if (e instanceof ApiError && e.code === 'signup_pending') return router.push({ pathname: '/verify-email', params: { email: email.trim(), pending: '1', ...(as === 'organization' ? { account: 'organization' } : {}) } });
+      if (e instanceof ApiError && e.code === 'wrong_account_type') setOtherType(as === 'student' ? 'organization' : 'student');
       setError(e);
     } finally {
       setLoading(false);
     }
+  };
+  const switchAndSubmit = (to: AccountType) => {
+    setAccountType(to);
+    void submit(to);
   };
 
   return (
@@ -87,7 +97,11 @@ export default function SignIn() {
               { value: 'organization' as const, label: t('auth.signInAs.organization') },
             ]}
             value={accountType}
-            onChange={setAccountType}
+            onChange={(v) => {
+              setAccountType(v);
+              setOtherType(null);
+              setError(null);
+            }}
           />
           {accountType === 'organization' && <Body muted style={{ fontSize: 13 }}>{t('auth.signInAs.organizationHint')}</Body>}
         </View>
@@ -113,7 +127,7 @@ export default function SignIn() {
           autoComplete="password"
           textContentType="password"
           returnKeyType="go"
-          onSubmitEditing={submit}
+          onSubmitEditing={() => void submit()}
         />
         <Link
           href={{ pathname: '/forgot-password', params: { ...(email.trim() ? { email: email.trim() } : {}), ...accountParams } }}
@@ -122,7 +136,8 @@ export default function SignIn() {
           {t('auth.forgotPassword')}
         </Link>
         <ErrorText error={error} />
-        <Button title={t('auth.signIn')} onPress={submit} loading={loading} disabled={!canSubmit} />
+        {otherType && <Button variant="secondary" title={t(`auth.signInAs.switchTo.${otherType}`)} onPress={() => switchAndSubmit(otherType)} disabled={loading} />}
+        <Button title={t('auth.signIn')} onPress={() => void submit()} loading={loading} disabled={!canSubmit} />
         <Link href={{ pathname: '/sign-up', params: accountParams }} style={{ color: colors.primary, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: space(3) }}>
           {t('auth.noAccount')}
         </Link>

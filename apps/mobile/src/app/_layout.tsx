@@ -81,6 +81,8 @@ function RootNavigator() {
       {/* The unsubscribe link of the daily study-plan email, and the website's "start" link (signed in or out). */}
       <Stack.Screen name="unsubscribe" options={{ title: t('nav.unsubscribe') }} />
       <Stack.Screen name="start" options={{ headerShown: false }} />
+      {/* Signed in to one identity, wanting the other: sign out first, then sign in as that type (signed out: the sign-in). */}
+      <Stack.Screen name="switch-account" options={{ title: t('nav.switchAccount') }} />
     </Stack>
   );
 }

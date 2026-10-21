@@ -79,19 +79,29 @@ export const authRoutes = new Hono<AuthEnv>()
   // `accountType` (sent by the app's sign-in form) selects exactly that identity: the organization sign-in never
   // signs into the student account with the same email, and vice versa. Absent (older app versions): the student
   // account if the email has one, otherwise the organization account — as before the split.
+  //
+  // Choosing a type is not authenticating: the session is only ever issued for the identity whose password matched.
+  // When the chosen identity does not match but the SAME email and password are those of the other identity, the
+  // answer is 403 `wrong_account_type` (no token) so the app can offer to sign in as that type instead. That tells
+  // the caller nothing they could not learn by trying the other sign-in with the password they already hold; with a
+  // wrong password the answer stays 401, whether or not either account exists.
   .post('/login', async (c) => {
     const input = parseBody(loginSchema, await c.req.json());
     const user = await findAccount(input.email, input.accountType);
-    if (!user) {
-      // A sign-up waiting for its email link (right password): say so instead of "incorrect password".
-      await assertNoPendingSignup(input.email, input.password, input.accountType);
-      throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
+    if (user && (await verifyPassword(input.password, user.passwordHash))) {
+      void track('login_completed', user.id, {});
+      return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt, user.accountType), user: toUser(user, await listMemberships(user.id)) });
     }
-    if (!(await verifyPassword(input.password, user.passwordHash))) {
-      throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
+    // A sign-up waiting for its email link (right password): say so instead of "incorrect password".
+    if (!user) await assertNoPendingSignup(input.email, input.password, input.accountType);
+    if (input.accountType) {
+      const otherType = input.accountType === 'student' ? 'organization' : 'student';
+      const other = await findAccount(input.email, otherType);
+      if (other && (await verifyPassword(input.password, other.passwordHash))) {
+        throw new HttpError(403, `This email and password belong to your ${otherType} account. Choose "${otherType === 'student' ? 'Student' : 'Organization'} account" to sign in.`, 'wrong_account_type', { accountType: otherType });
+      }
     }
-    void track('login_completed', user.id, {});
-    return c.json<AuthResponse>({ token: await signToken(user.id, user.passwordChangedAt, user.accountType), user: toUser(user, await listMemberships(user.id)) });
+    throw new HttpError(401, 'Incorrect email or password', 'invalid_credentials');
   })
   // Forgot password → a one-time code by email. Always 202: never reveals whether the email has an account.
   // `retryAfterSeconds`: how long until another code can be requested (15-minute cooldown per account).
