@@ -37,6 +37,16 @@ export const orgAnchor = (lang: OrgLang, id: string) => `${orgPathFor(lang)}#${i
 /** Link-preview image of the organizations pages (public/og-image-org-<lang>.png, from scripts/og-image-org.html). */
 export const orgOgImage = (lang: OrgLang) => `/og-image-org-${lang}.png`;
 
+/**
+ * The "for students" landing page, in every language: /for-students, /es/para-estudiantes, /fr/pour-les-etudiants,
+ * /ar/for-students (ASCII slug, like the organizations page). The home page stays the general entrance with the
+ * two audience choices; this page is the student-only one.
+ */
+const STUDENT_SLUG: Record<Lang, string> = { en: 'for-students', es: 'para-estudiantes', fr: 'pour-les-etudiants', ar: 'for-students' };
+export const studentPathFor = (lang: Lang): string => (lang === 'en' ? `/${STUDENT_SLUG.en}` : `/${lang}/${STUDENT_SLUG[lang]}`);
+export const studentAlternates = () => LANGS.map((l) => ({ lang: l, path: studentPathFor(l) }));
+export const studentAnchor = (lang: Lang, id: string) => `${studentPathFor(lang)}#${id}`;
+
 /** Anchor on the home page of a language, e.g. /es/#pricing. */
 export const homeAnchor = (lang: Lang, id: string) => `${pathFor(lang)}#${id}`;
 export const alternatesFor = (page: '' | 'privacy' | 'terms' | 'support') => LANGS.map((l) => ({ lang: l, path: pathFor(l, page) }));

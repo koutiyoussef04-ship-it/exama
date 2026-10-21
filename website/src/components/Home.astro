@@ -2,7 +2,7 @@
 /** The home page in one language (/ for English, /es/, /fr/, /ar/). */
 import Base from '../layouts/Base.astro';
 import Hero from './Hero.astro';
-import AudienceBand from './AudienceBand.astro';
+import AudienceChoice from './AudienceChoice.astro';
 import HowItWorks from './HowItWorks.astro';
 import Materials from './Materials.astro';
 import Grounded from './Grounded.astro';
@@ -36,7 +36,7 @@ const jsonLd = [
 
 <Base title={c.meta.title} description={c.meta.description} path={pathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={alternatesFor('')}>
   <Hero lang={lang} />
-  <AudienceBand lang={lang} />
+  <AudienceChoice lang={lang} />
   <HowItWorks lang={lang} />
   <Materials lang={lang} />
   <Grounded lang={lang} />

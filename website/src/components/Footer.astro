@@ -5,13 +5,13 @@ import Wordmark from './Wordmark.astro';
 import { SECTIONS } from '../data/content';
 import { site } from '../config/site';
 import { ORG_SECTIONS } from '../data/b2b';
-import { copy, homeAnchor, isOrgLang, orgAnchor, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
+import { copy, homeAnchor, isOrgLang, orgAnchor, orgLangFor, orgPathFor, pathFor, studentPathFor, type Lang } from '../i18n';
 import { orgCopy } from '../i18n/b2b';
 
 interface Props {
   lang: Lang;
-  /** The organizations pages get their own tagline, links and sign-up (no student sign-up there). */
-  nav?: 'student' | 'org';
+  /** The organizations pages get their own tagline, links and sign-up (no student sign-up there); 'students' = the student landing page. */
+  nav?: 'student' | 'students' | 'org';
 }
 const { lang, nav = 'student' } = Astro.props;
 const c = copy(lang);
@@ -22,7 +22,8 @@ const product = [
   { label: c.footer.links.materials, href: homeAnchor(lang, SECTIONS.materials) },
   { label: c.footer.links.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
   { label: c.footer.links.faq, href: homeAnchor(lang, SECTIONS.faq) },
-  // The organizations page in the same language.
+  // The two audience pages in the same language.
+  { label: c.footer.links.students, href: studentPathFor(lang) },
   { label: c.footer.links.organizations, href: orgPathFor(orgLangFor(lang)), attrs: isOrgLang(lang) ? {} : { hreflang: 'en' } },
 ];
 const legal = [
@@ -30,25 +31,22 @@ const legal = [
   { label: c.footer.links.terms, href: pathFor(lang, 'terms') },
   { label: c.footer.links.support, href: pathFor(lang, 'support') },
 ];
-const account = [
-  { label: c.footer.links.signup, href: site.links.signUp(lang) },
-  { label: c.footer.links.login, href: site.links.signIn(lang) },
+// "Log in" is always the two-way choice (student / organization account), in both footers.
+const logins = [
+  { label: c.footer.links.loginStudent, href: site.links.signIn(lang), kind: 'student' },
+  { label: c.footer.links.loginOrganization, href: site.links.orgSignIn(lang), kind: 'organization' },
 ];
+const account = [{ label: c.footer.links.signup, href: site.links.signUp(lang) }, ...logins];
 const productLinks = org && isOrgLang(lang)
   ? [
       { label: org.footer.how, href: orgAnchor(lang, ORG_SECTIONS.how) },
       { label: org.footer.pricing, href: orgAnchor(lang, ORG_SECTIONS.pricing) },
       { label: org.footer.faq, href: orgAnchor(lang, ORG_SECTIONS.faq) },
       { label: org.footer.demo, href: orgPathFor(lang, 'demo') },
-      { label: org.footer.students, href: pathFor(lang) },
+      { label: org.footer.students, href: studentPathFor(lang) },
     ]
   : product;
-const accountLinks = org
-  ? [
-      { label: org.footer.signup, href: site.links.orgSignUp(lang) },
-      { label: c.footer.links.login, href: site.links.orgSignIn(lang) },
-    ]
-  : account;
+const accountLinks = org ? [{ label: org.footer.signup, href: site.links.orgSignUp(lang) }, ...[...logins].reverse()] : account;
 ---
 
 <footer class="site-footer">
@@ -72,7 +70,7 @@ const accountLinks = org
     <nav aria-label={c.footer.account}>
       <h2 class="footer-heading">{c.footer.account}</h2>
       <ul>
-        {accountLinks.map((l) => <li><a href={l.href}>{l.label}</a></li>)}
+        {accountLinks.map((l) => <li><a href={l.href} {...('kind' in l ? { 'data-account': l.kind } : {})}>{l.label}</a></li>)}
       </ul>
     </nav>
 

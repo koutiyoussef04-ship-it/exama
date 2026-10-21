@@ -2,19 +2,23 @@
 import { Image } from 'astro:assets';
 import logoMark from '../assets/brand/logo-mark.png';
 import Icon from './Icon.astro';
+import LoginMenu from './LoginMenu.astro';
 import Wordmark from './Wordmark.astro';
 import { ORG_SECTIONS } from '../data/b2b';
 import { SECTIONS, TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
-import { copy, homeAnchor, isOrgLang, LANG_NAMES, orgAnchor, orgLangFor, orgPathFor, pathFor, type Lang } from '../i18n';
+import { copy, homeAnchor, isOrgLang, LANG_NAMES, orgAnchor, orgLangFor, orgPathFor, pathFor, studentAnchor, studentPathFor, type Lang } from '../i18n';
 import { orgCopy } from '../i18n/b2b';
 
 interface Props {
   lang: Lang;
   /** The same page in every language (language selector). */
   alternates: { lang: Lang; path: string }[];
-  /** The student site (default) or the organizations pages: different sections, a different main button. */
-  nav?: 'student' | 'org';
+  /**
+   * The home page (default), the student landing page or the organizations pages: different sections, a different
+   * main button. 'students' is the home navigation with its anchors on the student page itself.
+   */
+  nav?: 'student' | 'students' | 'org';
 }
 const { lang, alternates, nav = 'student' } = Astro.props;
 const c = copy(lang);
@@ -29,20 +33,27 @@ const navLinks = org
       { label: org.nav.pricing, href: orgAnchor(orgLang, ORG_SECTIONS.pricing) },
       { label: org.nav.faq, href: orgAnchor(orgLang, ORG_SECTIONS.faq) },
       { label: org.nav.demo, href: orgPathFor(orgLang, 'demo') },
-      // Back to the student site: in the mobile menu only (the logo already links there; the bar is full).
-      { label: org.nav.students, href: pathFor(lang), attrs: {}, menuOnly: true },
+      // To the student landing page: in the mobile menu only (the logo already links to the home; the bar is full).
+      { label: org.nav.students, href: studentPathFor(lang), attrs: {}, menuOnly: true },
     ]
   : [
-      { label: c.nav.how, href: homeAnchor(lang, SECTIONS.how) },
-      { label: c.nav.materials, href: homeAnchor(lang, SECTIONS.materials) },
-      { label: c.nav.pricing, href: homeAnchor(lang, SECTIONS.pricing) },
+      // On the student landing page the section links stay on that page; on the home page (and the legal pages) they go to the home sections.
+      { label: c.nav.how, href: nav === 'students' ? studentAnchor(lang, SECTIONS.how) : homeAnchor(lang, SECTIONS.how) },
+      { label: c.nav.materials, href: nav === 'students' ? studentAnchor(lang, SECTIONS.materials) : homeAnchor(lang, SECTIONS.materials) },
+      { label: c.nav.pricing, href: nav === 'students' ? studentAnchor(lang, SECTIONS.pricing) : homeAnchor(lang, SECTIONS.pricing) },
       { label: c.nav.faq, href: homeAnchor(lang, SECTIONS.faq) },
+      { label: c.nav.students, href: studentPathFor(lang), attrs: {}, menuOnly: true },
       { label: c.nav.organizations, href: orgHref, attrs: orgLinkAttrs },
     ];
 const ctaLabel = org ? org.cta.pilotShort : site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
 const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
-// On the organizations pages, "Log in" opens the organization sign-in (separate identity from the student account).
-const loginHref = org ? site.links.orgSignIn(lang) : site.links.signIn(lang);
+// "Log in" is a choice between the two identities (LoginMenu); the organizations pages list the organization one first.
+const loginPrimary = org ? 'organization' : 'student';
+const loginLinks = [
+  { label: c.nav.loginStudent, href: site.links.signIn(lang), kind: 'student' },
+  { label: c.nav.loginOrganization, href: site.links.orgSignIn(lang), kind: 'organization' },
+];
+if (org) loginLinks.reverse();
 ---
 
 <header class:list={['site-header', { 'site-header-org': !!org }]}>
@@ -73,7 +84,7 @@ const loginHref = org ? site.links.orgSignIn(lang) : site.links.signIn(lang);
       </ul>
     </details>
 
-    <a class="header-login" href={loginHref}>{c.nav.login}</a>
+    <div class="header-login"><LoginMenu lang={lang} primary={loginPrimary} /></div>
     <a class="btn btn-primary btn-sm header-cta" href={ctaHref}>{ctaLabel}</a>
 
     <details class="menu">
@@ -84,7 +95,12 @@ const loginHref = org ? site.links.orgSignIn(lang) : site.links.signIn(lang);
       <nav class="menu-panel" aria-label={c.ui.mobileNav}>
         <ul>
           {navLinks.map((l) => <li><a href={l.href} {...(l.attrs ?? {})}>{l.label}</a></li>)}
-          <li><a href={loginHref}>{c.nav.login}</a></li>
+          <li class="menu-login" aria-label={c.nav.loginAria}>
+            <span class="menu-login-label">{c.nav.login}</span>
+            <ul>
+              {loginLinks.map((l) => <li><a href={l.href} data-account={l.kind}>{l.label}</a></li>)}
+            </ul>
+          </li>
         </ul>
         <a class="btn btn-primary btn-block" href={ctaHref}>{ctaLabel}</a>
       </nav>
@@ -95,7 +111,7 @@ const loginHref = org ? site.links.orgSignIn(lang) : site.links.signIn(lang);
 <!-- Progressive enhancement: the menus open without JS; this only closes them after a link is used, on a click elsewhere or on Escape. -->
 <script is:inline data-purpose="close-menu">
   (function () {
-    var menus = document.querySelectorAll('.menu, .lang-menu');
+    var menus = document.querySelectorAll('.menu, .lang-menu, .login-menu');
     menus.forEach(function (menu) {
       menu.addEventListener('click', function (e) {
         if (e.target.closest('a')) menu.removeAttribute('open');

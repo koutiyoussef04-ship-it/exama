@@ -31,8 +31,12 @@ function startUrl(lang: Lang, params: Record<string, string> = {}): string {
 const links = {
   /** Create an account (the form links to sign-in for existing accounts). */
   signUp: (lang: Lang) => startUrl(lang, { mode: 'signup' }),
-  /** Sign in to an existing account. */
-  signIn: (lang: Lang) => startUrl(lang, { mode: 'signin' }),
+  /**
+   * Sign in to an existing STUDENT account. Every "Log in" on the site is a two-way choice (student / organization), so
+   * the link says which identity it means: the sign-in form opens on "Student account" and never falls back to the
+   * organization identity of the same email (apps/mobile/src/lib/start-intent.ts, `account=student`).
+   */
+  signIn: (lang: Lang) => startUrl(lang, { mode: 'signin', account: 'student' }),
   /**
    * Sign up or sign in, then the plans screen (with `plan` pre-selected). The trial itself is only
    * offered there, by the server, to eligible accounts — creating an account never starts one.

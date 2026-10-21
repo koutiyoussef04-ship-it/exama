@@ -15,10 +15,40 @@ export type PriceLine = { monthly: string; yearly: string; savingPct: number };
 export type Copy = {
   meta: { title: string; description: string; ogAlt: string };
   ui: { skip: string; menu: string; homeAria: string; language: string; primaryNav: string; mobileNav: string };
-  nav: { how: string; materials: string; pricing: string; faq: string; login: string; organizations: string };
+  nav: {
+    how: string;
+    materials: string;
+    pricing: string;
+    faq: string;
+    /** The "Log in" control: a two-way choice, never a direct link to one identity. */
+    login: string;
+    loginStudent: string;
+    loginOrganization: string;
+    /** Opens the login choice (screen-reader label of the dropdown). */
+    loginAria: string;
+    students: string;
+    organizations: string;
+  };
   cta: { trial: (days: number) => string; free: string; secondary: string; choose: (plan: string) => string; startFree: string };
-  /** The band under the hero that sends academies and training centers to the organizations page. */
-  audience: { text: string; link: string };
+  /** The home page's two prominent choices under the hero: students → /for-students, organizations → /for-organizations. */
+  choice: {
+    aria: string;
+    students: { title: string; text: string; cta: string };
+    organizations: { title: string; text: string; cta: string };
+  };
+  /** The student landing page (/for-students): its own metadata and hero; the sections are the home page's. */
+  students: {
+    meta: { title: string; description: string; ogAlt: string };
+    eyebrow: string;
+    titleStart: string;
+    titleHighlight: string;
+    lead: string;
+    /** Secondary call to action of the hero and the final block: the student sign-in. */
+    signIn: string;
+    /** Short line under the hero buttons: who the page is for and where organizations go. */
+    orgNote: string;
+    orgLink: string;
+  };
   hero: {
     eyebrow: string;
     titleStart: string;
@@ -77,7 +107,7 @@ export type Copy = {
     product: string;
     legalHelp: string;
     account: string;
-    links: { how: string; materials: string; pricing: string; faq: string; privacy: string; terms: string; support: string; login: string; signup: string; organizations: string };
+    links: { how: string; materials: string; pricing: string; faq: string; privacy: string; terms: string; support: string; login: string; loginStudent: string; loginOrganization: string; signup: string; students: string; organizations: string };
   };
   support: { title: string; description: string; intro: string; openApp: string; emailLead: string; noEmail: string; faqLead: string; faqLink: string; back: string };
 };
