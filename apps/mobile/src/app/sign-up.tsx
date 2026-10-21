@@ -2,7 +2,7 @@ import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
-import { ORGANIZATION_MARKETS, SIGNUP_AGE_ANSWERS, type AccountType, type AgeRange, type OrganizationMarket, type SignupAgeAnswer } from '@study/shared';
+import { ORGANIZATION_CATEGORIES, SIGNUP_AGE_ANSWERS, type AccountType, type AgeRange, type OrganizationCategory, type SignupAgeAnswer } from '@study/shared';
 import { AccountTypeChoice } from '@/components/account-type-choice';
 import { Chips } from '@/components/planner';
 import { Body, Button, Card, CheckRow, colors, ErrorText, Field, Loading, Screen, space, Title } from '@/components/ui';
@@ -33,7 +33,7 @@ export default function SignUp() {
   const params = useLocalSearchParams<{ account?: string }>();
   const [accountType, setAccountType] = useState<AccountType | null>(() => (params.account === 'organization' ? 'organization' : null));
   const [organizationName, setOrganizationName] = useState('');
-  const [market, setMarket] = useState<OrganizationMarket | null>(null);
+  const [market, setMarket] = useState<OrganizationCategory | null>(null);
   // Organization accounts: create a new organization, or join one whose admin will add this account by email.
   const [orgMode, setOrgMode] = useState<'create' | 'join'>('create');
   // Sign-up declined for age on this device in the last 24 h: don't offer the form again.
@@ -145,7 +145,7 @@ export default function SignUp() {
             <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} accessibilityRole="header">
               {t('auth.marketQuestion')}
             </Text>
-            <Chips options={ORGANIZATION_MARKETS.map((value) => ({ value, label: t(`auth.market.${value}`) }))} value={market as OrganizationMarket} onChange={setMarket} />
+            <Chips options={ORGANIZATION_CATEGORIES.map((value) => ({ value, label: t(`auth.market.${value}`) }))} value={market as OrganizationCategory} onChange={setMarket} />
             <Body muted style={{ fontSize: 13 }}>{t('auth.marketHint')}</Body>
           </View>
         )}

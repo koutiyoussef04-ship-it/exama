@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { normalizeEmail } from './email';
 import { aiLanguageSchema, languageSchema } from './languages';
 import { marketingConsentSchema } from './marketing-consent';
-import { ACCOUNT_TYPES, ORGANIZATION_MARKETS, organizationNameSchema, type AccountType, type B2BRole, type OrganizationMembershipSummary } from './organizations';
+import { ACCOUNT_TYPES, ORGANIZATION_CATEGORIES, organizationNameSchema, type AccountType, type B2BRole, type OrganizationMembershipSummary } from './organizations';
 
 // ---------- Auth ----------
 
@@ -48,12 +48,12 @@ export const registerSchema = z.object({
   /**
    * student (default, what older apps create) or organization. The two are SEPARATE identities: the same email can
    * have one of each, with its own password, sessions and data. An organization sign-up either names a new
-   * organization and its market (the server creates it and makes the account its first admin) or names none: a
+   * organization and its category (the server creates it and makes the account its first admin) or names none: a
    * colleague's account, added to an existing organization by one of its admins.
    */
   accountType: z.enum(ACCOUNT_TYPES).default('student'),
   organizationName: organizationNameSchema.optional(),
-  market: z.enum(ORGANIZATION_MARKETS).optional(),
+  market: z.enum(ORGANIZATION_CATEGORIES).optional(),
 }).superRefine((v, ctx) => {
   // Students state an age group; organization (staff) accounts are not asked.
   if (v.accountType !== 'organization' && !v.ageRange) ctx.addIssue({ code: 'custom', path: ['ageRange'], message: 'Age group is required' });

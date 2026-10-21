@@ -95,27 +95,30 @@ test('the Free course-limit message is used for Free only (trial and paid plans 
 
 // ---- Account type (student vs organization) ----
 import { canSubmitSignup as canSubmit2, organizationFieldsComplete, signupRequest as request2 } from '../src/lib/signup-form';
-import { registerSchema } from '@study/shared';
+import { ORGANIZATION_CATEGORIES, registerSchema } from '@study/shared';
 
 test('account type: students need nothing more; an organization sign-up needs the organization name and kind', () => {
   assert.equal(canSubmit2(form()), true, 'no account type = student (older flows)');
   assert.equal(canSubmit2(form({ accountType: 'student' })), true);
   assert.equal(canSubmit2(form({ accountType: 'organization' })), false);
-  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte' })), false, 'market missing');
-  assert.equal(canSubmit2(form({ accountType: 'organization', market: 'academy' })), false, 'name missing');
-  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: ' A ', market: 'academy' })), false, 'name too short');
-  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy' })), true);
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Université Nord' })), false, 'market missing');
+  assert.equal(canSubmit2(form({ accountType: 'organization', market: 'exam_prep' })), false, 'name missing');
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: ' A ', market: 'exam_prep' })), false, 'name too short');
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Université Nord', market: 'exam_prep' })), true);
   assert.equal(organizationFieldsComplete({ accountType: 'student' }), true);
+  // The six offered categories come from the shared list; the legacy Spanish values are not among them.
+  assert.deepEqual([...ORGANIZATION_CATEGORIES], ['university', 'school', 'training_center', 'corporate', 'exam_prep', 'other']);
+  assert.ok(!(ORGANIZATION_CATEGORIES as readonly string[]).includes('academy') && !(ORGANIZATION_CATEGORIES as readonly string[]).includes('training_provider'));
 });
 
 test('the request carries the account type only for organizations, with the trimmed organization name and the market', () => {
   const student = request2({ ...form(), ageRange: '18_24' }, { language: 'es' });
   assert.ok(!('accountType' in student) && !('organizationName' in student) && !('market' in student));
-  const org = request2({ ...form({ accountType: 'organization', organizationName: '  Academia Norte ', market: 'training_provider' }), ageRange: '25_34' }, { language: 'es' });
-  assert.deepEqual(org, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'es', accountType: 'organization', organizationName: 'Academia Norte', market: 'training_provider' }, 'organizations send no age group');
-  const orgNoAge = request2({ ...form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy' }), ageRange: null }, { language: 'es', marketing: true });
+  const org = request2({ ...form({ accountType: 'organization', organizationName: '  Université Nord ', market: 'university' }), ageRange: '25_34' }, { language: 'es' });
+  assert.deepEqual(org, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'es', accountType: 'organization', organizationName: 'Université Nord', market: 'university' }, 'organizations send no age group');
+  const orgNoAge = request2({ ...form({ accountType: 'organization', organizationName: 'Université Nord', market: 'exam_prep' }), ageRange: null }, { language: 'es', marketing: true });
   assert.ok(!('ageRange' in orgNoAge) && !('marketingConsent' in orgNoAge));
-  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Academia Norte', market: 'academy', ageRange: null })), true, 'organizations are not asked their age group');
+  assert.equal(canSubmit2(form({ accountType: 'organization', organizationName: 'Université Nord', market: 'exam_prep', ageRange: null })), true, 'organizations are not asked their age group');
   assert.equal(canSubmit2(form({ ageRange: null })), false, 'students still are');
   assert.ok(!JSON.stringify(org).includes('confirm'));
 });
@@ -144,12 +147,12 @@ test('organization accounts can join an existing organization: no organization f
   assert.deepEqual(body, { name: 'Lina', email: 'lina@example.com', password: 'correct horse', language: 'en', accountType: 'organization' });
   assert.equal(registerSchema.safeParse(body).success, true, 'the API accepts an organization account without an organization');
   // Creating one still needs both.
-  assert.equal(canSubmit2(form({ accountType: 'organization', joinExisting: false, organizationName: 'Academia Norte' })), false);
+  assert.equal(canSubmit2(form({ accountType: 'organization', joinExisting: false, organizationName: 'Université Nord' })), false);
 });
 
 test('sign-in: the account type is chosen on the form and sent; reset and sign-up keep it', () => {
   const src = readFileSync(new URL('../src/app/sign-in.tsx', import.meta.url), 'utf8');
-  assert.ok(src.includes('await signIn({ email: email.trim(), password, accountType });'), 'the sign-in names the identity');
+  assert.ok(src.includes('await signIn({ email: email.trim(), password, accountType: as });') && src.includes('const submit = async (as: AccountType = accountType) =>'), 'the sign-in names the identity (the chosen one, or the one the user just switched to)');
   assert.ok(src.includes("params.account === 'organization' ? 'organization' : 'student'"), 'defaults to student; the organization link pre-selects organization');
   assert.ok(src.includes("pathname: '/forgot-password', params: { ...(email.trim() ? { email: email.trim() } : {}), ...accountParams }"));
   const reset = readFileSync(new URL('../src/app/forgot-password.tsx', import.meta.url), 'utf8');

@@ -55,7 +55,7 @@ const pdf = await readFile(new URL('./fixtures/biology-notes.pdf', import.meta.u
 
 const registerStudent = (email: string, password = STUDENT_PW) => call<AuthResponse>('/auth/register', json('POST', { email, password, name: 'Sam Student', ageRange: '18_24' }));
 const registerOrg = (email: string, password = ORG_PW, org?: string) =>
-  call<AuthResponse>('/auth/register', json('POST', { email, password, name: 'Olga Org', accountType: 'organization', ...(org ? { organizationName: `Sep ${org} ${RUN}`, market: 'training_provider' } : {}) }));
+  call<AuthResponse>('/auth/register', json('POST', { email, password, name: 'Olga Org', accountType: 'organization', ...(org ? { organizationName: `Sep ${org} ${RUN}`, market: 'training_center' } : {}) }));
 const login = (email: string, password: string, accountType?: 'student' | 'organization') => call<AuthResponse>('/auth/login', json('POST', { email, password, ...(accountType && { accountType }) }));
 const mailCode = (email: string, predicate: (subject: string) => boolean = () => true) =>
   [...outbox].reverse().find((m) => m.to === email && predicate(m.subject) && /\b\d{6}\b/.test(m.text))?.text.match(/\b(\d{6})\b/)?.[1];
@@ -297,9 +297,9 @@ test('B2B owner: provisioned only by the server command (idempotent, no password
   assert.ok(audit[0].n >= 4, 'dashboard requests are audited');
 
   // Unlimited usage, enforced on the server: the owner's organization has an expired pilot and zero allowances.
-  const created = await call<OrganizationMembershipSummary>('/orgs', { ...json('POST', { name: `Sep owner-org ${RUN}`, market: 'training_provider' }), token: owner.token });
+  const created = await call<OrganizationMembershipSummary>('/orgs', { ...json('POST', { name: `Sep owner-org ${RUN}`, market: 'training_center' }), token: owner.token });
   assert.equal(created.status, 201);
-  for (const i of [2, 3]) assert.equal((await call('/orgs', { ...json('POST', { name: `Sep owner-org-${i} ${RUN}`, market: 'training_provider' }), token: owner.token })).status, 201, 'no organization cap for the owner');
+  for (const i of [2, 3]) assert.equal((await call('/orgs', { ...json('POST', { name: `Sep owner-org-${i} ${RUN}`, market: 'training_center' }), token: owner.token })).status, 201, 'no organization cap for the owner');
   const orgId = created.body.id;
   await sql`update organizations set pilot_ends_at = now() - interval '1 day', limits = '{"coursesPerMonth":0,"itemsPerMonth":0,"maxMembers":1}'::jsonb where id = ${orgId}`;
   const up = await upload(owner.token, orgId);

@@ -176,6 +176,13 @@
       "when": 1792591183698,
       "tag": "0024_separate_account_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792620418965,
+      "tag": "0025_organization_categories",
+      "breakpoints": true
     }
   ]
 }

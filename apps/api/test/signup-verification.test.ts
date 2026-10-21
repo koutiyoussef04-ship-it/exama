@@ -62,7 +62,7 @@ async function signUp(tag: string, extra: Record<string, unknown> = {}) {
   const auth = v.body.auth!;
   return { email, token: auth.token, id: auth.user.id, user: auth.user };
 }
-const orgSignUp = (tag: string) => signUp(tag, { accountType: 'organization', organizationName: `SV ${tag} ${RUN}`, market: 'training_provider', ageRange: undefined });
+const orgSignUp = (tag: string) => signUp(tag, { accountType: 'organization', organizationName: `SV ${tag} ${RUN}`, market: 'corporate', ageRange: undefined });
 
 // ---------------------------------------------------------------- sign-up
 
@@ -185,12 +185,12 @@ test('per-IP registration limit (automated sign-ups)', async () => {
 test('organization sign-up: no age question; the organization is created only when the link is opened', async () => {
   const email = emailFor('org');
   const name = `SV org ${RUN}`;
-  const r = await register({ email, accountType: 'organization', organizationName: name, market: 'academy' });
+  const r = await register({ email, accountType: 'organization', organizationName: name, market: 'school' });
   assert.equal(r.status, 202, JSON.stringify(r.body));
   assert.equal(((await sql`select count(*)::int as c from organizations where name = ${name}`) as unknown as { c: number }[])[0].c, 0);
   // Students still must answer it; under 13 is still refused first.
   assert.equal((await register({ email: emailFor('noage') })).body.code, 'age_range_required');
-  assert.equal((await register({ email: emailFor('kid'), ageRange: 'under_13', accountType: 'organization', organizationName: 'x', market: 'academy' })).status, 403);
+  assert.equal((await register({ email: emailFor('kid'), ageRange: 'under_13', accountType: 'organization', organizationName: 'x', market: 'school' })).status, 403);
 
   const v = await verify(links(email)[0]);
   assert.equal(v.status, 200);
@@ -308,7 +308,7 @@ test('separate identities with confirmed sign-up: a student and an organization 
   const email = emailFor('both');
   const student = await signUp('both', { email });
   // The organization sign-up for the same address is accepted (it used to be 409 email_taken) and is its own pending row.
-  const pending = await register({ email, password: 'org-password-77', accountType: 'organization', organizationName: `SV both ${RUN}`, market: 'academy' });
+  const pending = await register({ email, password: 'org-password-77', accountType: 'organization', organizationName: `SV both ${RUN}`, market: 'school' });
   assert.equal(pending.status, 202, JSON.stringify(pending.body));
   // Signing in to the organization before confirming: "check your email", never the student account.
   const early = await call('/auth/login', json('POST', { email, password: 'org-password-77', accountType: 'organization' }));

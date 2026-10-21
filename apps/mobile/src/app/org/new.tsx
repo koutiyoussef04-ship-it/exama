@@ -2,7 +2,7 @@
  * Create an organization (organization accounts only — the server refuses everyone else). The creator
  * becomes its first admin; colleagues are added from the Members screen.
  */
-import { ORGANIZATION_MARKETS, type OrganizationMarket } from '@study/shared';
+import { ORGANIZATION_CATEGORIES, type OrganizationCategory } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -20,10 +20,10 @@ export default function NewOrganization() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [name, setName] = useState('');
-  const [market, setMarket] = useState<OrganizationMarket>('training_provider');
+  const [market, setMarket] = useState<OrganizationCategory | null>(null);
 
   const create = useMutation({
-    mutationFn: () => api.createOrganization({ name: name.trim(), market }),
+    mutationFn: () => api.createOrganization({ name: name.trim(), market: market! }),
     onSuccess: async (org) => {
       await kv.set(ORG_CURRENT_KEY, org.id);
       await qc.invalidateQueries({ queryKey: ORG_LIST_KEY });
@@ -42,7 +42,7 @@ export default function NewOrganization() {
     );
   }
 
-  const valid = name.trim().length >= 2;
+  const valid = name.trim().length >= 2 && !!market;
   return (
     <Screen>
       <View style={{ gap: space(1) }}>
@@ -53,7 +53,7 @@ export default function NewOrganization() {
         <Field label={t('auth.organizationName')} value={name} onChangeText={setName} placeholder={t('auth.organizationNamePlaceholder')} autoFocus maxLength={120} />
         <View style={{ gap: space(2) }}>
           <SectionLabel>{t('auth.marketQuestion')}</SectionLabel>
-          <Chips options={ORGANIZATION_MARKETS.map((m) => ({ value: m, label: t(`auth.market.${m}`) }))} value={market} onChange={setMarket} />
+          <Chips options={ORGANIZATION_CATEGORIES.map((m) => ({ value: m, label: t(`auth.market.${m}`) }))} value={market as OrganizationCategory} onChange={setMarket} />
           <Body muted style={{ fontSize: 13 }}>{t('auth.marketHint')}</Body>
         </View>
         <Button title={t('org.new.create')} onPress={() => create.mutate()} loading={create.isPending} disabled={!valid} />

@@ -1,6 +1,7 @@
 /**
- * Organizations (the B2B side of Exama): a training provider or an oposiciones academy whose staff
- * upload material, generate draft questions, review them and keep the approved ones in a question bank.
+ * Organizations (the B2B side of Exama): a university, a school, a training center, a company's learning
+ * team or an exam-preparation center whose staff upload material, generate draft questions, review them and
+ * keep the approved ones in a question bank.
  *
  * - An account is either a `student` (the existing app) or an `organization` user, chosen at sign-up and
  *   stored on the user; the server decides which experience applies, never the client.
@@ -16,9 +17,22 @@ export type AccountType = (typeof ACCOUNT_TYPES)[number];
 export const B2B_ROLES = ['owner'] as const;
 export type B2BRole = (typeof B2B_ROLES)[number];
 
-/** Which market an organization serves. Behaviour differences come from `marketProfile`, never from ad-hoc checks. */
-export const ORGANIZATION_MARKETS = ['training_provider', 'academy'] as const;
+/**
+ * The kind of organization, chosen at sign-up (or when creating a further organization) and stored in
+ * `organizations.market`. These are the categories OFFERED today, for French-speaking markets and the Gulf.
+ * Workspace behaviour comes from `marketProfile`, never from ad-hoc checks on the value.
+ */
+export const ORGANIZATION_CATEGORIES = ['university', 'school', 'training_center', 'corporate', 'exam_prep', 'other'] as const;
+export type OrganizationCategory = (typeof ORGANIZATION_CATEGORIES)[number];
+/**
+ * Values stored by organizations created before the categories above existed (the Spanish launch). They stay
+ * valid data — read, displayed and still driving their workspace defaults — but are no longer offered to anyone.
+ */
+export const LEGACY_ORGANIZATION_MARKETS = ['training_provider', 'academy'] as const;
+/** Every value `organizations.market` may hold (the database CHECK constraint lists exactly these). */
+export const ORGANIZATION_MARKETS = [...ORGANIZATION_CATEGORIES, ...LEGACY_ORGANIZATION_MARKETS] as const;
 export type OrganizationMarket = (typeof ORGANIZATION_MARKETS)[number];
+export const isOrganizationMarket = (v: unknown): v is OrganizationMarket => typeof v === 'string' && (ORGANIZATION_MARKETS as readonly string[]).includes(v);
 
 /** admin: everything incl. members · editor: upload, generate, review, export · reviewer: read + review only. */
 export const ORGANIZATION_ROLES = ['admin', 'editor', 'reviewer'] as const;
@@ -32,10 +46,10 @@ export const organizationNameSchema = z.string().trim().min(2).max(120);
 export const organizationSignupSchema = z.object({
   accountType: z.literal('organization'),
   organizationName: organizationNameSchema,
-  market: z.enum(ORGANIZATION_MARKETS),
+  market: z.enum(ORGANIZATION_CATEGORIES),
 });
 
-export const createOrganizationSchema = z.object({ name: organizationNameSchema, market: z.enum(ORGANIZATION_MARKETS) });
+export const createOrganizationSchema = z.object({ name: organizationNameSchema, market: z.enum(ORGANIZATION_CATEGORIES) });
 export type CreateOrganizationInput = z.input<typeof createOrganizationSchema>;
 
 export const updateOrganizationSchema = z.object({ name: organizationNameSchema.optional() });
@@ -129,18 +143,27 @@ export type OrganizationOverview = Organization & {
  * (A test fails if `market ===` appears elsewhere in the API.)
  */
 export type MarketProfile = {
-  /** Word for the unit staff organize questions by ("module" for training, "tema" for oposiciones). */
+  /** Word for the unit staff organize questions by ("module" everywhere; "tema" for the legacy Spanish academies). */
   unitLabel: 'module' | 'tema';
-  /** Show the law / official publication / article / effective-date fields on questions. */
+  /** Show the law / official publication / article / effective-date fields on questions (legacy academies only). */
   legalMetadata: boolean;
-  /** Generate multiple-choice questions only (oposiciones tests are MCQ). */
+  /** Generate multiple-choice questions only (legacy academies: their tests are MCQ). */
   mcqOnly: boolean;
   /** Number of options the generator is asked for. */
   optionCount: 4;
 };
 
+/** The general workspace defaults: mixed question types, no legal-reference fields. Every offered category uses them. */
+const GENERAL_PROFILE: MarketProfile = { unitLabel: 'module', legalMetadata: false, mcqOnly: false, optionCount: 4 };
 export const MARKET_PROFILES: Record<OrganizationMarket, MarketProfile> = {
-  training_provider: { unitLabel: 'module', legalMetadata: false, mcqOnly: false, optionCount: 4 },
+  university: GENERAL_PROFILE,
+  school: GENERAL_PROFILE,
+  training_center: GENERAL_PROFILE,
+  corporate: GENERAL_PROFILE,
+  exam_prep: GENERAL_PROFILE,
+  other: GENERAL_PROFILE,
+  // Legacy values (existing organizations): unchanged behaviour.
+  training_provider: GENERAL_PROFILE,
   academy: { unitLabel: 'tema', legalMetadata: true, mcqOnly: true, optionCount: 4 },
 };
 export const marketProfile = (market: OrganizationMarket): MarketProfile => MARKET_PROFILES[market];

@@ -11,7 +11,7 @@ export const enOrg: OrgCopy = {
   meta: {
     title: 'Exama for organizations — Test questions from your own course material',
     description:
-      'For academies and training centers: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Free 30-day pilot.',
+      'For universities, schools, training centers and companies: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Free 30-day pilot.',
     demoTitle: 'Request a demo — Exama for organizations',
     ogAlt: 'Exama for organizations: test questions from your own course material, each one with its source',
     demoDescription: 'Ask for a walkthrough of the Exama organization workspace by email, or start the free 30-day pilot yourself.',
@@ -19,7 +19,7 @@ export const enOrg: OrgCopy = {
   nav: { how: 'How it works', pricing: 'Pricing', faq: 'FAQ', students: 'For students', demo: 'Demo' },
   cta: { pilot: (days) => `Start the free ${days}-day pilot`, pilotShort: 'Start the free pilot', demo: 'Request a demo', seeHow: 'See how it works' },
   hero: {
-    eyebrow: 'For exam-prep academies and training centers',
+    eyebrow: 'For universities, schools, training centers and companies',
     titleStart: 'Turn your course material into test questions, ',
     titleHighlight: 'each one with its source.',
     lead: 'Upload a PDF or PowerPoint. Exama drafts the questions and shows the passage each one comes from. Your team reviews and approves every question before it is used, then exports them to Moodle or CSV.',
@@ -37,20 +37,26 @@ export const enOrg: OrgCopy = {
   },
   audiences: {
     eyebrow: 'Who it is for',
-    title: 'Two kinds of organization, one workspace',
-    lead: 'When you create the organization you choose its type. It sets the question format and the fields your reviewers see — nothing else changes.',
+    title: 'Every kind of organization, one workspace',
+    lead: 'When you create the organization you say what kind it is: university or higher education, school, training center, company, tutoring or exam preparation. The workspace is the same for all of them.',
     items: [
       {
-        title: 'Exam-preparation academies',
-        text: 'For competitive-exam (oposiciones) preparation, where every question must point to the text it tests.',
-        icon: 'exam',
-        points: ['Multiple-choice questions with four options', 'Law, article and official-gazette reference fields, filled in by your team: the AI never invents a legal reference', 'Questions organized by topic (tema) within each course'],
+        title: 'Universities and schools',
+        text: 'For courses taught from your own syllabus, where teaching staff keep control of every question.',
+        icon: 'building',
+        points: ['Multiple-choice and short-answer questions', 'Questions organized by module and topic within each course', 'Every question shows the passage it is based on'],
       },
       {
-        title: 'Training providers',
-        text: 'For in-company training and vocational courses built from your own modules.',
+        title: 'Training centers and companies',
+        text: 'For professional courses and employee training built from your own modules.',
         icon: 'folder',
-        points: ['Multiple-choice and short-answer questions', 'Questions organized by module and topic', 'Exports that drop into Moodle or your own tools'],
+        points: ['Drafts from PDFs and PowerPoint slides', 'Reviewed and approved by your team before use', 'Exports that drop into Moodle or your own tools'],
+      },
+      {
+        title: 'Tutoring and exam preparation',
+        text: 'For centers preparing students for exams, where practice must follow the material closely.',
+        icon: 'target',
+        points: ['Questions that stay within the uploaded material', 'Approve, reject or edit each draft', 'Reviewers at no cost, on every plan'],
       },
     ],
   },
@@ -114,7 +120,7 @@ export const enOrg: OrgCopy = {
       },
       esencial: {
         name: 'Esencial',
-        tagline: 'For one academy or department.',
+        tagline: 'For one center or department.',
         features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'Moodle GIFT and CSV export'],
         cta: 'Request Esencial',
       },
@@ -204,7 +210,7 @@ export const enOrg: OrgCopy = {
     title: 'Request a demo',
     intro: 'Tell us about your organization and we will reply by email to arrange a walkthrough of the workspace, answer your questions or set up a plan.',
     includeTitle: 'Helpful to include',
-    include: ['Your organization and what it teaches (exam preparation, in-company training, vocational courses…)', 'How many courses or modules you would start with, and in what format', 'How many people would upload, draft and review questions', 'Which plan you are considering, or what you would need from Centro'],
+    include: ['Your organization and what it teaches (university or school courses, professional training, employee training, exam preparation…)', 'How many courses or modules you would start with, and in what format', 'How many people would upload, draft and review questions', 'Which plan you are considering, or what you would need from Centro'],
     emailButton: 'Email examaweb@gmail.com',
     emailHow: 'The button opens your email app with a pre-filled message. If it does not, write to the address below.',
     addressLead: 'Our address for organizations:',

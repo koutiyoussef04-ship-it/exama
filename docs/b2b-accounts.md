@@ -41,7 +41,7 @@ All of these are enforced on the server.
 
 An organization sign-up either:
 
-- **Creates an organization:** it needs a name and a market, as before.
+- **Creates an organization:** it needs a name and a category (`market`), one of `ORGANIZATION_CATEGORIES` in `packages/shared/src/organizations.ts`: `university`, `school`, `training_center`, `corporate`, `exam_prep`, `other` (for French-speaking markets and the Gulf). Organizations created before those categories keep `training_provider` or `academy` (`LEGACY_ORGANIZATION_MARKETS`): still valid, displayed and, for `academy`, still driving its workspace defaults (multiple-choice only, legal-reference fields), but no longer offered to new sign-ups or to `POST /orgs`. Migration 0025 only widened the database CHECK constraint to the eight values; it rewrote no row.
 - **Joins one:** it sends no organization fields. The account is created without an organization, and an admin of the existing organization adds it by email.
 
 ## B2B owner

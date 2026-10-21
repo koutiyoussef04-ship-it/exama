@@ -23,7 +23,7 @@
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { and, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm';
-import { EMAIL_VERIFICATION_RESEND_SECONDS, EMAIL_VERIFICATION_TTL_HOURS, SIGNUP_EMAILS_PER_HOUR, type AccountType, type Language, type MarketingConsentInput, type SignupPending, type User, type VerifyEmailResult } from '@study/shared';
+import { EMAIL_VERIFICATION_RESEND_SECONDS, EMAIL_VERIFICATION_TTL_HOURS, SIGNUP_EMAILS_PER_HOUR, type AccountType, type Language, type MarketingConsentInput, type OrganizationMarket, type SignupPending, type User, type VerifyEmailResult } from '@study/shared';
 import { track } from '../analytics/index.js';
 import { hashPassword, signToken, verifyPassword } from '../auth/auth.js';
 import { config } from '../config.js';
@@ -67,7 +67,8 @@ export type AccountDetails = {
   accountType: 'student' | 'organization';
   ageRange: UserRow['ageRange'];
   organizationName?: string | null;
-  market?: 'training_provider' | 'academy' | null;
+  /** The organization's category (ORGANIZATION_MARKETS: an offered category, or a legacy value from a pending sign-up stored before them). */
+  market?: OrganizationMarket | null;
   marketingConsent?: MarketingConsentInput | null;
 };
 

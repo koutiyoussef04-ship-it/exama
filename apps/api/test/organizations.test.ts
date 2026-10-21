@@ -17,6 +17,7 @@ import type {
   DocumentSummary,
   Entitlement,
   GenerateBankItemsResult,
+  OrganizationCategory,
   OrganizationMember,
   OrganizationMembershipSummary,
   OrganizationOverview,
@@ -63,8 +64,18 @@ async function signup(tag: string, extra: Record<string, unknown> = {}): Promise
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return { email, token: r.body.token, id: r.body.user.id, user: r.body.user };
 }
-const orgSignup = (tag: string, market: 'training_provider' | 'academy' = 'training_provider') =>
+const orgSignup = (tag: string, market: OrganizationCategory = 'training_center') =>
   signup(tag, { accountType: 'organization', organizationName: `Org ${tag} ${RUN}`, market });
+/**
+ * An organization created before the current categories existed (Spanish launch, market = 'academy'): sign-up no longer
+ * offers that value, so the row is updated directly, as the migration left it. Its workspace defaults must keep working.
+ */
+async function legacyAcademySignup(tag: string): Promise<Account> {
+  const a = await orgSignup(tag, 'exam_prep');
+  await sql`update organizations set market = 'academy' where id = ${orgOf(a)}`;
+  const me = await call<User>('/auth/me', { token: a.token });
+  return { ...a, user: me.body };
+}
 /** A colleague's organization account, without an organization of its own (an admin adds it). */
 const staffSignup = (tag: string) => signup(tag, { accountType: 'organization' });
 const orgOf = (a: Account) => a.user.organizations[0].id;
@@ -92,10 +103,10 @@ test('sign-up: students by default (older apps too); organization accounts creat
   const legacy = await call<AuthResponse>('/auth/register', json('POST', { email: `org-legacy-${RUN}@example.com`, password: PASSWORD, name: 'Old app', ageRange: '18_24' }));
   assert.equal(legacy.body.user.accountType, 'student');
 
-  const o = await orgSignup('acme', 'academy');
+  const o = await orgSignup('acme', 'university');
   assert.equal(o.user.accountType, 'organization');
   assert.equal(o.user.organizations.length, 1);
-  assert.deepEqual([o.user.organizations[0].name, o.user.organizations[0].market, o.user.organizations[0].role], [`Org acme ${RUN}`, 'academy', 'admin']);
+  assert.deepEqual([o.user.organizations[0].name, o.user.organizations[0].market, o.user.organizations[0].role], [`Org acme ${RUN}`, 'university', 'admin']);
   // Both /auth/me and login return the same.
   const me = await call<User>('/auth/me', { token: o.token });
   assert.deepEqual(me.body.organizations, o.user.organizations);
@@ -109,19 +120,27 @@ test('sign-up: students by default (older apps too); organization accounts creat
   // An organization account without an organization: a colleague waiting to be added by an admin.
   const colleague = await staffSignup('colleague');
   assert.deepEqual([colleague.user.accountType, colleague.user.organizations], ['organization', []]);
-  // Validation: creating an organization needs a name AND a market; the client cannot pick an unknown type.
-  for (const bad of [{ accountType: 'organization', market: 'academy' }, { accountType: 'organization', organizationName: 'X' }, { accountType: 'organization', organizationName: 'Org', market: 'bank' }, { accountType: 'owner' }]) {
+  // Validation: creating an organization needs a name AND a category; the client cannot pick an unknown type, nor one of
+  // the two legacy Spanish values (existing organizations keep them; new ones cannot choose them).
+  for (const bad of [
+    { accountType: 'organization', market: 'exam_prep' },
+    { accountType: 'organization', organizationName: 'X' },
+    { accountType: 'organization', organizationName: 'Org', market: 'bank' },
+    { accountType: 'organization', organizationName: 'Org', market: 'academy' },
+    { accountType: 'organization', organizationName: 'Org', market: 'training_provider' },
+    { accountType: 'owner' },
+  ]) {
     const r = await call('/auth/register', json('POST', { email: `org-bad-${RUN}-${++n}@example.com`, password: PASSWORD, name: 'B', ageRange: '18_24', ...bad }));
     assert.equal(r.status, 400, JSON.stringify(bad));
   }
   // Only organization accounts create further organizations; students are added by an admin.
-  assert.equal((await call(`/orgs`, { ...json('POST', { name: 'Side org', market: 'training_provider' }), token: s.token })).status, 403);
-  const second = await call<OrganizationMembershipSummary>(`/orgs`, { ...json('POST', { name: 'Second org', market: 'training_provider' }), token: o.token });
+  assert.equal((await call(`/orgs`, { ...json('POST', { name: 'Side org', market: 'corporate' }), token: s.token })).status, 403);
+  const second = await call<OrganizationMembershipSummary>(`/orgs`, { ...json('POST', { name: 'Second org', market: 'corporate' }), token: o.token });
   assert.equal(second.status, 201);
   assert.equal((await call<OrganizationMembershipSummary[]>('/orgs', { token: o.token })).body.length, 2);
   // Capped per account (sign-up organization included): every organization has its own free monthly allowances,
   // so creating them without limit would multiply one account's AI quota. The default cap is 2.
-  const third = await call(`/orgs`, { ...json('POST', { name: 'Third org', market: 'training_provider' }), token: o.token });
+  const third = await call(`/orgs`, { ...json('POST', { name: 'Third org', market: 'corporate' }), token: o.token });
   assert.equal(third.status, 403, JSON.stringify(third.body));
   assert.equal(third.body.code, 'organization_limit_reached');
   assert.deepEqual(third.body.details, { max: 2 });
@@ -180,7 +199,7 @@ test('membership and roles: add by email of an existing account, change role, ne
 });
 
 test('workflow: upload → generate drafts with located sources and flags → review → bank → export (approved only); students unaffected', async () => {
-  const admin = await orgSignup('flow', 'training_provider');
+  const admin = await orgSignup('flow', 'training_center');
   const orgId = orgOf(admin);
   const doc = await uploadCourse(admin.token, orgId, 'Safety course.pdf');
   assert.ok(doc.topics.length > 0);
@@ -214,7 +233,7 @@ test('workflow: upload → generate drafts with located sources and flags → re
     }
     assert.ok(it.verification && ['supported', 'partial', 'unsupported', 'unavailable'].includes(it.verification.verdict));
   }
-  // Mixed types were asked for; the academy profile would have forced mcq only (checked below).
+  // Mixed types were asked for; the legacy academy profile would have forced mcq only (checked below).
   const located = g.body.items.filter((i) => i.sources[0].located);
   assert.ok(located.length > 0, 'the mock quotes are verbatim sentences: at least one must locate');
   // The chunk hash really is the hash of the stored chunk.
@@ -362,8 +381,9 @@ test('workflow: upload → generate drafts with located sources and flags → re
   await call(`/orgs/${orgId}/items/${trap.body.id}/retire`, { ...json('POST', {}), token: admin.token });
 });
 
-test('generation rules: academy market is multiple-choice only; unknown topic / empty page range / unknown course refused; AI failure refunds the allowance', async () => {
-  const admin = await orgSignup('rules', 'academy');
+test('generation rules: a legacy academy is multiple-choice only; unknown topic / empty page range / unknown course refused; AI failure refunds the allowance', async () => {
+  const admin = await legacyAcademySignup('rules');
+  assert.equal(admin.user.organizations[0].market, 'academy', 'the legacy value is still read and returned');
   const orgId = orgOf(admin);
   const doc = await uploadCourse(admin.token, orgId);
   const g = await generate(admin.token, orgId, doc.id, { count: 4, topic: doc.topics[0] });
@@ -514,7 +534,7 @@ test('owner tooling: organizations are listed with usage; limits and suspension 
   const list = await call<AdminOrganization[]>('/admin/organizations', { token: owner.token });
   assert.equal(list.status, 200);
   const mine = list.body.find((o) => o.id === orgId)!;
-  assert.deepEqual([mine.market, mine.status, mine.limits.itemsPerMonth, mine.counts.members, mine.creatorEmail], ['training_provider', 'active', 150, 1, admin.email]);
+  assert.deepEqual([mine.market, mine.status, mine.limits.itemsPerMonth, mine.counts.members, mine.creatorEmail], ['training_center', 'active', 150, 1, admin.email]);
 
   // Limits: merged over the defaults and enforced on the next generation.
   const updated = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { limits: { itemsPerMonth: 2 } }), token: owner.token });
