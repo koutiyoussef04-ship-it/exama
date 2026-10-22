@@ -1,8 +1,7 @@
 ---
 import Icon from '../Icon.astro';
 import { formatEuros } from '../../data/content';
-import { ORG_LIMITS, ORG_MAX_ITEMS_PER_REQUEST, ORG_PILOT_DAYS, ORG_PLAN_ORDER, ORG_PRICES, ORG_SECTIONS, orgYearlySavingPct, type OrgPaidPlan } from '../../data/b2b';
-import { site } from '../../config/site';
+import { ORG_LIMITS, ORG_MAX_ITEMS_PER_REQUEST, ORG_PLAN_ORDER, ORG_PRICES, ORG_SECTIONS, orgYearlySavingPct, type OrgPaidPlan } from '../../data/b2b';
 import { orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
@@ -20,8 +19,8 @@ const plans = ORG_PLAN_ORDER.map((id) => {
     ...c.plans[id],
     features: c.plans[id].features(limits, ORG_MAX_ITEMS_PER_REQUEST),
     price: paid ? { monthly: formatEuros(ORG_PRICES[paid].monthlyCents, lang), yearly: formatEuros(ORG_PRICES[paid].yearlyCents, lang), savingPct: orgYearlySavingPct(paid) } : null,
-    // Pilot: the organization sign-up (the pilot starts with the account). Paid plans and Centro: ask by email (demo page).
-    href: id === 'pilot' ? site.links.orgSignUp(lang) : demo,
+    // Every plan is requested by email (demo page) and activated by Exama: there is no online checkout yet.
+    href: demo,
     recommended: id === 'esencial',
   };
 });
@@ -48,11 +47,6 @@ const plans = ORG_PLAN_ORDER.map((id) => {
               <p class="price-main"><span class="price-amount">{p.price.monthly}</span><span class="price-per">{c.perMonth} {c.plusVat}</span></p>
               <p class="price-alt">{c.orYearly(p.price.yearly, p.price.savingPct)}</p>
             </div>
-          ) : p.id === 'pilot' ? (
-            <div class="plan-price">
-              <p class="price-main"><span class="price-amount">{c.pilotPrice}</span></p>
-              <p class="price-alt">{c.pilotDuration(ORG_PILOT_DAYS)}</p>
-            </div>
           ) : (
             <div class="plan-price">
               <p class="price-main"><span class="price-amount">{c.custom}</span></p>
@@ -69,12 +63,18 @@ const plans = ORG_PLAN_ORDER.map((id) => {
             ))}
           </ul>
 
-          <a class:list={['btn', 'btn-block', p.id === 'pilot' || p.recommended ? 'btn-primary' : 'btn-secondary']} href={p.href}>{p.cta}</a>
+          <a class:list={['btn', 'btn-block', p.recommended ? 'btn-primary' : 'btn-secondary']} href={p.href}>{p.cta}</a>
         </li>
       ))}
     </ul>
 
     <p class="fineprint center">{c.vatNote}</p>
     <p class="fineprint center">{c.billingNote}</p>
+    {/* A pilot is negotiated individually, never a public plan: a line and a contact link, no price, length or sign-up. */}
+    <aside class="card pilot-note" aria-labelledby="pilot-note-title">
+      <h3 id="pilot-note-title">{c.pilotNote.title}</h3>
+      <p>{c.pilotNote.text}</p>
+      <a class="btn btn-secondary" href={demo}>{c.pilotNote.cta}</a>
+    </aside>
   </div>
 </section>

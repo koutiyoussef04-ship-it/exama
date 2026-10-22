@@ -45,8 +45,9 @@ const navLinks = org
       { label: c.nav.students, href: studentPathFor(lang), attrs: {}, menuOnly: true },
       { label: c.nav.organizations, href: orgHref, attrs: orgLinkAttrs },
     ];
-const ctaLabel = org ? org.cta.pilotShort : site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
-const ctaHref = org ? site.links.orgSignUp(lang) : site.links.primary(lang);
+// Organizations pages: "Request a demo" (plans are agreed with Exama; there is no public pilot or self-service plan).
+const ctaLabel = org ? org.cta.demo : site.webCheckoutAvailable ? c.cta.trial(TRIAL_DAYS) : c.cta.free;
+const ctaHref = org ? orgPathFor(orgLang, 'demo') : site.links.primary(lang);
 // "Log in" is a choice between the two identities (LoginMenu); the organizations pages list the organization one first.
 const loginPrimary = org ? 'organization' : 'student';
 const loginLinks = [

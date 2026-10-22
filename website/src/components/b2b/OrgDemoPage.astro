@@ -5,7 +5,6 @@
  */
 import Base from '../../layouts/Base.astro';
 import Icon from '../Icon.astro';
-import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
 import { orgAlternatesFor, orgOgImage, orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
@@ -42,8 +41,8 @@ const mailto = site.b2b.demoMailto(d.subject, d.body);
 
       <div class="card demo-or">
         <h2>{d.orTitle}</h2>
-        <p>{d.orText(ORG_PILOT_DAYS)}</p>
-        <a class="btn btn-secondary" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
+        <p>{d.orText}</p>
+        <a class="btn btn-secondary" href={site.links.orgSignUp(lang)}>{c.cta.createAccount}</a>
       </div>
 
       <p class="back"><a href={orgPathFor(lang)}>{d.back}</a></p>

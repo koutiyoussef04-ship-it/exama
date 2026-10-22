@@ -1,0 +1,48 @@
+---
+/**
+ * How an organization gets started: talk to us, agree a plan, create the account, Exama activates the plan. Replaces the
+ * former public "pilot" section: a pilot is never a public offer (it can be discussed individually, see OrgPricing).
+ */
+import Icon from '../Icon.astro';
+import { ORG_SECTIONS } from '../../data/b2b';
+import { site } from '../../config/site';
+import { orgPathFor, type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const { lang } = Astro.props;
+const c = orgCopy(lang);
+const s = c.start;
+---
+
+<section id={ORG_SECTIONS.start} class="section section-alt" aria-labelledby="start-title">
+  <div class="container split">
+    <div>
+      <p class="eyebrow">{s.eyebrow}</p>
+      <h2 id="start-title">{s.title}</h2>
+      <p class="section-lead">{s.lead}</p>
+      <ol class="start-steps">
+        {s.steps.map((step) => (
+          <li><strong>{step.title}</strong>{step.text}</li>
+        ))}
+      </ol>
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
+        <a class="btn btn-secondary btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.createAccount}</a>
+      </div>
+    </div>
+    <div class="start-side">
+      <div class="card start-after">
+        <span class="card-icon"><Icon name="clock" size={24} /></span>
+        <h3>{s.noPlanTitle}</h3>
+        <ul class="checks">
+          {s.noPlan.map((line) => (
+            <li><Icon name="check" size={18} /><span>{line}</span></li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>

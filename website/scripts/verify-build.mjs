@@ -29,7 +29,7 @@ const SIGNUP = (lang) => start(lang, { mode: 'signup' });
 const SIGNIN = (lang) => start(lang, { mode: 'signin', account: 'student' });
 const PLANS = (lang, plan) => start(lang, { mode: 'signup', intent: 'plans', ...(plan ? { plan, period: 'monthly' } : {}) });
 const PRIMARY = (lang) => (TRIAL ? PLANS(lang) : SIGNUP(lang));
-/** The organizations pages: sign-up with the organization form pre-selected (the 30-day pilot starts with the account). */
+/** The organizations pages: sign-up with the organization form pre-selected (the new organization has no plan until Exama activates one). */
 const ORG_SIGNUP = (lang) => start(lang, { mode: 'signup', account: 'organization' });
 /** …and their "Log in" links: the sign-in form on "Organization account" (separate identity from the student account). */
 const ORG_SIGNIN = (lang) => start(lang, { mode: 'signin', account: 'organization' });
@@ -132,15 +132,18 @@ const ORG_EXPECT = {
   en: {
     title: 'Exama for organizations — Test questions from your own course material',
     demoTitle: 'Request a demo — Exama for organizations',
-    pilotCta: 'Start the free 30-day pilot',
-    pilotShort: 'Start the free pilot',
+    createAccount: 'Create an organization account',
+    seePricing: 'See plans and pricing',
+    pilotNote: 'Want to see it with your own material first?',
+    // A pilot is never a public offer (negotiated individually): none of these may appear on the organizations pages.
+    publicPilot: /free (30-day )?pilot|start the (free )?pilot|\d+-day pilot|pilot (plan|starts)/i,
     demoCta: 'Request a demo',
     students: 'For students',
     prices: ['€149', '€1,490', '€349', '€3,490'],
     vat: /\+ VAT/,
     vatNote: /Prices exclude VAT/,
     monthlyWording: ['10 course uploads per month', '500 question drafts per month', '100 course uploads per month', '2,000 question drafts per month'],
-    pilotWording: ['5 courses', '150 question drafts in total', '3 admins or editors', 'Unlimited reviewers'],
+    planWording: ['10 admins or editors', '25 admins or editors', 'Unlimited reviewers'],
     noCheckout: /no online checkout/i,
     notCharged: /nothing is charged automatically/i,
     generations: /\bgenerations?\b/i,
@@ -151,15 +154,17 @@ const ORG_EXPECT = {
   es: {
     title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
     demoTitle: 'Solicitar una demo — Exama para organizaciones',
-    pilotCta: 'Empieza el piloto gratuito de 30 días',
-    pilotShort: 'Empezar el piloto gratuito',
+    createAccount: 'Crear una cuenta de organización',
+    seePricing: 'Ver planes y precios',
+    pilotNote: '¿Quieres verlo antes con tu propio material?',
+    publicPilot: /piloto (gratuito|gratis)|empieza el piloto|empezar el piloto|piloto de \d+ días|\d+ días de piloto/i,
     demoCta: 'Solicitar una demo',
     students: 'Para estudiantes',
     prices: ['149 €', '1.490 €', '349 €', '3.490 €'],
     vat: /\+ IVA/,
     vatNote: /Precios sin IVA/,
     monthlyWording: ['10 cursos subidos al mes', '500 borradores de preguntas al mes', '100 cursos subidos al mes', '2.000 borradores de preguntas al mes'],
-    pilotWording: ['5 cursos', '150 borradores de preguntas en total', '3 administradores o editores', 'Revisores ilimitados'],
+    planWording: ['10 administradores o editores', '25 administradores o editores', 'Revisores ilimitados'],
     noCheckout: /no hay pago en línea/i,
     notCharged: /no se cobra nada automáticamente/i,
     generations: /\bgeneraciones?\b/i,
@@ -170,8 +175,10 @@ const ORG_EXPECT = {
   fr: {
     title: 'Exama pour les organismes — Des questions d’examen à partir de vos propres supports',
     demoTitle: 'Demander une démo — Exama pour les organismes',
-    pilotCta: 'Lancer le pilote gratuit de 30 jours',
-    pilotShort: 'Lancer le pilote gratuit',
+    createAccount: 'Créer un compte organisation',
+    seePricing: 'Voir les offres et les tarifs',
+    pilotNote: 'Envie de le voir d’abord avec vos propres supports ?',
+    publicPilot: /pilote gratuit|lancer le pilote|pilote de \d+ jours|\d+ jours de pilote/i,
     demoCta: 'Demander une démo',
     students: 'Pour les étudiants',
     // French groups thousands with a narrow no-break space (U+202F); the page text is compared with spaces normalized.
@@ -179,7 +186,7 @@ const ORG_EXPECT = {
     vat: /\+ TVA/,
     vatNote: /Prix hors TVA/,
     monthlyWording: ['10 cours importés par mois', '500 brouillons de questions par mois', '100 cours importés par mois', '2 000 brouillons de questions par mois'],
-    pilotWording: ['5 cours', '150 brouillons de questions au total', '3 administrateurs ou éditeurs', 'Relecteurs illimités'],
+    planWording: ['10 administrateurs ou éditeurs', '25 administrateurs ou éditeurs', 'Relecteurs illimités'],
     noCheckout: /pas de paiement en ligne/i,
     notCharged: /rien n’est facturé automatiquement/i,
     generations: /\bgénérations?\b/i,
@@ -190,8 +197,10 @@ const ORG_EXPECT = {
   ar: {
     title: 'Exama للمؤسسات — أسئلة اختبارات من موادك التعليمية الخاصة',
     demoTitle: 'طلب عرض توضيحي — Exama للمؤسسات',
-    pilotCta: 'ابدأ الفترة التجريبية المجانية لمدة 30 يومًا',
-    pilotShort: 'ابدأ الفترة التجريبية المجانية',
+    createAccount: 'إنشاء حساب مؤسسة',
+    seePricing: 'اطّلع على الخطط والأسعار',
+    pilotNote: 'تودّ رؤيته أولًا على موادك الخاصة؟',
+    publicPilot: /فترة تجريبية مجانية|الفترة التجريبية المجانية|ابدأ الفترة التجريبية|لمدة 30 يومًا/,
     demoCta: 'اطلب عرضًا توضيحيًا',
     students: 'للطلاب',
     // Western digits, like the student pricing in Arabic.
@@ -200,7 +209,7 @@ const ORG_EXPECT = {
     vatNote: /الأسعار لا تشمل ضريبة القيمة المضافة/,
     // Number–noun agreement: 3–10 plural, 11–99 accusative singular, round hundreds/thousands singular.
     monthlyWording: ['10 مقررات مرفوعة شهريًا', '500 مسودة أسئلة شهريًا', '100 مقرر مرفوع شهريًا', '2,000 مسودة أسئلة شهريًا', '25 مسؤولًا أو محرّرًا'],
-    pilotWording: ['5 مقررات', '150 مسودة أسئلة إجمالًا', '3 مسؤولين أو محرّرين', 'عدد غير محدود من المراجعين'],
+    planWording: ['10 مسؤولين أو محرّرين', '25 مسؤولًا أو محرّرًا', 'عدد غير محدود من المراجعين'],
     noCheckout: /لا يوجد دفع عبر الإنترنت/,
     notCharged: /لا تُحتسب أي رسوم تلقائيًا/,
     generations: /توليدات/,
@@ -509,12 +518,17 @@ for (const { lang, page, route, file } of orgPages) {
     ORG_LANGS.filter((l) => l !== lang).every((l) => new RegExp(`href="${orgPath(l, page)}" hreflang="${l}" lang="${l}">${EXPECT[l].language}<`).test(menu)),
     'language selector links to this page in the other three languages',
   );
-  // Navigation: back to the student site, and the organization sign-up as the main button.
+  // Navigation: to the student landing page; "Request a demo" is the main button (header + mobile menu). No public pilot:
+  // no pilot button, no pilot plan, no "free pilot" wording — a pilot is negotiated individually.
   check(links.some((a) => a.label === e.students && a.href === studentPath(lang)), `"${e.students}" → ${studentPath(lang)} (the student landing page)`);
-  const pilot = links.filter((a) => a.label === e.pilotCta);
-  check(pilot.length >= (page ? 1 : 3) && pilot.every((a) => a.href === ORG_SIGNUP(lang)), `"${e.pilotCta}" → organization sign-up (${pilot.length}×${page ? '' : ': hero, pilot section, final CTA'}, nowhere else)`);
-  const short = links.filter((a) => a.label === e.pilotShort);
-  check(short.length >= 2 && short.every((a) => a.href === ORG_SIGNUP(lang)), `header "${e.pilotShort}" → organization sign-up (header + mobile menu)`);
+  const demos = links.filter((a) => a.label === e.demoCta);
+  check(demos.length >= (page ? 2 : 5) && demos.every((a) => a.href === orgPath(lang, 'demo')), `"${e.demoCta}" → ${orgPath(lang, 'demo')} (${demos.length}×${page ? ': header, menu' : ': header, menu, hero, getting started, final CTA'}), nowhere else`);
+  const creates = links.filter((a) => a.label === e.createAccount);
+  check(creates.length >= (page ? 2 : 3) && creates.every((a) => a.href === ORG_SIGNUP(lang)), `"${e.createAccount}" → organization sign-up (${creates.length}×)`);
+  check(links.filter((a) => a.href === ORG_SIGNUP(lang)).every((a) => a.label === e.createAccount), 'every link to the organization sign-up is labelled as creating an account (never a pilot)');
+  const freePilot = body.match(e.publicPilot);
+  check(!freePilot, `no public pilot offer${freePilot ? ` (found "${freePilot[0]}")` : ''}`);
+  check(!/id="pilot"|data-plan="pilot"/.test(html), 'no pilot section and no pilot plan card');
   check(links.filter((a) => a.href.startsWith(`${APP_URL}/start?`)).every((a) => a.href.endsWith(`&lang=${lang}`)), `links into the app open it in ${EXPECT[lang].language}`);
   checkLoginChoice(lang, html, links, 'organization');
   const ldTypes = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((m) => JSON.stringify(JSON.parse(m[1])).match(/"@type":"[A-Za-z]+"/g) ?? []);
@@ -543,24 +557,26 @@ for (const { lang, page, route, file } of orgPages) {
   }
   check(links.filter((a) => /class="brand"/.test(a.attrs)).every((a) => a.href === orgPath(lang)), 'logo links stay on the organizations page (header and footer)');
   if (!page) {
-    for (const id of ['how-it-works', 'review', 'pricing', 'pilot', 'faq']) check(new RegExp(`id="${id}"`).test(html), `section #${id}`);
+    for (const id of ['how-it-works', 'review', 'pricing', 'get-started', 'faq']) check(new RegExp(`id="${id}"`).test(html), `section #${id}`);
     for (const price of e.prices) check(body.includes(price), `pricing shows ${price}`);
     check(e.vat.test(body) && e.vatNote.test(body), 'prices are marked as excluding VAT, with the VAT note');
-    for (const w of [...e.monthlyWording, ...e.pilotWording]) check(body.includes(w), `allowance wording: "${w}"`);
+    for (const w of [...e.monthlyWording, ...e.planWording]) check(body.includes(w), `allowance wording: "${w}"`);
     check(e.noCheckout.test(body) && e.notCharged.test(body), 'says there is no online checkout and nothing is charged automatically');
     const cards = html.split(/(?=<li class="plan[ "])/).slice(1);
     const plan = (id) => anchors(cards.find((c) => c.includes(`data-plan="${id}"`)) ?? '').find((a) => /class="btn/.test(a.attrs));
-    check(plan('pilot')?.href === ORG_SIGNUP(lang), 'plan pilot → organization sign-up');
+    check(cards.map((c) => c.match(/data-plan="([a-z]+)"/)?.[1]).join(',') === 'esencial,profesional,centro', 'exactly three plan cards: Esencial, Profesional, Centro');
+    // Under the plans: a pilot can be discussed individually — a contact link, never a plan, price, length or sign-up.
+    const noteHtml = html.slice(html.indexOf('class="card pilot-note"'), html.indexOf('</aside>', html.indexOf('class="card pilot-note"')));
+    check(text(noteHtml).includes(e.pilotNote) && anchors(noteHtml).length === 1 && anchors(noteHtml)[0].href === orgPath(lang, 'demo'), `pilot note under the plans ("${e.pilotNote}"), linking only to the demo page`);
     for (const id of ['esencial', 'profesional', 'centro']) check(plan(id)?.href === orgPath(lang, 'demo'), `plan ${id} → the demo page (requested by email, never bought online)`);
     const questions = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map((m) => text(m[1]).trim());
     const faqLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1])).find((d) => d['@type'] === 'FAQPage');
     check(questions.length === e.faqCount && faqLd?.mainEntity.length === e.faqCount && faqLd.mainEntity.every((q, i) => q.name === questions[i]), `FAQ: ${e.faqCount} questions, mirrored in the structured data`);
-    // Above the fold: the pilot AND a demo request (directors who want to talk first), then verified trust facts.
+    // Above the fold: a demo request and the plans, then verified trust facts.
     const heroHtml = html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'));
     const heroLinks = anchors(heroHtml);
-    check(heroLinks.some((a) => a.label === e.pilotCta && a.href === ORG_SIGNUP(lang)) && heroLinks.some((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')), `hero: "${e.pilotCta}" + "${e.demoCta}"`);
+    check(heroLinks.some((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')) && heroLinks.some((a) => a.label === e.seePricing && a.href === '#pricing'), `hero: "${e.demoCta}" + "${e.seePricing}"`);
     for (const fact of e.trust) check(text(html.slice(html.indexOf('class="trust-strip"'))).includes(fact), `trust strip: "${fact}"`);
-    check(links.filter((a) => a.label === e.demoCta && a.href === orgPath(lang, 'demo')).length >= 2, `"${e.demoCta}" → ${orgPath(lang, 'demo')} (hero and final CTA)`);
     check(new RegExp(`<meta property="og:image" content="https://exama.app/og-image-org-${lang}.png"`).test(html) && existsSync(join(dist, `og-image-org-${lang}.png`)), `link preview: og-image-org-${lang}.png`);
     // Footer of the organizations pages: organization sign-up, no student sign-up.
     const foot = anchors(html.slice(html.indexOf('<footer')));
@@ -575,6 +591,20 @@ for (const { lang, page, route, file } of orgPages) {
     check(mail.some((a) => a.label === DEMO_EMAIL), 'the address is written out as a link too');
     check(!/<form\b/.test(html), 'no form (requests go by email)');
   }
+}
+
+// ---------- No public pilot anywhere on the site ----------
+// A pilot is negotiated individually and granted by hand: no page (home, student, organizations, legal, support) and no
+// link-preview source may offer one. (Arabic is checked on the organizations pages only: the student pages' 3-day trial
+// uses the same words for "free trial".)
+console.log('\nNo public pilot');
+{
+  const PUBLIC_PILOT_ANY = new RegExp([ORG_EXPECT.en.publicPilot.source, ORG_EXPECT.es.publicPilot.source, ORG_EXPECT.fr.publicPilot.source].join('|'), 'i');
+  const offending = Object.entries(pages).filter(([, file]) => PUBLIC_PILOT_ANY.test(text(read(file))));
+  check(offending.length === 0, `no page offers a pilot${offending.length ? ` (found on ${offending.map(([r]) => r).join(', ')})` : ''}`);
+  const ogSources = ORG_LANGS.map((l) => join(dirname(fileURLToPath(import.meta.url)), `og-image-org-${l}.html`));
+  const ogHits = ogSources.filter((f) => existsSync(f) && (PUBLIC_PILOT_ANY.test(readFileSync(f, 'utf8')) || ORG_EXPECT.ar.publicPilot.test(readFileSync(f, 'utf8'))));
+  check(ogHits.length === 0, `link-preview sources (scripts/og-image-org-*.html) offer no pilot${ogHits.length ? ` (${ogHits.join(', ')})` : ''}`);
 }
 
 // ---------- Support and 404 ----------

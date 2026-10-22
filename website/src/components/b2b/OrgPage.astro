@@ -7,10 +7,9 @@ import OrgHow from './OrgHow.astro';
 import OrgReview from './OrgReview.astro';
 import OrgTeam from './OrgTeam.astro';
 import OrgPricing from './OrgPricing.astro';
-import OrgPilot from './OrgPilot.astro';
+import OrgStart from './OrgStart.astro';
 import OrgFaq from './OrgFaq.astro';
 import OrgFinalCta from './OrgFinalCta.astro';
-import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
 import { orgAlternatesFor, orgOgImage, orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
@@ -27,7 +26,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
     inLanguage: lang,
-    mainEntity: c.faq.items(ORG_PILOT_DAYS).map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a.join(' ') } })),
+    mainEntity: c.faq.items.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a.join(' ') } })),
   },
 ];
 ---
@@ -39,7 +38,7 @@ const jsonLd = [
   <OrgAudiences lang={lang} />
   <OrgTeam lang={lang} />
   <OrgPricing lang={lang} />
-  <OrgPilot lang={lang} />
+  <OrgStart lang={lang} />
   <OrgFaq lang={lang} />
   <OrgFinalCta lang={lang} />
 </Base>

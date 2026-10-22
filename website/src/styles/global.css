@@ -1420,15 +1420,6 @@ html[lang='ar'] .eyebrow {
 .final-ctas {
   justify-content: center;
 }
-.btn-outline-light {
-  background: transparent;
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.55);
-}
-.btn-outline-light:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: #fff;
-}
 
 /* "Log in": a <details> dropdown with the two account types (header bar), styled like the language selector. */
 .login-menu {
@@ -1579,23 +1570,23 @@ html[lang='ar'] .eyebrow {
   color: var(--muted);
 }
 .usage-card,
-.pilot-after {
+.start-after {
   align-self: start;
 }
 .usage-card h3,
-.pilot-after h3 {
+.start-after h3 {
   margin-top: 16px;
   font-size: 1.15rem;
   font-weight: 700;
 }
-.pilot-after .checks {
+.start-after .checks {
   margin-top: 16px;
 }
-.pilot-after .checks li,
+.start-after .checks li,
 .usage-card p {
   color: var(--muted);
 }
-#pilot .cta-row {
+#get-started .cta-row {
   margin-top: 28px;
 }
 
@@ -1607,10 +1598,26 @@ html[lang='ar'] .eyebrow {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (min-width: 1100px) {
+@media (min-width: 1000px) {
   .org-pricing {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
+}
+/* Under the plans: a pilot can be discussed individually (never a plan card). */
+.pilot-note {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 46rem;
+  margin: 32px auto 0;
+  text-align: center;
+}
+.pilot-note h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.pilot-note p {
+  margin: 0;
 }
 
 .cta-center {
@@ -1723,32 +1730,36 @@ html[lang='ar'] .eyebrow {
   }
 }
 
-/* The pilot: how it starts + what happens after. */
-.pilot-side {
+/* Getting started: the steps + what an organization without a plan can do. */
+.start-side {
   display: grid;
   gap: 16px;
   align-self: start;
 }
-.pilot-start h3 {
+.start-card h3 {
   font-size: 1.15rem;
   font-weight: 700;
 }
-.pilot-steps {
+.start-steps {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 14px;
+  margin-top: 20px;
   padding: 0;
   list-style: none;
-  counter-reset: pilot;
+  counter-reset: start;
 }
-.pilot-steps li {
+.start-steps li {
   position: relative;
   padding-inline-start: 38px;
   color: var(--muted);
-  counter-increment: pilot;
+  counter-increment: start;
 }
-.pilot-steps li::before {
-  content: counter(pilot);
+.start-steps li strong {
+  display: block;
+  color: var(--text);
+}
+.start-steps li::before {
+  content: counter(start);
   position: absolute;
   inset-inline-start: 0;
   top: -1px;

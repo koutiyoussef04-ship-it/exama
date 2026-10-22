@@ -46,8 +46,8 @@ const links = {
   primary: (lang: Lang) => (webCheckoutAvailable ? links.plans(lang) : links.signUp(lang)),
   /**
    * Organization sign-up (the B2B pages): the same /start route, with the organization form pre-selected
-   * (apps/mobile/src/lib/start-intent.ts, `account=organization`). The 30-day pilot starts with the account;
-   * no card, no payment.
+   * (apps/mobile/src/lib/start-intent.ts, `account=organization`). The new organization has NO plan: uploads and AI
+   * drafts start once Exama activates the plan agreed with it (or a pilot negotiated individually). No card, no payment.
    */
   orgSignUp: (lang: Lang) => startUrl(lang, { mode: 'signup', account: 'organization' }),
   /**

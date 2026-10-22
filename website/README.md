@@ -52,9 +52,9 @@ npm test           # pricing check + typecheck + build + post-build verification
 
 ```
 src/config/site.ts       domain, app URL, links into the app (/start), the web-checkout flag, OG image, legal/contact details (null until confirmed), the B2B demo address
-src/data/b2b.ts          organization plans (allowances, prices ex-VAT, pilot length) — checked against packages/shared/src/organizations.ts
+src/data/b2b.ts          the publicly presented organization plans (allowances, prices ex-VAT; no pilot) — checked against packages/shared/src/organizations.ts
 src/i18n/b2b/            types.ts + en.ts / es.ts / fr.ts / ar.ts: ALL text of the organizations pages
-src/components/b2b/      the organizations page (OrgPage.astro = hero, audiences, how, review, team, pricing, pilot, FAQ, final CTA) and the demo page
+src/components/b2b/      the organizations page (OrgPage.astro = hero, how, review, audiences, team, pricing, getting started, FAQ, final CTA) and the demo page
 src/components/AudienceChoice.astro the two entrances under the home hero (students / organizations); LoginMenu.astro the "Log in" choice (header)
 src/components/StudentPage.astro    the student landing page (its own hero via Hero.astro `variant="students"`, then the home sections)
 src/i18n/                languages.ts (languages, URLs, direction), types.ts (the shape of the copy), en.ts / es.ts / fr.ts / ar.ts (ALL page text)
@@ -94,17 +94,20 @@ both buttons. Each one is canonical on itself with the four student pages as hre
 its full content and gains the two audience choices.
 
 - **Facts** come from `src/data/b2b.ts`, which mirrors the app's plan catalog
-  (`packages/shared/src/organizations.ts`): pilot 30 days — 5 courses, 150 question drafts and 3 admin/editor
-  seats **as totals**; Esencial €149/month · €1,490/year — 10 course uploads and 500 question drafts **per
+  (`packages/shared/src/organizations.ts`): Esencial €149/month · €1,490/year — 10 course uploads and 500 question drafts **per
   calendar month**, 10 seats; Profesional €349/month · €3,490/year — 100 / 2,000 per month, 25 seats; Centro
   custom; reviewers unlimited; at most 20 drafts per request. `npm run check:pricing` fails if any of it drifts
   from the app. Prices are shown **excluding VAT** (`+ VAT` / `+ IVA` and a note).
-- **Buttons.** "Start the free 30-day pilot" → `https://app.exama.app/start?mode=signup&account=organization&lang=…`
-  (the app's `/start` route opens the sign-up with the organization form pre-selected; the pilot starts with the
-  account). Esencial, Profesional and Centro → the demo page. **There is no online checkout**: plans are
-  requested by email and activated by Exama; nothing is charged automatically, and the copy says so.
-  "Log in" (header, menu, footer) → `…/start?mode=signin&account=organization&lang=…`: the sign-in form opens on
-  "Organization account", because the organization identity is separate from a student account with the same email.
+- **No public pilot.** A pilot is negotiated individually and granted by Exama by hand (owner tools); it is never a
+  plan card, a price, a length or a sign-up button. Under the plans, one note says a pilot can be discussed for some
+  projects, without promising one, and links to the demo page. `verify-build` fails if "free pilot" wording, a pilot
+  section or a pilot plan card appears on any page (all four languages) or in the link-preview sources.
+- **Buttons.** "Request a demo" is the main call to action (header, hero, getting started, final block) → the demo page.
+  Esencial, Profesional and Centro → the demo page too. "Create an organization account" →
+  `https://app.exama.app/start?mode=signup&account=organization&lang=…`: the new organization has **no plan** until
+  Exama activates the one agreed with it. **There is no online checkout**: plans are requested by email and activated
+  by Exama; nothing is charged automatically, and the copy says so. "Log in" is the two-way choice (student /
+  organization), with the organization entry first on these pages.
 - **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
   with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
 - **Screenshots**: real captures of the workspace only — `public/screenshots/org-review.jpg`, `org-queue.jpg`

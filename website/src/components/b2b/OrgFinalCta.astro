@@ -1,5 +1,4 @@
 ---
-import { ORG_PILOT_DAYS } from '../../data/b2b';
 import { site } from '../../config/site';
 import { orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
@@ -16,8 +15,8 @@ const c = orgCopy(lang);
     <h2 id="final-title">{c.final.title}</h2>
     <p>{c.final.text}</p>
     <div class="cta-row cta-center">
-      <a class="btn btn-light btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
-      <a class="btn btn-outline-light btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
+      <a class="btn btn-light btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
+      <a class="btn btn-outline-light btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.createAccount}</a>
     </div>
     <p class="final-note">{c.final.note}</p>
   </div>
