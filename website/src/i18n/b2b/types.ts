@@ -20,14 +20,14 @@ export type OrgPlanCopy = {
 export type OrgCopy = {
   meta: { title: string; description: string; demoTitle: string; demoDescription: string; ogAlt: string };
   nav: { how: string; pricing: string; faq: string; students: string; demo: string };
-  /** `pilotShort`: the header button (little room); `pilot` everywhere else. */
-  cta: { pilot: (days: number) => string; pilotShort: string; demo: string; seeHow: string };
+  /** `demo` is the main call to action everywhere (header, hero, final block); `createAccount` opens the organization sign-up. */
+  cta: { demo: string; seePricing: string; seeHow: string; createAccount: string };
   hero: {
     eyebrow: string;
     titleStart: string;
     titleHighlight: string;
     lead: string;
-    note: (days: number) => string;
+    note: string;
     /** Verified facts shown as a strip under the hero (storage, access, review, export). */
     trustAria: string;
     trust: string[];
@@ -52,25 +52,20 @@ export type OrgCopy = {
     perMonth: string;
     plusVat: string;
     orYearly: (yearly: string, pct: number) => string;
-    pilotPrice: string;
-    pilotDuration: (days: number) => string;
     custom: string;
     customSub: string;
     plans: Record<OrgPlanId, OrgPlanCopy>;
     vatNote: string;
     billingNote: string;
+    /**
+     * Under the plans: a pilot can be discussed individually (contact us). Never a plan, a price, a length or a
+     * sign-up button, and never a promise that every organization gets one.
+     */
+    pilotNote: { title: string; text: string; cta: string };
   };
-  pilot: {
-    eyebrow: string;
-    title: (days: number) => string;
-    lead: string;
-    includes: (limits: OrgLimits, perRequest: number) => string[];
-    startTitle: string;
-    start: string[];
-    afterTitle: string;
-    after: string[];
-  };
-  faq: { eyebrow: string; title: string; items: (days: number) => Faq[] };
+  /** How an organization gets started: talk to us, agree a plan, create the account, Exama activates the plan. */
+  start: { eyebrow: string; title: string; lead: string; steps: Step[]; noPlanTitle: string; noPlan: string[] };
+  faq: { eyebrow: string; title: string; items: Faq[] };
   final: { title: string; text: string; note: string };
   demo: {
     title: string;
@@ -84,7 +79,7 @@ export type OrgCopy = {
     body: string;
     replyNote: string;
     orTitle: string;
-    orText: (days: number) => string;
+    orText: string;
     back: string;
   };
   footer: { tagline: string; product: string; account: string; how: string; pricing: string; faq: string; demo: string; signup: string; students: string };

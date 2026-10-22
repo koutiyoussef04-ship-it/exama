@@ -11,19 +11,19 @@ export const enOrg: OrgCopy = {
   meta: {
     title: 'Exama for organizations — Test questions from your own course material',
     description:
-      'For universities, schools, training centers and companies: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Free 30-day pilot.',
+      'For universities, schools, training centers and companies: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Monthly or yearly plans, activated by Exama.',
     demoTitle: 'Request a demo — Exama for organizations',
     ogAlt: 'Exama for organizations: test questions from your own course material, each one with its source',
-    demoDescription: 'Ask for a walkthrough of the Exama organization workspace by email, or start the free 30-day pilot yourself.',
+    demoDescription: 'Ask for a walkthrough of the Exama organization workspace by email, or tell us which plan fits your organization.',
   },
   nav: { how: 'How it works', pricing: 'Pricing', faq: 'FAQ', students: 'For students', demo: 'Demo' },
-  cta: { pilot: (days) => `Start the free ${days}-day pilot`, pilotShort: 'Start the free pilot', demo: 'Request a demo', seeHow: 'See how it works' },
+  cta: { demo: 'Request a demo', seePricing: 'See plans and pricing', seeHow: 'See how it works', createAccount: 'Create an organization account' },
   hero: {
     eyebrow: 'For universities, schools, training centers and companies',
     titleStart: 'Turn your course material into test questions, ',
     titleHighlight: 'each one with its source.',
     lead: 'Upload a PDF or PowerPoint. Exama drafts the questions and shows the passage each one comes from. Your team reviews and approves every question before it is used, then exports them to Moodle or CSV.',
-    note: (days) => `Free for ${days} days · No card · Nothing is charged automatically`,
+    note: 'Monthly or yearly plans · Prices exclude VAT · Nothing is charged automatically',
     trustAria: 'How your material is handled',
     trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
     shotAlt: 'The Exama review screen: the source passage from the course next to the drafted question, with approve and reject controls',
@@ -102,22 +102,14 @@ export const enOrg: OrgCopy = {
   },
   pricing: {
     eyebrow: 'Pricing',
-    title: 'Start with a free pilot. Choose a plan when it fits.',
-    lead: 'Plans are activated by Exama for your organization after you request one. There is no online checkout and nothing is charged automatically.',
+    title: 'Plans for your organization',
+    lead: 'Choose the plan that fits your volume. Exama activates it for your organization once we have agreed on it with you. There is no online checkout and nothing is charged automatically.',
     perMonth: '/month',
     plusVat: '+ VAT',
     orYearly: (yearly, pct) => `or ${yearly}/year + VAT (save ${pct}%)`,
-    pilotPrice: 'Free',
-    pilotDuration: (days) => `for ${days} days`,
     custom: 'Custom',
     customSub: 'pricing and allowances',
     plans: {
-      pilot: {
-        name: 'Pilot',
-        tagline: 'Try the whole workspace with your own material.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} courses`, `${n(l!.itemsPerMonth)} question drafts in total`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'Moodle GIFT and CSV export'],
-        cta: 'Start the free pilot',
-      },
       esencial: {
         name: 'Esencial',
         tagline: 'For one center or department.',
@@ -138,26 +130,30 @@ export const enOrg: OrgCopy = {
       },
     },
     vatNote: 'Prices exclude VAT. VAT is added at the applicable rate when the plan is invoiced.',
-    billingNote: 'The pilot needs no card. Paid plans are agreed by email and activated by Exama; you are never charged without having asked for a plan.',
+    billingNote: 'Plans are agreed by email and activated by Exama; you are never charged without having asked for a plan.',
+    pilotNote: {
+      title: 'Want to see it with your own material first?',
+      text: 'Ask us for a demo. For some projects we can agree a pilot with an organization for a limited period; we look at each request individually.',
+      cta: 'Contact us',
+    },
   },
-  pilot: {
-    eyebrow: 'The pilot',
-    title: (days) => `${days} days to try it with your own courses`,
-    lead: 'The pilot starts the moment the organization account is created. It is the full workspace, with these allowances for the whole pilot:',
-    includes: (l, perRequest) => [`${n(l.coursesPerMonth)} courses`, `${n(l.itemsPerMonth)} question drafts in total`, `${n(l.maxMembers)} admins or editors, unlimited reviewers`, `Up to ${n(perRequest)} drafts per request`],
-    startTitle: 'How the pilot starts',
-    start: ['Create the organization account: its name, its type, your name and email.', 'Confirm your email with the link we send you.', 'Upload a course and ask for your first drafts. Add colleagues as editors or reviewers once they have an Exama account.'],
-    afterTitle: 'When the pilot ends',
-    after: [
-      'Nothing is charged and nothing is deleted.',
-      'Your team can keep reading, reviewing and exporting every course and question.',
-      'New courses and new drafts wait until a plan is activated for the organization.',
+  start: {
+    eyebrow: 'Getting started',
+    title: 'From a first conversation to your workspace',
+    lead: 'Plans are activated by Exama, so getting started goes through a short conversation with us.',
+    steps: [
+      { title: 'Tell us about your organization', text: 'Request a demo or write to us: what you teach, and how many courses and people are involved.', icon: 'mail' },
+      { title: 'Agree on a plan', text: 'Esencial, Profesional or Centro, monthly or yearly. We confirm the plan and its terms by email.', icon: 'check' },
+      { title: 'Create the organization account', text: 'Your name, your email, and the organization’s name and type. Confirm your email with the link we send you.', icon: 'users' },
+      { title: 'We activate your plan', text: 'Once it is active, your team can upload courses, draft questions and add colleagues as editors or reviewers.', icon: 'upload' },
     ],
+    noPlanTitle: 'Before a plan is active',
+    noPlan: ['The account and the workspace can be created at any time.', 'Uploading courses and drafting questions start once Exama has activated a plan.', 'Nothing is charged: a plan is only activated after you have asked for one.'],
   },
   faq: {
     eyebrow: 'FAQ',
     title: 'Questions organizations ask',
-    items: (days) => [
+    items: [
       {
         q: 'What can we upload?',
         a: ['PDF and PowerPoint (.pptx) files that contain real text. Scanned images without a text layer cannot be read. Each course is one file; you can upload as many courses as your plan allows.'],
@@ -166,7 +162,7 @@ export const enOrg: OrgCopy = {
         q: 'What counts as a question draft?',
         a: [
           'A draft is one question Exama writes and keeps for your review. You ask for a number of drafts (up to 20 per request) and only the ones delivered count against your allowance. Questions your editors add by hand do not count.',
-          `On the pilot the allowance is a total for the ${days} days; on Esencial and Profesional it is per calendar month.`,
+          'On Esencial and Profesional the allowance is per calendar month.',
         ],
       },
       {
@@ -192,19 +188,19 @@ export const enOrg: OrgCopy = {
         ],
       },
       {
-        q: 'What happens after the pilot?',
-        a: [`After ${days} days, nothing is charged and nothing is deleted. Your team can still read, review and export everything. To upload new courses or draft new questions, request a plan and we activate it for your organization.`],
+        q: 'Can we try Exama before choosing a plan?',
+        a: ['Yes: ask us for a demo and we will show you the workspace with real course material. For some projects we also agree a pilot with the organization, for a limited period and with set allowances. Pilots are agreed case by case; they are not available by default.'],
       },
       {
         q: 'How is a plan paid?',
-        a: ['Request Esencial, Profesional or Centro by email. We agree the plan and billing period with you and activate it; prices exclude VAT. There is no online checkout, and nothing is charged automatically — not after the pilot, not at renewal.'],
+        a: ['Request Esencial, Profesional or Centro by email. We agree the plan and billing period with you and activate it; prices exclude VAT. There is no online checkout, and nothing is charged automatically — not at the start, not at renewal.'],
       },
     ],
   },
   final: {
-    title: 'Try it with one of your courses.',
-    text: 'Create the organization account, upload a course and review the first drafts with your team.',
-    note: 'Free for 30 days. No card. Your material stays yours.',
+    title: 'See it with one of your courses.',
+    text: 'Request a demo, or tell us which plan fits your organization.',
+    note: 'Plans are activated by Exama. Nothing is charged automatically. Your material stays yours.',
   },
   demo: {
     title: 'Request a demo',
@@ -217,8 +213,8 @@ export const enOrg: OrgCopy = {
     subject: 'Exama for organizations — demo request',
     body: 'Hello Exama,\n\nWe would like a demo of the organization workspace.\n\nOrganization:\nWhat we teach:\nCourses or modules to start with:\nPeople who would review questions:\nPlan we are considering:\n\nThank you,\n',
     replyNote: 'We reply by email. No account is created and nothing is charged by asking.',
-    orTitle: 'Prefer to try it yourself?',
-    orText: (days) => `The ${days}-day pilot is free and starts as soon as the organization account is created — no demo needed.`,
+    orTitle: 'Already agreed on a plan with us?',
+    orText: 'Create the organization account and tell us its name: we activate the plan we agreed on.',
     back: '← Back to Exama for organizations',
   },
   footer: {

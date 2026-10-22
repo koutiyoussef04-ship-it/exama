@@ -81,6 +81,7 @@ export async function b2bOverview(now = new Date()): Promise<B2BOverview> {
       pilotsActive,
       pilotsExpired,
       pilotsEndingSoon,
+      withoutPlan: byPlan.none,
     },
     accounts: {
       organizationAccounts: Number(accounts?.total ?? 0),

@@ -54,11 +54,24 @@ An organization sign-up either:
 - **Creates an organization:** it needs a name and a category (`market`), one of `ORGANIZATION_CATEGORIES` in `packages/shared/src/organizations.ts`: `university`, `school`, `training_center`, `corporate`, `exam_prep`, `other` (for French-speaking markets and the Gulf). Organizations created before those categories keep `training_provider` or `academy` (`LEGACY_ORGANIZATION_MARKETS`): still valid, displayed and, for `academy`, still driving its workspace defaults (multiple-choice only, legal-reference fields), but no longer offered to new sign-ups or to `POST /orgs`. Migration 0025 only widened the database CHECK constraint to the eight values; it rewrote no row.
 - **Joins one:** it sends no organization fields. The account is created without an organization, and an admin of the existing organization adds it by email.
 
+## Plans and manual pilots
+
+- **No automatic pilot.** A new organization (sign-up or `POST /orgs`) has `plan = 'none'`: it can sign in, see its workspace and add reviewers, but uploads, AI drafts and reprocessing answer `402 org_plan_required` until the owner assigns a plan. The workspace says so in all four languages. Migration 0026 made `'none'` a valid value and the column default.
+- **Paid plans** (`ORGANIZATION_PLAN_CATALOG`): Esencial €149/month · €1,490/year (10 course uploads, 500 question drafts per month, 10 admins/editors), Profesional €349/month · €3,490/year (100 / 2,000 / 25), Centro custom (owner overrides). Prices exclude VAT. Reviewers are unlimited; at most 20 drafts per request. Billing is manual until the Stripe integration (`docs/b2b-stripe-plan.md`).
+- **Pilots are negotiated, then granted by hand** by the B2B owner (owner dashboard → organization → "Grant a pilot", or `PATCH /b2b-admin/organizations/:id` / `PATCH /admin/organizations/:id` with `{ plan: 'pilot', pilotEndsAt?, limits? }`):
+  - it starts at the moment of the grant (`pilot_started_at`) and ends at `pilotEndsAt` (in the future, at most 365 days away) or after 30 days;
+  - its allowances are the pilot defaults (5 courses, 150 drafts, 3 admins/editors, as totals for the whole pilot) or the agreed ones in `limits`;
+  - **extend:** a later `pilotEndsAt`; **end now (revoke):** `pilotEndsAt` = now — the pilot stays on record (start and end dates) and stops at once;
+  - after its end: `402 org_pilot_expired` for uploads, AI drafts and reprocessing; reading, review and exports keep working. The owner extends it or assigns a plan;
+  - assigning a paid plan or `none` keeps the last pilot's dates as a record (they only apply while the plan is `pilot`).
+- **Who can change it:** only the B2B owner (`/b2b-admin`, audited with `params.change`) and the student-side owner tools (`/admin/organizations`, audited with the organization id and the change). An organization's own admins cannot: `PATCH /orgs/:id` only renames, `POST /orgs` ignores plan fields, and the owner endpoints answer 403/404.
+- **Existing organizations** kept their plan when 0026 ran: pilots granted automatically before it run until their end date, unless the owner ends them.
+
 ## B2B owner
 
 The B2B owner is `users.b2b_role = 'owner'` on an organization account. A database check refuses the role on any other account type.
 
-- **Dashboard:** `/b2b-admin/*` (overview, organizations, organization detail, plan / pilot / suspension changes, organization accounts), in English, Spanish, French and Arabic like the rest of the app. The route's owner check (`ownerOnlyAudited` in `routes/b2b-admin.ts`) reads the role from the database on every request and answers `404` to everyone else.
+- **Dashboard:** `/b2b-admin/*` (overview, organizations, organization detail, plan / pilot / suspension changes, organization accounts; see "Plans and manual pilots" below), in English, Spanish, French and Arabic like the rest of the app. The route's owner check (`ownerOnlyAudited` in `routes/b2b-admin.ts`) reads the role from the database on every request and answers `404` to everyone else.
 - **Audit:** every request is written to `admin_audit_log` with a `b2b …` action. Changes also record what they set (`params.change`, e.g. `{"status":"suspended"}`). Refused attempts by other accounts are recorded with `allowed = false`. No passwords, tokens or hashes are ever stored there.
 - **Where the owner finds it:** sign in with **Organization account** selected. The dashboard is in the workspace sidebar, under Account → Administration, and on the empty workspace screen. Hiding it elsewhere is cosmetic. Signing in with **Student account** (same email) never shows it.
 - **Unlimited usage:** this applies when the B2B owner itself acts. Course uploads, draft generation, reprocessing, the organization cap and the admin/editor seat limit are not refused. Usage is still recorded in the ledger. The per-request size cap (`maxItemsPerRequest`) and the anti-abuse rate limits still apply. Other members of the same organization are bound by its plan.

@@ -93,6 +93,14 @@ function Overview({ data: o, go }: { data: OrganizationOverview; go: (p: '/org/c
   const l = o.limits;
   return (
     <>
+      {/* No active plan (every new organization): nothing to upload or draft until Exama activates a plan. */}
+      {o.plan === 'none' && (
+        <Card style={{ gap: space(2), borderColor: colors.warning }}>
+          <Badge label={t('org.plan.noPlanBadge')} tone="warning" />
+          <Body muted>{t('org.plan.noPlan')}</Body>
+        </Card>
+      )}
+      {/* A pilot exists only when Exama granted one to this organization. */}
       {o.plan === 'pilot' && o.pilotEndsAt && (
         <Card style={{ gap: space(2), ...(o.pilotExpired && { borderColor: colors.warning }) }}>
           <Badge label={t(o.pilotExpired ? 'org.plan.pilotEndedBadge' : 'org.plan.pilotBadge')} tone={o.pilotExpired ? 'warning' : 'primary'} />
@@ -113,13 +121,15 @@ function Overview({ data: o, go }: { data: OrganizationOverview; go: (p: '/org/c
         <StatCard label={t('org.dashboard.counts.members')} value={formatNumber(c.members)} onPress={() => go('/org/members')} />
       </View>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: space(3) }}>
-        <Card style={{ flex: 1, gap: space(3) }}>
-          <SectionLabel>{t(u.period === 'pilot' ? 'org.plan.usagePilot' : 'org.dashboard.usage')}</SectionLabel>
-          <UsageRow label={t('org.dashboard.usageCourses')} used={u.coursesThisMonth} limit={l.coursesPerMonth} />
-          <UsageRow label={t('org.dashboard.usageItems')} used={u.itemsThisMonth} limit={l.itemsPerMonth} />
-          <Body muted style={{ fontSize: 13 }}>{t('org.dashboard.perRequest', { count: l.maxItemsPerRequest })}</Body>
-          <Body muted style={{ fontSize: 13 }}>{t('org.plan.seats', { max: l.maxMembers })}</Body>
-        </Card>
+        {o.plan !== 'none' && (
+          <Card style={{ flex: 1, gap: space(3) }}>
+            <SectionLabel>{t(u.period === 'pilot' ? 'org.plan.usagePilot' : 'org.dashboard.usage')}</SectionLabel>
+            <UsageRow label={t('org.dashboard.usageCourses')} used={u.coursesThisMonth} limit={l.coursesPerMonth} />
+            <UsageRow label={t('org.dashboard.usageItems')} used={u.itemsThisMonth} limit={l.itemsPerMonth} />
+            <Body muted style={{ fontSize: 13 }}>{t('org.dashboard.perRequest', { count: l.maxItemsPerRequest })}</Body>
+            <Body muted style={{ fontSize: 13 }}>{t('org.plan.seats', { max: l.maxMembers })}</Body>
+          </Card>
+        )}
         <Card style={{ flex: 1, gap: space(2), justifyContent: 'center' }}>
           <SectionLabel>{t(`org.plan.name.${o.plan}`)}</SectionLabel>
           <Body style={{ fontSize: 14 }}>{t(`org.market.${o.market}`)}</Body>

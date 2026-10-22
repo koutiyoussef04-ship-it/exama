@@ -1,5 +1,5 @@
 ---
-import { ORG_PILOT_DAYS, ORG_SECTIONS } from '../../data/b2b';
+import { ORG_SECTIONS } from '../../data/b2b';
 import { type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
@@ -7,7 +7,7 @@ interface Props {
   lang: OrgLang;
 }
 const c = orgCopy(Astro.props.lang).faq;
-const items = c.items(ORG_PILOT_DAYS);
+const items = c.items;
 ---
 
 <section id={ORG_SECTIONS.faq} class="section" aria-labelledby="faq-title">

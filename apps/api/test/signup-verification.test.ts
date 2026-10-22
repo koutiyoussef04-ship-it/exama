@@ -63,6 +63,9 @@ async function signUp(tag: string, extra: Record<string, unknown> = {}) {
   return { email, token: auth.token, id: auth.user.id, user: auth.user };
 }
 const orgSignUp = (tag: string) => signUp(tag, { accountType: 'organization', organizationName: `SV ${tag} ${RUN}`, market: 'corporate', ageRange: undefined });
+/** The owner (OWNER_EMAILS), created once and shared by the tests that manage organizations. */
+let ownerOnce: ReturnType<typeof signUp> | null = null;
+const theOwner = () => (ownerOnce ??= signUp('owner', { email: OWNER_EMAIL }));
 
 // ---------------------------------------------------------------- sign-up
 
@@ -222,19 +225,36 @@ async function ready(token: string, orgId: string, id: string) {
 const generate = (token: string, orgId: string, docId: string, count = 3) => call(`/orgs/${orgId}/courses/${docId}/generate`, { ...json('POST', { count }), token });
 const overview = (token: string, orgId: string) => call<OrganizationOverview>(`/orgs/${orgId}`, { token });
 
-test('pilot: 30 days, pilot allowances; seats count admins and editors, reviewers are unlimited', async () => {
+test('no automatic pilot: a new organization has no plan; a pilot granted by the owner has the pilot allowances; seats count admins and editors, reviewers are unlimited', async () => {
+  const owner = await theOwner();
   const admin = await orgSignUp('seats');
   const orgId = admin.user.organizations[0].id;
+  // Signing up never starts a pilot: no plan, no end date, nothing to create with.
+  const before = (await overview(admin.token, orgId)).body;
+  assert.deepEqual([before.plan, before.billingPeriod, before.pilotStartedAt, before.pilotEndsAt, before.pilotExpired], ['none', null, null, null, false]);
+  assert.deepEqual(before.limits, { coursesPerMonth: 0, itemsPerMonth: 0, maxItemsPerRequest: 20, maxMembers: 1 });
+  const refused = await upload(admin.token, orgId);
+  assert.deepEqual([refused.status, refused.body.code], [402, 'org_plan_required']);
+
+  const add = (role: string) => signUp(`m-${role}`, { accountType: 'organization' }).then(async (m) => ({ m, r: await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: m.email, role }), token: admin.token }) }));
+  const early = await add('editor');
+  assert.deepEqual([early.r.status, early.r.body.code], [402, 'org_member_limit_reached'], 'without a plan: the creating admin only (plus reviewers)');
+  const firstReviewer = await add('reviewer');
+  assert.equal(firstReviewer.r.status, 201);
+
+  // The owner grants the pilot it negotiated: it starts now, for 30 days by default, with the pilot allowances.
+  const granted = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token });
+  assert.equal(granted.status, 200, JSON.stringify(granted.body));
   const o = (await overview(admin.token, orgId)).body;
   assert.equal(o.plan, 'pilot');
   assert.equal(o.billingPeriod, null);
   assert.equal(o.pilotExpired, false);
+  assert.ok(Math.abs(new Date(o.pilotStartedAt!).getTime() - Date.now()) < 60_000, 'starts when granted');
   const days = (new Date(o.pilotEndsAt!).getTime() - Date.now()) / 86_400_000;
   assert.ok(days > 29.9 && days <= 30, String(days));
   assert.deepEqual(o.limits, { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 });
   assert.equal(o.usage.period, 'pilot');
 
-  const add = (role: string) => signUp(`m-${role}`, { accountType: 'organization' }).then(async (m) => ({ m, r: await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: m.email, role }), token: admin.token }) }));
   assert.equal((await add('editor')).r.status, 201);
   assert.equal((await add('admin')).r.status, 201);
   const fourth = await add('editor');
@@ -244,13 +264,14 @@ test('pilot: 30 days, pilot allowances; seats count admins and editors, reviewer
   assert.ok(reviewers.every((x) => x.r.status === 201), 'reviewers are not counted');
   const promote = await call(`/orgs/${orgId}/members/${reviewers[0].m.id}`, { ...json('PATCH', { role: 'editor' }), token: admin.token });
   assert.equal(promote.status, 402, 'promoting a reviewer needs a free seat');
-  assert.equal((await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { token: admin.token })).body.length, 6);
+  assert.equal((await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { token: admin.token })).body.length, 7);
 });
 
 test('pilot totals count the whole pilot; an ended pilot keeps data and exports but cannot create; the owner assigns paid plans', async () => {
-  const owner = await signUp('owner', { email: OWNER_EMAIL });
+  const owner = await theOwner();
   const admin = await orgSignUp('expiry');
   const orgId = admin.user.organizations[0].id;
+  assert.equal((await call(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token })).status, 200, 'pilot granted by the owner');
   const up = await upload(admin.token, orgId);
   assert.equal(up.status, 201, JSON.stringify(up.body));
   const doc = await ready(admin.token, orgId, up.body.id);

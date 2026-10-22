@@ -11,19 +11,19 @@ export const esOrg: OrgCopy = {
   meta: {
     title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
     description:
-      'Para universidades, centros educativos, centros de formación y empresas: sube tu material, recibe borradores de preguntas redactados por IA con su fuente, revísalos y apruébalos en equipo y expórtalos a Moodle o CSV. Piloto gratuito de 30 días.',
+      'Para universidades, centros educativos, centros de formación y empresas: sube tu material, recibe borradores de preguntas redactados por IA con su fuente, revísalos y apruébalos en equipo y expórtalos a Moodle o CSV. Planes mensuales o anuales, activados por Exama.',
     demoTitle: 'Solicitar una demo — Exama para organizaciones',
     ogAlt: 'Exama para organizaciones: preguntas tipo test a partir de tu temario, cada una con su fuente',
-    demoDescription: 'Pide por correo una demostración del espacio de trabajo para organizaciones de Exama, o empieza tú mismo el piloto gratuito de 30 días.',
+    demoDescription: 'Pide por correo una demostración del espacio de trabajo para organizaciones de Exama o cuéntanos qué plan encaja con tu organización.',
   },
   nav: { how: 'Cómo funciona', pricing: 'Precios', faq: 'Preguntas', students: 'Para estudiantes', demo: 'Demo' },
-  cta: { pilot: (days) => `Empieza el piloto gratuito de ${days} días`, pilotShort: 'Empezar el piloto gratuito', demo: 'Solicitar una demo', seeHow: 'Ver cómo funciona' },
+  cta: { demo: 'Solicitar una demo', seePricing: 'Ver planes y precios', seeHow: 'Ver cómo funciona', createAccount: 'Crear una cuenta de organización' },
   hero: {
     eyebrow: 'Para universidades, centros educativos, centros de formación y empresas',
     titleStart: 'Convierte tu temario en preguntas tipo test, ',
     titleHighlight: 'cada una con su fuente.',
     lead: 'Sube un PDF o un PowerPoint. Exama redacta las preguntas y muestra el pasaje del que sale cada una. Tu equipo revisa y aprueba cada pregunta antes de usarla y después las exporta a Moodle o CSV.',
-    note: (days) => `Gratis ${days} días · Sin tarjeta · Sin cargos automáticos`,
+    note: 'Planes mensuales o anuales · Precios sin IVA · Sin cargos automáticos',
     trustAria: 'Cómo se trata tu material',
     trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
     shotAlt: 'La pantalla de revisión de Exama: el pasaje del curso junto a la pregunta redactada, con los controles de aprobar y rechazar',
@@ -102,22 +102,14 @@ export const esOrg: OrgCopy = {
   },
   pricing: {
     eyebrow: 'Precios',
-    title: 'Empieza con un piloto gratuito. Elige un plan cuando encaje.',
-    lead: 'Exama activa el plan para tu organización después de que lo solicites. No hay pago en línea y no se cobra nada automáticamente.',
+    title: 'Planes para tu organización',
+    lead: 'Elige el plan que encaje con tu volumen. Exama lo activa para tu organización una vez acordado contigo. No hay pago en línea y no se cobra nada automáticamente.',
     perMonth: '/mes',
     plusVat: '+ IVA',
     orYearly: (yearly, pct) => `o ${yearly}/año + IVA (ahorra un ${pct} %)`,
-    pilotPrice: 'Gratis',
-    pilotDuration: (days) => `durante ${days} días`,
     custom: 'A medida',
     customSub: 'precio y límites',
     plans: {
-      pilot: {
-        name: 'Piloto',
-        tagline: 'Prueba todo el espacio de trabajo con tu propio material.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos`, `${n(l!.itemsPerMonth)} borradores de preguntas en total`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación Moodle GIFT y CSV'],
-        cta: 'Empezar el piloto gratuito',
-      },
       esencial: {
         name: 'Esencial',
         tagline: 'Para un centro o un departamento.',
@@ -138,26 +130,30 @@ export const esOrg: OrgCopy = {
       },
     },
     vatNote: 'Precios sin IVA. El IVA se añade al tipo aplicable cuando se factura el plan.',
-    billingNote: 'El piloto no necesita tarjeta. Los planes de pago se acuerdan por correo y los activa Exama; nunca se te cobra sin haber solicitado un plan.',
+    billingNote: 'Los planes se acuerdan por correo y los activa Exama; nunca se te cobra sin haber solicitado un plan.',
+    pilotNote: {
+      title: '¿Quieres verlo antes con tu propio material?',
+      text: 'Pídenos una demo. Para algunos proyectos podemos acordar con la organización un piloto durante un periodo limitado; estudiamos cada solicitud de forma individual.',
+      cta: 'Contactar con nosotros',
+    },
   },
-  pilot: {
-    eyebrow: 'El piloto',
-    title: (days) => `${days} días para probarlo con tus propios cursos`,
-    lead: 'El piloto empieza en el momento en que se crea la cuenta de la organización. Es el espacio de trabajo completo, con estos límites para todo el piloto:',
-    includes: (l, perRequest) => [`${n(l.coursesPerMonth)} cursos`, `${n(l.itemsPerMonth)} borradores de preguntas en total`, `${n(l.maxMembers)} administradores o editores, revisores ilimitados`, `Hasta ${n(perRequest)} borradores por petición`],
-    startTitle: 'Cómo empieza el piloto',
-    start: ['Crea la cuenta de la organización: su nombre, su tipo, tu nombre y tu correo.', 'Confirma tu correo con el enlace que te enviamos.', 'Sube un curso y pide tus primeros borradores. Añade a tus compañeros como editores o revisores cuando tengan su cuenta de Exama.'],
-    afterTitle: 'Cuando termina el piloto',
-    after: [
-      'No se cobra nada y no se borra nada.',
-      'Tu equipo puede seguir leyendo, revisando y exportando todos los cursos y preguntas.',
-      'Los cursos nuevos y los borradores nuevos esperan hasta que se active un plan para la organización.',
+  start: {
+    eyebrow: 'Cómo empezar',
+    title: 'De una primera conversación a tu espacio de trabajo',
+    lead: 'Exama activa los planes, así que para empezar basta con una breve conversación con nosotros.',
+    steps: [
+      { title: 'Cuéntanos sobre tu organización', text: 'Solicita una demo o escríbenos: qué enseñáis y cuántos cursos y personas participarían.', icon: 'mail' },
+      { title: 'Acordamos un plan', text: 'Esencial, Profesional o Centro, mensual o anual. Confirmamos el plan y sus condiciones por correo.', icon: 'check' },
+      { title: 'Crea la cuenta de la organización', text: 'Tu nombre, tu correo y el nombre y el tipo de la organización. Confirma tu correo con el enlace que te enviamos.', icon: 'users' },
+      { title: 'Activamos tu plan', text: 'Una vez activo, tu equipo puede subir cursos, redactar preguntas y añadir compañeros como editores o revisores.', icon: 'upload' },
     ],
+    noPlanTitle: 'Antes de que haya un plan activo',
+    noPlan: ['La cuenta y el espacio de trabajo se pueden crear en cualquier momento.', 'Subir cursos y redactar preguntas es posible en cuanto Exama active un plan.', 'No se cobra nada: un plan solo se activa después de que lo solicites.'],
   },
   faq: {
     eyebrow: 'Preguntas frecuentes',
     title: 'Lo que preguntan las organizaciones',
-    items: (days) => [
+    items: [
       {
         q: '¿Qué podemos subir?',
         a: ['Archivos PDF y PowerPoint (.pptx) que contengan texto real. Las imágenes escaneadas sin capa de texto no se pueden leer. Cada curso es un archivo; puedes subir tantos cursos como permita tu plan.'],
@@ -166,7 +162,7 @@ export const esOrg: OrgCopy = {
         q: '¿Qué cuenta como un borrador de pregunta?',
         a: [
           'Un borrador es una pregunta que Exama redacta y guarda para tu revisión. Pides un número de borradores (hasta 20 por petición) y solo cuentan los que se entregan. Las preguntas que tus editores añaden a mano no cuentan.',
-          `En el piloto el límite es un total para los ${days} días; en Esencial y Profesional es por mes natural.`,
+          'En Esencial y Profesional el límite es por mes natural.',
         ],
       },
       {
@@ -192,19 +188,19 @@ export const esOrg: OrgCopy = {
         ],
       },
       {
-        q: '¿Qué pasa después del piloto?',
-        a: [`Pasados los ${days} días, no se cobra nada y no se borra nada. Tu equipo puede seguir leyendo, revisando y exportándolo todo. Para subir cursos nuevos o redactar preguntas nuevas, solicita un plan y lo activamos para tu organización.`],
+        q: '¿Podemos probar Exama antes de elegir un plan?',
+        a: ['Sí: pídenos una demo y te mostraremos el espacio de trabajo con material de curso real. Para algunos proyectos también acordamos un piloto con la organización, durante un periodo limitado y con unos límites fijados. Los pilotos se acuerdan caso por caso; no están disponibles por defecto.'],
       },
       {
         q: '¿Cómo se paga un plan?',
-        a: ['Solicita Esencial, Profesional o Centro por correo. Acordamos contigo el plan y el periodo de facturación y lo activamos; los precios no incluyen IVA. No hay pago en línea y no se cobra nada automáticamente: ni al acabar el piloto ni en la renovación.'],
+        a: ['Solicita Esencial, Profesional o Centro por correo. Acordamos contigo el plan y el periodo de facturación y lo activamos; los precios no incluyen IVA. No hay pago en línea y no se cobra nada automáticamente: ni al empezar ni en la renovación.'],
       },
     ],
   },
   final: {
-    title: 'Pruébalo con uno de tus cursos.',
-    text: 'Crea la cuenta de la organización, sube un curso y revisa los primeros borradores con tu equipo.',
-    note: 'Gratis durante 30 días. Sin tarjeta. Tu material sigue siendo tuyo.',
+    title: 'Míralo con uno de tus cursos.',
+    text: 'Solicita una demo o cuéntanos qué plan encaja con tu organización.',
+    note: 'Exama activa los planes. Sin cargos automáticos. Tu material sigue siendo tuyo.',
   },
   demo: {
     title: 'Solicitar una demo',
@@ -217,8 +213,8 @@ export const esOrg: OrgCopy = {
     subject: 'Exama para organizaciones — solicitud de demo',
     body: 'Hola, Exama:\n\nNos gustaría ver una demo del espacio de trabajo para organizaciones.\n\nOrganización:\nQué enseñamos:\nCursos o módulos para empezar:\nPersonas que revisarían preguntas:\nPlan que estamos valorando:\n\nGracias,\n',
     replyNote: 'Respondemos por correo. Pedir una demo no crea ninguna cuenta ni genera ningún cargo.',
-    orTitle: '¿Prefieres probarlo por tu cuenta?',
-    orText: (days) => `El piloto de ${days} días es gratuito y empieza en cuanto se crea la cuenta de la organización; no hace falta demo.`,
+    orTitle: '¿Ya hemos acordado un plan?',
+    orText: 'Crea la cuenta de la organización y dinos su nombre: activaremos el plan acordado.',
     back: '← Volver a Exama para organizaciones',
   },
   footer: {

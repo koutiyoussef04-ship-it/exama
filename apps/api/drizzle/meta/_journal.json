@@ -183,6 +183,13 @@
       "when": 1792620418965,
       "tag": "0025_organization_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792681527171,
+      "tag": "0026_organization_no_default_plan",
+      "breakpoints": true
     }
   ]
 }

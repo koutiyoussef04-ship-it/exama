@@ -3,7 +3,7 @@
  * organization's allowances and can suspend one (read-only for its members) from here.
  */
 import { desc, eq, sql } from 'drizzle-orm';
-import { ORGANIZATION_PILOT_DAYS, type AdminOrganization, type AdminUpdateOrganizationInput } from '@study/shared';
+import { ORGANIZATION_PILOT_DAYS, ORGANIZATION_PILOT_MAX_DAYS, type AdminOrganization, type AdminUpdateOrganizationInput } from '@study/shared';
 import { getOrgUsage, orgPlanState, resolveOrgLimits } from '../billing/org-limits.js';
 import { db } from '../db/client.js';
 import { bankItems, documents, organizationMembers, organizations, users } from '../db/schema.js';
@@ -38,14 +38,35 @@ export async function listOrganizationsForOwner(): Promise<AdminOrganization[]> 
   );
 }
 
+/**
+ * The owner's changes to one organization (B2B owner dashboard and the owner admin tools; both audited by their routes).
+ *
+ *   plan 'pilot' (granting)   starts NOW and ends at `pilotEndsAt` (future, at most ORGANIZATION_PILOT_MAX_DAYS away) or
+ *                             after ORGANIZATION_PILOT_DAYS; allowances = the pilot defaults, or `limits` if given.
+ *   pilotEndsAt on a pilot    extends it, or ends it now (any date not after now ends it: the pilot is revoked, its dates kept).
+ *   plan 'none'               removes the plan: no new courses or drafts. No billing period, no allowance overrides.
+ *   paid plans                monthly or yearly; no end date here (manual billing). The last pilot's dates stay as a record.
+ *
+ * Nothing here charges anyone or creates anything in Stripe.
+ */
 export async function updateOrganizationForOwner(id: string, input: AdminUpdateOrganizationInput): Promise<AdminOrganization> {
-  const [existing] = await db.select({ id: organizations.id, plan: organizations.plan, pilotEndsAt: organizations.pilotEndsAt }).from(organizations).where(eq(organizations.id, id));
+  const [existing] = await db
+    .select({ id: organizations.id, plan: organizations.plan, pilotStartedAt: organizations.pilotStartedAt, pilotEndsAt: organizations.pilotEndsAt })
+    .from(organizations)
+    .where(eq(organizations.id, id));
   if (!existing) throw new HttpError(404, 'Organization not found', 'not_found');
   const plan = input.plan ?? existing.plan;
   const changingPlan = input.plan !== undefined && input.plan !== existing.plan;
-  if (plan === 'pilot' && input.billingPeriod) throw new HttpError(400, 'A pilot has no billing period', 'invalid_request');
-  if (plan !== 'pilot' && input.pilotEndsAt) throw new HttpError(400, 'Only a pilot has an end date', 'invalid_request');
   const now = new Date();
+  if ((plan === 'pilot' || plan === 'none') && input.billingPeriod) throw new HttpError(400, `${plan === 'pilot' ? 'A pilot' : 'An organization without a plan'} has no billing period`, 'invalid_request');
+  if (plan !== 'pilot' && input.pilotEndsAt) throw new HttpError(400, 'Only a pilot has an end date', 'invalid_request');
+  if (plan === 'none' && input.limits) throw new HttpError(400, 'An organization without a plan has no allowances to change', 'invalid_request');
+  if (plan === 'pilot' && input.pilotEndsAt) {
+    const end = new Date(input.pilotEndsAt).getTime();
+    const startsAt = changingPlan ? now.getTime() : existing.pilotStartedAt.getTime();
+    if (changingPlan && end <= now.getTime()) throw new HttpError(400, 'A new pilot must end in the future', 'invalid_request');
+    if (end - startsAt > ORGANIZATION_PILOT_MAX_DAYS * 86_400_000) throw new HttpError(400, `A pilot can last at most ${ORGANIZATION_PILOT_MAX_DAYS} days`, 'invalid_request');
+  }
   await db
     .update(organizations)
     .set({
@@ -56,15 +77,14 @@ export async function updateOrganizationForOwner(id: string, input: AdminUpdateO
         : input.limits
           ? { limits: sql`${organizations.limits} || ${JSON.stringify(input.limits)}::jsonb` }
           : {}),
-      ...(plan === 'pilot' ? { billingPeriod: null } : input.billingPeriod !== undefined ? { billingPeriod: input.billingPeriod } : {}),
-      // Back to a pilot: a fresh 30 days unless a date is given. Leaving the pilot: no end date (paid plans don't expire here).
-      ...(plan !== 'pilot'
-        ? { pilotEndsAt: null }
-        : input.pilotEndsAt
-          ? { pilotEndsAt: new Date(input.pilotEndsAt) }
-          : changingPlan
-            ? { pilotStartedAt: now, pilotEndsAt: new Date(now.getTime() + ORGANIZATION_PILOT_DAYS * 86_400_000) }
-            : {}),
+      ...(plan === 'pilot' || plan === 'none' ? { billingPeriod: null } : input.billingPeriod !== undefined ? { billingPeriod: input.billingPeriod } : {}),
+      // Granting a pilot: it starts now, for ORGANIZATION_PILOT_DAYS unless an end date is given. On a running pilot, a
+      // date extends or ends it. Leaving a pilot keeps its dates as a record (they only apply while plan = 'pilot').
+      ...(plan === 'pilot' && changingPlan
+        ? { pilotStartedAt: now, pilotEndsAt: input.pilotEndsAt ? new Date(input.pilotEndsAt) : new Date(now.getTime() + ORGANIZATION_PILOT_DAYS * 86_400_000) }
+        : plan === 'pilot' && input.pilotEndsAt
+          ? { pilotEndsAt: new Date(Math.max(new Date(input.pilotEndsAt).getTime(), existing.pilotStartedAt.getTime())) }
+          : {}),
       updatedAt: now,
     })
     .where(eq(organizations.id, id));

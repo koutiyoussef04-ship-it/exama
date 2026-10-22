@@ -12,19 +12,19 @@ export const frOrg: OrgCopy = {
   meta: {
     title: 'Exama pour les organismes — Des questions d’examen à partir de vos propres supports',
     description:
-      'Pour les universités, les écoles, les centres de formation et les entreprises : importez vos supports de cours, recevez des brouillons de questions rédigés par l’IA avec leur source, relisez-les et approuvez-les en équipe, exportez-les vers Moodle ou en CSV. Pilote gratuit de 30 jours.',
+      'Pour les universités, les écoles, les centres de formation et les entreprises : importez vos supports de cours, recevez des brouillons de questions rédigés par l’IA avec leur source, relisez-les et approuvez-les en équipe, exportez-les vers Moodle ou en CSV. Offres mensuelles ou annuelles, activées par Exama.',
     demoTitle: 'Demander une démo — Exama pour les organismes',
     ogAlt: 'Exama pour les organismes : des questions d’examen à partir de vos propres supports, chacune avec sa source',
-    demoDescription: 'Demandez par e-mail une présentation de l’espace de travail Exama pour les organismes, ou lancez vous-même le pilote gratuit de 30 jours.',
+    demoDescription: 'Demandez par e-mail une présentation de l’espace de travail Exama pour les organismes, ou dites-nous quelle offre convient à votre organisme.',
   },
   nav: { how: 'Fonctionnement', pricing: 'Tarifs', faq: 'FAQ', students: 'Pour les étudiants', demo: 'Démo' },
-  cta: { pilot: (days) => `Lancer le pilote gratuit de ${days} jours`, pilotShort: 'Lancer le pilote gratuit', demo: 'Demander une démo', seeHow: 'Voir le fonctionnement' },
+  cta: { demo: 'Demander une démo', seePricing: 'Voir les offres et les tarifs', seeHow: 'Voir le fonctionnement', createAccount: 'Créer un compte organisation' },
   hero: {
     eyebrow: 'Pour les universités, les écoles, les centres de formation et les entreprises',
     titleStart: 'Transformez vos supports de cours en questions d’examen, ',
     titleHighlight: 'chacune avec sa source.',
     lead: 'Importez un PDF ou un PowerPoint. Exama rédige les questions et montre le passage dont chacune est tirée. Votre équipe relit et approuve chaque question avant de l’utiliser, puis les exporte vers Moodle ou en CSV.',
-    note: (days) => `Gratuit pendant ${days} jours · Sans carte bancaire · Rien n’est facturé automatiquement`,
+    note: 'Offres mensuelles ou annuelles · Prix hors TVA · Rien n’est facturé automatiquement',
     trustAria: 'Comment vos supports sont traités',
     trust: ['Données hébergées dans l’UE (Francfort)', 'Seul votre organisme voit ses supports', 'Rien n’est approuvé sans relecteur', 'Export à tout moment : Moodle GIFT ou CSV'],
     shotAlt: 'L’écran de relecture d’Exama : le passage source du cours à côté de la question rédigée, avec les boutons pour approuver ou rejeter',
@@ -103,22 +103,14 @@ export const frOrg: OrgCopy = {
   },
   pricing: {
     eyebrow: 'Tarifs',
-    title: 'Commencez par un pilote gratuit. Choisissez une offre quand elle vous convient.',
-    lead: 'Exama active l’offre pour votre organisme après votre demande. Il n’y a pas de paiement en ligne et rien n’est facturé automatiquement.',
+    title: 'Des offres pour votre organisme',
+    lead: 'Choisissez l’offre qui correspond à vos volumes. Exama l’active pour votre organisme une fois convenue avec vous. Il n’y a pas de paiement en ligne et rien n’est facturé automatiquement.',
     perMonth: '/mois',
     plusVat: '+ TVA',
     orYearly: (yearly, pct) => `ou ${yearly}/an + TVA (${pct}\u00a0% d’économie)`,
-    pilotPrice: 'Gratuit',
-    pilotDuration: (days) => `pendant ${days} jours`,
     custom: 'Sur mesure',
     customSub: 'tarif et volumes',
     plans: {
-      pilot: {
-        name: 'Pilote',
-        tagline: 'Essayez tout l’espace de travail avec vos propres supports.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cours`, `${n(l!.itemsPerMonth)} brouillons de questions au total`, `${n(l!.maxMembers)} administrateurs ou éditeurs`, 'Relecteurs illimités', `Jusqu’à ${n(perRequest)} brouillons par demande`, 'Export Moodle GIFT et CSV'],
-        cta: 'Lancer le pilote gratuit',
-      },
       esencial: {
         name: 'Esencial',
         tagline: 'Pour un centre ou un service.',
@@ -139,26 +131,30 @@ export const frOrg: OrgCopy = {
       },
     },
     vatNote: 'Prix hors TVA. La TVA est ajoutée au taux applicable lors de la facturation de l’offre.',
-    billingNote: 'Le pilote ne demande pas de carte bancaire. Les offres payantes sont convenues par e-mail et activées par Exama ; vous n’êtes jamais facturé sans avoir demandé une offre.',
+    billingNote: 'Les offres sont convenues par e-mail et activées par Exama ; vous n’êtes jamais facturé sans avoir demandé une offre.',
+    pilotNote: {
+      title: 'Envie de le voir d’abord avec vos propres supports ?',
+      text: 'Demandez-nous une démo. Pour certains projets, nous pouvons convenir avec l’organisme d’un pilote pour une durée limitée ; nous étudions chaque demande au cas par cas.',
+      cta: 'Nous contacter',
+    },
   },
-  pilot: {
-    eyebrow: 'Le pilote',
-    title: (days) => `${days} jours pour l’essayer avec vos propres cours`,
-    lead: 'Le pilote commence dès la création du compte de l’organisation. C’est l’espace de travail complet, avec ces volumes pour toute la durée du pilote :',
-    includes: (l, perRequest) => [`${n(l.coursesPerMonth)} cours`, `${n(l.itemsPerMonth)} brouillons de questions au total`, `${n(l.maxMembers)} administrateurs ou éditeurs, relecteurs illimités`, `Jusqu’à ${n(perRequest)} brouillons par demande`],
-    startTitle: 'Comment le pilote commence',
-    start: ['Créez le compte de l’organisation : son nom, son type, votre nom et votre e-mail.', 'Confirmez votre e-mail avec le lien que nous vous envoyons.', 'Importez un cours et demandez vos premiers brouillons. Ajoutez vos collègues comme éditeurs ou relecteurs dès qu’ils ont un compte Exama.'],
-    afterTitle: 'À la fin du pilote',
-    after: [
-      'Rien n’est facturé et rien n’est supprimé.',
-      'Votre équipe peut continuer à lire, relire et exporter tous les cours et toutes les questions.',
-      'Les nouveaux cours et les nouveaux brouillons attendent qu’une offre soit activée pour l’organisation.',
+  start: {
+    eyebrow: 'Pour commencer',
+    title: 'D’un premier échange à votre espace de travail',
+    lead: 'Les offres sont activées par Exama : pour commencer, il suffit d’un court échange avec nous.',
+    steps: [
+      { title: 'Présentez-nous votre organisme', text: 'Demandez une démo ou écrivez-nous : ce que vous enseignez, et combien de cours et de personnes sont concernés.', icon: 'mail' },
+      { title: 'Convenons d’une offre', text: 'Esencial, Profesional ou Centro, mensuelle ou annuelle. Nous confirmons l’offre et ses conditions par e-mail.', icon: 'check' },
+      { title: 'Créez le compte de l’organisation', text: 'Votre nom, votre e-mail, ainsi que le nom et le type de l’organisation. Confirmez votre e-mail avec le lien que nous vous envoyons.', icon: 'users' },
+      { title: 'Nous activons votre offre', text: 'Une fois l’offre active, votre équipe peut importer des cours, rédiger des questions et ajouter des collègues comme éditeurs ou relecteurs.', icon: 'upload' },
     ],
+    noPlanTitle: 'Avant l’activation d’une offre',
+    noPlan: ['Le compte et l’espace de travail peuvent être créés à tout moment.', 'L’import de cours et la rédaction de questions commencent dès qu’Exama a activé une offre.', 'Rien n’est facturé : une offre n’est activée qu’après votre demande.'],
   },
   faq: {
     eyebrow: 'FAQ',
     title: 'Les questions des organismes',
-    items: (days) => [
+    items: [
       {
         q: 'Que pouvons-nous importer ?',
         a: ['Des fichiers PDF et PowerPoint (.pptx) contenant du vrai texte. Les images numérisées sans couche de texte ne peuvent pas être lues. Chaque cours est un fichier ; vous pouvez importer autant de cours que votre offre le permet.'],
@@ -167,7 +163,7 @@ export const frOrg: OrgCopy = {
         q: 'Qu’est-ce qui compte comme un brouillon de question ?',
         a: [
           'Un brouillon est une question qu’Exama rédige et conserve pour votre relecture. Vous demandez un nombre de brouillons (jusqu’à 20 par demande) et seuls ceux qui sont livrés sont décomptés. Les questions que vos éditeurs ajoutent à la main ne comptent pas.',
-          `Pendant le pilote, le volume est un total pour les ${days} jours ; avec Esencial et Profesional, il s’entend par mois civil.`,
+          'Avec Esencial et Profesional, le volume s’entend par mois civil.',
         ],
       },
       {
@@ -193,19 +189,19 @@ export const frOrg: OrgCopy = {
         ],
       },
       {
-        q: 'Que se passe-t-il après le pilote ?',
-        a: [`Au bout de ${days} jours, rien n’est facturé et rien n’est supprimé. Votre équipe peut toujours tout lire, relire et exporter. Pour importer de nouveaux cours ou rédiger de nouvelles questions, demandez une offre et nous l’activons pour votre organisme.`],
+        q: 'Pouvons-nous essayer Exama avant de choisir une offre ?',
+        a: ['Oui : demandez-nous une démo et nous vous montrerons l’espace de travail avec de vrais supports de cours. Pour certains projets, nous convenons aussi d’un pilote avec l’organisme, pour une durée limitée et avec des volumes définis. Les pilotes sont convenus au cas par cas ; ils ne sont pas proposés par défaut.'],
       },
       {
         q: 'Comment une offre est-elle payée ?',
-        a: ['Demandez Esencial, Profesional ou Centro par e-mail. Nous convenons avec vous de l’offre et de la période de facturation, puis nous l’activons ; les prix s’entendent hors TVA. Il n’y a pas de paiement en ligne et rien n’est facturé automatiquement : ni à la fin du pilote, ni au renouvellement.'],
+        a: ['Demandez Esencial, Profesional ou Centro par e-mail. Nous convenons avec vous de l’offre et de la période de facturation, puis nous l’activons ; les prix s’entendent hors TVA. Il n’y a pas de paiement en ligne et rien n’est facturé automatiquement : ni au démarrage, ni au renouvellement.'],
       },
     ],
   },
   final: {
-    title: 'Essayez-le avec l’un de vos cours.',
-    text: 'Créez le compte de l’organisation, importez un cours et relisez les premiers brouillons avec votre équipe.',
-    note: 'Gratuit pendant 30 jours. Sans carte bancaire. Vos supports restent les vôtres.',
+    title: 'Voyez-le avec l’un de vos cours.',
+    text: 'Demandez une démo, ou dites-nous quelle offre convient à votre organisme.',
+    note: 'Les offres sont activées par Exama. Rien n’est facturé automatiquement. Vos supports restent les vôtres.',
   },
   demo: {
     title: 'Demander une démo',
@@ -218,8 +214,8 @@ export const frOrg: OrgCopy = {
     subject: 'Exama pour les organismes — demande de démo',
     body: 'Bonjour Exama,\n\nNous aimerions une démo de l’espace de travail pour les organismes.\n\nOrganisme :\nCe que nous enseignons :\nCours ou modules pour commencer :\nPersonnes qui relieraient les questions :\nOffre envisagée :\n\nMerci,\n',
     replyNote: 'Nous répondons par e-mail. Demander une démo ne crée aucun compte et n’entraîne aucune facturation.',
-    orTitle: 'Vous préférez l’essayer vous-même ?',
-    orText: (days) => `Le pilote de ${days} jours est gratuit et commence dès la création du compte de l’organisation ; aucune démo n’est nécessaire.`,
+    orTitle: 'Nous avons déjà convenu d’une offre ?',
+    orText: 'Créez le compte de l’organisation et indiquez-nous son nom : nous activerons l’offre convenue.',
     back: '← Retour à Exama pour les organismes',
   },
   footer: {

@@ -4,32 +4,34 @@
  * Source of truth is the Exama application code, NOT this file:
  *   - plans, allowances and prices ........... packages/shared/src/organizations.ts (ORGANIZATION_PLAN_CATALOG)
  *   - what the allowances count .............. apps/api/src/billing/org-limits.ts
- *       pilot: totals for the whole pilot (30 days from sign-up); paid plans: per calendar month;
- *       "members" = admins and editors — reviewers are not counted;
- *       after the pilot ends: no new courses or drafts, everything stays readable, reviewable and exportable
+ *       paid plans: per calendar month; "members" = admins and editors — reviewers are not counted
+ *   - pilots ................................. NOT a public offer: a pilot is negotiated individually and granted by
+ *       Exama by hand (B2B owner tools). The site never shows a pilot plan, price, length or sign-up button; it may
+ *       only say that a pilot can be discussed, without promising one. A new organization has no plan until Exama
+ *       activates one.
  *   - formats and exports .................... apps/api/src/routes/orgs.ts (PDF, PPTX), packages/shared/src/bank.ts (csv, gift)
  * `npm run check:pricing` compares the numbers below with the app's catalog. If the app changes, update here.
  *
  * Billing for organizations is manual: plans are requested (demo/contact) and assigned by Exama; there is no
- * online checkout and nothing is charged automatically. The copy must never say otherwise.
+ * online checkout and nothing is charged automatically. The copy must never say otherwise (until a Stripe checkout
+ * really exists: docs/b2b-stripe-plan.md).
  *
  * Rules for the copy: no customer names or logos, no testimonials, no counts, no statistics, no time savings,
  * no guarantees. Only what the workspace demonstrably does.
  */
 import type { Lang } from '../i18n/languages';
 
-export const ORG_PILOT_DAYS = 30;
 /** At most this many drafts per generation request, on every plan. */
 export const ORG_MAX_ITEMS_PER_REQUEST = 20;
 
-export const ORG_PLAN_ORDER = ['pilot', 'esencial', 'profesional', 'centro'] as const;
+/** The publicly presented plans, in display order (the paid plans; Centro is custom-priced). */
+export const ORG_PLAN_ORDER = ['esencial', 'profesional', 'centro'] as const;
 export type OrgPlanId = (typeof ORG_PLAN_ORDER)[number];
 export type OrgLimits = { coursesPerMonth: number; itemsPerMonth: number; maxMembers: number };
 
 // Keep the `key: { coursesPerMonth, itemsPerMonth, maxMembers }` shape — scripts/check-pricing.mjs parses it.
-// Pilot numbers are totals for the 30 days; Esencial/Profesional are per calendar month. Centro is custom (set by hand).
+// Esencial/Profesional are per calendar month. Centro is custom (set by hand).
 export const ORG_LIMITS: Record<Exclude<OrgPlanId, 'centro'>, OrgLimits> = {
-  pilot: { coursesPerMonth: 5, itemsPerMonth: 150, maxMembers: 3 },
   esencial: { coursesPerMonth: 10, itemsPerMonth: 500, maxMembers: 10 },
   profesional: { coursesPerMonth: 100, itemsPerMonth: 2000, maxMembers: 25 },
 };
@@ -48,7 +50,7 @@ export const orgYearlySavingPct = (plan: OrgPaidPlan) => {
 };
 
 /** Section ids (anchors) on the organizations page — the same in every language. */
-export const ORG_SECTIONS = { how: 'how-it-works', review: 'review', pricing: 'pricing', pilot: 'pilot', faq: 'faq' } as const;
+export const ORG_SECTIONS = { how: 'how-it-works', review: 'review', pricing: 'pricing', start: 'get-started', faq: 'faq' } as const;
 
 /** Whole numbers the local way (1,000 / 1.000). */
 export const formatCount = (n: number, lang: Lang) => new Intl.NumberFormat(lang === 'ar' ? 'ar-u-nu-latn' : lang === 'en' ? 'en-IE' : lang === 'es' ? 'es-ES' : 'fr-FR', { useGrouping: 'always' }).format(n);

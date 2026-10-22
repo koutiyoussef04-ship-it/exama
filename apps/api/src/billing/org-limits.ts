@@ -1,11 +1,14 @@
 /**
  * Organization plans and allowances. Organizations are not on the student plans: each has a B2B plan
- * (`organizations.plan`: pilot | esencial | profesional | centro, catalog in @study/shared) whose allowances apply,
- * with owner overrides (`organizations.limits`, partial) on top — that is how Centro's custom limits are set.
+ * (`organizations.plan`: none | pilot | esencial | profesional | centro, catalog in @study/shared) whose allowances
+ * apply, with owner overrides (`organizations.limits`, partial) on top — that is how Centro's custom limits and a
+ * pilot's agreed allowances are set.
  *
- *   pilot        30 days from `pilot_started_at` to `pilot_ends_at`; its allowances are TOTALS for the whole pilot.
- *                Once it has ended, no new courses and no new AI drafts (402 org_pilot_expired); everything already
- *                there stays readable, reviewable and exportable.
+ *   none         no active plan (every new organization): no new courses and no AI drafts (402 org_plan_required);
+ *                everything already there stays readable, reviewable and exportable.
+ *   pilot        granted by the B2B owner only (never automatic), from `pilot_started_at` to `pilot_ends_at`; its
+ *                allowances are TOTALS for the whole pilot. Once it has ended, no new courses and no new AI drafts
+ *                (402 org_pilot_expired); everything already there stays readable, reviewable and exportable.
  *   paid plans   allowances per calendar month (UTC).
  *   members      `maxMembers` counts admins and editors; reviewers are unlimited (they cannot upload or generate).
  *
@@ -36,7 +39,8 @@ export const isPilotExpired = (o: Pick<OrgPlanRow, 'plan' | 'pilotEndsAt'>, now 
 
 export const orgPlanState = (o: OrgPlanRow, now = new Date()): OrganizationPlanState => ({
   plan: o.plan,
-  billingPeriod: o.plan === 'pilot' ? null : o.billingPeriod,
+  billingPeriod: o.plan === 'pilot' || o.plan === 'none' ? null : o.billingPeriod,
+  pilotStartedAt: o.plan === 'pilot' ? o.pilotStartedAt.toISOString() : null,
   pilotEndsAt: o.plan === 'pilot' ? (o.pilotEndsAt?.toISOString() ?? null) : null,
   pilotExpired: isPilotExpired(o, now),
 });
@@ -81,14 +85,20 @@ export async function getOrgUsage(orgId: string, exec: Exec = db, now = new Date
   };
 }
 
-/** Pre-check before storing a file or reprocessing: the pilot must be running, unless the actor is the B2B owner. */
+/** Pre-check before storing a file or reprocessing: an active plan or running pilot, unless the actor is the B2B owner. */
 export async function assertActorCanCreate(orgId: string, actorUserId: string) {
   if (await isB2BOwner(actorUserId)) return;
   assertCanCreate(await loadOrgPlan(orgId));
 }
 
-/** 402 org_pilot_expired: no new courses, AI drafts or reprocessing once the pilot has ended. */
+/**
+ * 402 org_plan_required (no active plan) / org_pilot_expired (the pilot has ended): no new courses, AI drafts or
+ * reprocessing. Reading, reviewing and exporting what is already there never goes through here.
+ */
 export function assertCanCreate(o: Pick<OrgPlanRow, 'plan' | 'pilotEndsAt'>, now = new Date()) {
+  if (o.plan === 'none') {
+    throw new HttpError(402, 'This organization has no active plan yet. Your courses, questions and exports are still available; contact Exama to choose a plan.', 'org_plan_required');
+  }
   if (isPilotExpired(o, now)) {
     throw new HttpError(402, 'The pilot of this organization has ended. Your courses, questions and exports are still available; contact Exama to choose a plan.', 'org_pilot_expired', {
       pilotEndsAt: o.pilotEndsAt!.toISOString(),

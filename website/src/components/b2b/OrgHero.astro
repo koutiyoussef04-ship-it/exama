@@ -4,8 +4,7 @@ import { join } from 'node:path';
 import { Image } from 'astro:assets';
 import logoMark from '../../assets/brand/logo-mark.png';
 import Icon from '../Icon.astro';
-import { ORG_PILOT_DAYS } from '../../data/b2b';
-import { site } from '../../config/site';
+import { ORG_SECTIONS } from '../../data/b2b';
 import { orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
 
@@ -36,10 +35,10 @@ const shot = shotExt ? `/screenshots/org-review.${shotExt}` : null;
       <p class="lead">{h.lead}</p>
 
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href={site.links.orgSignUp(lang)}>{c.cta.pilot(ORG_PILOT_DAYS)}</a>
-        <a class="btn btn-secondary btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
+        <a class="btn btn-primary btn-lg" href={orgPathFor(lang, 'demo')}>{c.cta.demo}</a>
+        <a class="btn btn-secondary btn-lg" href={`#${ORG_SECTIONS.pricing}`}>{c.cta.seePricing}</a>
       </div>
-      <p class="cta-note">{h.note(ORG_PILOT_DAYS)}</p>
+      <p class="cta-note">{h.note}</p>
     </div>
 
     {shot ? (
