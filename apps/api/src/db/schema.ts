@@ -330,10 +330,17 @@ export const organizations = pgTable(
     name: text('name').notNull(),
     market: text('market').$type<OrganizationMarket>().notNull(),
     status: text('status').$type<'active' | 'suspended'>().notNull().default('active'),
-    /** Commercial plan (billing is manual). New organizations start on the pilot; the owner assigns paid plans. */
-    plan: text('plan').$type<OrganizationPlan>().notNull().default('pilot'),
+    /**
+     * Commercial plan (billing is manual). New organizations start with NO plan ('none'); only the B2B owner assigns a
+     * paid plan or grants an individually agreed pilot.
+     */
+    plan: text('plan').$type<OrganizationPlan>().notNull().default('none'),
     billingPeriod: text('billing_period').$type<OrganizationBillingPeriod>(),
-    /** Pilot only: when it ends. After that no new courses or AI drafts; reading, review and exports keep working. */
+    /**
+     * The last pilot granted by the owner: when it started and ends. Meaningful only while plan = 'pilot' (for other
+     * plans they are a record of the last pilot, or the creation time if there never was one). After the end: no new
+     * courses or AI drafts; reading, review and exports keep working.
+     */
     pilotStartedAt: timestamp('pilot_started_at', { withTimezone: true }).notNull().defaultNow(),
     pilotEndsAt: timestamp('pilot_ends_at', { withTimezone: true }),
     /** Owner overrides on top of the plan's allowances (see billing/org-limits.ts). */
@@ -345,7 +352,7 @@ export const organizations = pgTable(
   (t) => [
     // Every value of ORGANIZATION_MARKETS (packages/shared): the six offered categories plus the two legacy values.
     check('organizations_market_check', sql`${t.market} in ('university', 'school', 'training_center', 'corporate', 'exam_prep', 'other', 'training_provider', 'academy')`),
-    check('organizations_plan_check', sql`${t.plan} in ('pilot', 'esencial', 'profesional', 'centro')`),
+    check('organizations_plan_check', sql`${t.plan} in ('none', 'pilot', 'esencial', 'profesional', 'centro')`),
     check('organizations_billing_period_check', sql`${t.billingPeriod} is null or ${t.billingPeriod} in ('monthly', 'yearly')`),
   ],
 );

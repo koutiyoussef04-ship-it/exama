@@ -64,8 +64,24 @@ async function signup(tag: string, extra: Record<string, unknown> = {}): Promise
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return { email, token: r.body.token, id: r.body.user.id, user: r.body.user };
 }
-const orgSignup = (tag: string, market: OrganizationCategory = 'training_center') =>
+/** Organization sign-up as it is now: the organization has NO plan (no automatic pilot). */
+const newOrgSignup = (tag: string, market: OrganizationCategory = 'training_center') =>
   signup(tag, { accountType: 'organization', organizationName: `Org ${tag} ${RUN}`, market });
+/** The owner account (OWNER_EMAILS), created once; it manages organizations through /admin/organizations. */
+let ownerAccount: Promise<Account> | null = null;
+const theOwner = () => (ownerAccount ??= signup('owner-admin', { email: OWNER_EMAIL }));
+/**
+ * An organization that can work: signed up (no plan), then granted a pilot by the owner through the real owner endpoint,
+ * as happens after a pilot is negotiated. The workflow tests below start from this.
+ */
+async function orgSignup(tag: string, market: OrganizationCategory = 'training_center'): Promise<Account> {
+  const a = await newOrgSignup(tag, market);
+  const owner = await theOwner();
+  const granted = await call<AdminOrganization>(`/admin/organizations/${orgOf(a)}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token });
+  assert.equal(granted.status, 200, JSON.stringify(granted.body));
+  assert.equal(granted.body.plan, 'pilot');
+  return a;
+}
 /**
  * An organization created before the current categories existed (Spanish launch, market = 'academy'): sign-up no longer
  * offers that value, so the row is updated directly, as the migration left it. Its workspace defaults must keep working.
@@ -501,6 +517,46 @@ test('account deletion: a staff member leaves; the organization keeps its course
   assert.equal(orphans.n, 0);
 });
 
+test('no automatic pilot: new organizations (sign-up or POST /orgs) have no plan and cannot create; their admins cannot grant themselves a plan or a pilot; only the owner can, audited', async () => {
+  const admin = await newOrgSignup('noplan');
+  const orgId = orgOf(admin);
+  const ov = await call<OrganizationOverview>(`/orgs/${orgId}`, { token: admin.token });
+  assert.equal(ov.status, 200, 'the workspace is readable');
+  assert.deepEqual([ov.body.plan, ov.body.billingPeriod, ov.body.pilotStartedAt, ov.body.pilotEndsAt, ov.body.pilotExpired], ['none', null, null, null, false]);
+  assert.deepEqual([ov.body.limits.coursesPerMonth, ov.body.limits.itemsPerMonth], [0, 0]);
+  // Nothing that costs anything: no upload (checked before the file is stored).
+  const form = new FormData();
+  form.append('file', new File([pdf], 'notes.pdf', { type: 'application/pdf' }));
+  const up = await call(`/orgs/${orgId}/courses`, { method: 'POST', body: form, token: admin.token });
+  assert.deepEqual([up.status, up.body.code], [402, 'org_plan_required']);
+  assert.equal((await call<DocumentSummary[]>(`/orgs/${orgId}/courses`, { token: admin.token })).body.length, 0);
+  // A second organization created from the workspace has no plan either, whatever the body says.
+  const second = await call<OrganizationMembershipSummary>('/orgs', { ...json('POST', { name: `Org noplan-2 ${RUN}`, market: 'school', plan: 'pilot', pilotEndsAt: '2099-01-01T00:00:00Z' }), token: admin.token });
+  assert.equal(second.status, 201, JSON.stringify(second.body));
+  assert.equal((await call<OrganizationOverview>(`/orgs/${second.body.id}`, { token: admin.token })).body.plan, 'none');
+  await sql`delete from organizations where id = ${second.body.id}`;
+
+  // The organization's own admin cannot grant itself anything: the settings endpoint ignores plan fields, the owner
+  // endpoints refuse it (403 /admin, 404 /b2b-admin).
+  const self = await call<OrganizationOverview>(`/orgs/${orgId}`, { ...json('PATCH', { name: `Org noplan ${RUN}`, plan: 'profesional', pilotEndsAt: '2099-01-01T00:00:00Z', limits: { itemsPerMonth: 99999 } }), token: admin.token });
+  assert.equal(self.status, 200);
+  assert.deepEqual([self.body.plan, self.body.pilotEndsAt, self.body.limits.itemsPerMonth], ['none', null, 0]);
+  assert.equal((await call(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: admin.token })).status, 403);
+  assert.equal((await call(`/b2b-admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: admin.token })).status, 404);
+  assert.equal((await call<OrganizationOverview>(`/orgs/${orgId}`, { token: admin.token })).body.plan, 'none', 'still no plan');
+
+  // The owner grants the negotiated pilot (owner tools): recorded with what was set; creating works at once.
+  const owner = await theOwner();
+  const end = new Date(Date.now() + 10 * 86_400_000).toISOString();
+  const grant = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot', pilotEndsAt: end, limits: { coursesPerMonth: 2 } }), token: owner.token });
+  assert.equal(grant.status, 200, JSON.stringify(grant.body));
+  assert.deepEqual([grant.body.plan, Date.parse(grant.body.pilotEndsAt!), grant.body.limits.coursesPerMonth, grant.body.limits.itemsPerMonth], ['pilot', Date.parse(end), 2, 150]);
+  const [row] = (await sql`select params, allowed, status from admin_audit_log where actor_user_id = ${owner.id} and action = 'PATCH /admin/organizations/:id' order by created_at desc limit 1`) as unknown as { params: Record<string, string>; allowed: boolean; status: number }[];
+  assert.deepEqual([row.allowed, row.status, row.params.organizationId, JSON.parse(row.params.change)], [true, 200, orgId, { plan: 'pilot', pilotEndsAt: end, limits: { coursesPerMonth: 2 } }]);
+  const doc = await uploadCourse(admin.token, orgId);
+  assert.equal((await generate(admin.token, orgId, doc.id, { count: 2 })).status, 201);
+});
+
 test('student regression: a student with personal courses, exams and usage is unchanged by the organization tables', async () => {
   const s = await signup('regress');
   const form = new FormData();
@@ -526,7 +582,7 @@ test('student regression: a student with personal courses, exams and usage is un
 });
 
 test('owner tooling: organizations are listed with usage; limits and suspension are set by the owner only; a suspended organization is read-only', async () => {
-  const owner = await signup('owner-admin', { email: OWNER_EMAIL });
+  const owner = await theOwner();
   const admin = await orgSignup('owned');
   const orgId = orgOf(admin);
   // Only the owner (server configuration) reaches /admin/organizations: an organization admin gets 403.

@@ -75,6 +75,7 @@ function OverviewCards({ o }: { o: B2BOverview }) {
           <Stat label={t('b2bAdmin.stats.pilotsActive')} value={n(o.organizations.pilotsActive)} />
           <Stat label={t('b2bAdmin.stats.pilotsEndingSoon')} value={n(o.organizations.pilotsEndingSoon)} />
           <Stat label={t('b2bAdmin.stats.pilotsExpired')} value={n(o.organizations.pilotsExpired)} />
+          <Stat label={t('b2bAdmin.stats.withoutPlan')} value={n(o.organizations.withoutPlan)} />
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
           {Object.entries(o.organizations.byPlan).map(([plan, count]) => (

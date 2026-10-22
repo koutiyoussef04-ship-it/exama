@@ -4,16 +4,29 @@
  * Controls: assign a plan (billing is manual), extend a pilot, suspend / reactivate. The server checks the B2B owner
  * role on every request.
  */
-import { ORGANIZATION_BILLING_PERIODS, ORGANIZATION_PLANS, type AdminUpdateOrganizationInput, type B2BOrganizationDetail, type OrganizationBillingPeriod, type OrganizationPlan } from '@study/shared';
+import {
+  ORGANIZATION_BILLING_PERIODS,
+  ORGANIZATION_PILOT_DAYS,
+  ORGANIZATION_PILOT_MAX_DAYS,
+  ORGANIZATION_PLAN_CATALOG,
+  type AdminUpdateOrganizationInput,
+  type B2BOrganizationDetail,
+  type OrganizationBillingPeriod,
+  type OrganizationPlan,
+} from '@study/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { Chips } from '@/components/planner';
-import { Badge, Body, Button, Card, colors, EmptyState, ErrorState, ErrorText, Loading, Screen, SectionLabel, space, Title } from '@/components/ui';
+import { Badge, Body, Button, Card, colors, EmptyState, ErrorState, ErrorText, Field, Loading, Screen, SectionLabel, space, Title } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { extendedPilotEnd, formatMicroUsd } from '@/lib/b2b-admin';
+import { extendedPilotEnd, formatMicroUsd, pilotGrantInput, type PilotGrantForm } from '@/lib/b2b-admin';
+
+/** Plans assigned with the plan selector. A pilot is granted with its own form (length and allowances), never as a plain plan. */
+const ASSIGNABLE_PLANS = ['none', 'esencial', 'profesional', 'centro'] as const satisfies readonly OrganizationPlan[];
+const PILOT_DEFAULTS = ORGANIZATION_PLAN_CATALOG.pilot.limits;
 import { formatDate, formatNumber } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';
 
@@ -58,10 +71,25 @@ function Detail({ o, refreshing, refresh }: { o: B2BOrganizationDetail; refreshi
       void qc.invalidateQueries({ queryKey: ['b2b-admin', 'overview'] });
     },
   });
-  const planChanged = plan !== o.plan || (plan !== 'pilot' && period !== (o.billingPeriod ?? 'monthly'));
+  const hasPeriod = plan !== 'pilot' && plan !== 'none';
+  const planChanged = plan !== o.plan || (hasPeriod && period !== (o.billingPeriod ?? 'monthly'));
   const savePlan = async () => {
     const ok = await confirm({ title: t('b2bAdmin.detail.confirmPlanTitle', { name: o.name, plan: t(`org.plan.name.${plan}`) }), message: t('b2bAdmin.detail.confirmPlanBody'), confirmText: t('b2bAdmin.detail.savePlan') });
-    if (ok) update.mutate(plan === 'pilot' ? { plan } : { plan, billingPeriod: period });
+    if (ok) update.mutate(hasPeriod ? { plan, billingPeriod: period } : { plan });
+  };
+  // Manual pilot: granted only after it was agreed with the organization; length and allowances chosen here.
+  const [pilotForm, setPilotForm] = useState<PilotGrantForm>({ days: String(ORGANIZATION_PILOT_DAYS), courses: '', drafts: '', seats: '' });
+  const [pilotError, setPilotError] = useState<string | null>(null);
+  const grantPilot = async () => {
+    const r = pilotGrantInput(pilotForm, ORGANIZATION_PILOT_MAX_DAYS);
+    if (!r.ok) return setPilotError(r.error === 'days' ? t('b2bAdmin.detail.invalidDays', { max: ORGANIZATION_PILOT_MAX_DAYS }) : t('b2bAdmin.detail.invalidLimit'));
+    setPilotError(null);
+    const ok = await confirm({ title: t('b2bAdmin.detail.confirmGrantTitle', { name: o.name }), message: t('b2bAdmin.detail.confirmGrantBody', { date: formatDate(r.input.pilotEndsAt) }), confirmText: t('b2bAdmin.detail.grantPilot') });
+    if (ok) update.mutate(r.input);
+  };
+  const endPilot = async () => {
+    const ok = await confirm({ title: t('b2bAdmin.detail.confirmEndTitle', { name: o.name }), message: t('b2bAdmin.detail.confirmEndBody'), confirmText: t('b2bAdmin.detail.endPilotNow'), destructive: true });
+    if (ok) update.mutate({ pilotEndsAt: new Date().toISOString() });
   };
   const toggleStatus = async () => {
     const suspending = o.status === 'active';
@@ -88,22 +116,37 @@ function Detail({ o, refreshing, refresh }: { o: B2BOrganizationDetail; refreshi
 
       <Card style={{ gap: space(1) }}>
         <SectionLabel>{t('b2bAdmin.detail.planSection')}</SectionLabel>
+        {o.plan === 'pilot' && o.pilotStartedAt && <Line label={t('b2bAdmin.detail.pilotStarted')} value={formatDate(o.pilotStartedAt)} />}
         {o.plan === 'pilot' && <Line label={t('b2bAdmin.detail.pilotEnds')} value={formatDate(o.pilotEndsAt)} />}
-        {o.plan !== 'pilot' && <Line label={t('b2bAdmin.detail.billingPeriod')} value={o.billingPeriod ? t(`b2bAdmin.period.${o.billingPeriod}`) : '—'} />}
+        {o.plan !== 'pilot' && o.plan !== 'none' && <Line label={t('b2bAdmin.detail.billingPeriod')} value={o.billingPeriod ? t(`b2bAdmin.period.${o.billingPeriod}`) : '—'} />}
         <Line label={t('b2bAdmin.detail.createdBy')} value={o.creatorEmail ?? '—'} />
         <Line label={t('b2bAdmin.detail.created')} value={formatDate(o.createdAt)} />
         <Line label={t('b2bAdmin.detail.lastActivity')} value={o.lastActivityAt ? formatDate(o.lastActivityAt) : '—'} />
         <View style={{ gap: space(2), marginTop: space(2) }}>
-          <Chips options={ORGANIZATION_PLANS.map((p) => ({ value: p, label: t(`org.plan.name.${p}`) }))} value={plan} onChange={setPlan} />
-          {plan !== 'pilot' && <Chips options={ORGANIZATION_BILLING_PERIODS.map((p) => ({ value: p, label: t(`b2bAdmin.period.${p}`) }))} value={period} onChange={setPeriod} />}
+          <Chips options={ASSIGNABLE_PLANS.map((p) => ({ value: p, label: t(`org.plan.name.${p}`) }))} value={plan} onChange={setPlan} />
+          {hasPeriod && <Chips options={ORGANIZATION_BILLING_PERIODS.map((p) => ({ value: p, label: t(`b2bAdmin.period.${p}`) }))} value={period} onChange={setPeriod} />}
           <Button title={t('b2bAdmin.detail.savePlan')} onPress={() => void savePlan()} disabled={!planChanged || update.isPending} loading={update.isPending} />
           {o.plan === 'pilot' && (
             <Button variant="secondary" title={t('b2bAdmin.detail.extendPilot', { days: 14 })} onPress={() => update.mutate({ pilotEndsAt: extendedPilotEnd(o.pilotEndsAt, 14) })} disabled={update.isPending} />
           )}
+          {o.plan === 'pilot' && !o.pilotExpired && <Button variant="secondary" title={t('b2bAdmin.detail.endPilotNow')} onPress={() => void endPilot()} disabled={update.isPending} />}
           <Button variant="secondary" title={o.status === 'active' ? t('b2bAdmin.detail.suspend') : t('b2bAdmin.detail.reactivate')} onPress={() => void toggleStatus()} disabled={update.isPending} />
           <ErrorText error={update.error} />
         </View>
       </Card>
+
+      {o.plan !== 'pilot' && (
+        <Card style={{ gap: space(2) }}>
+          <SectionLabel>{t('b2bAdmin.detail.grantPilotTitle')}</SectionLabel>
+          <Body muted style={{ fontSize: 13 }}>{t('b2bAdmin.detail.grantPilotHint', { courses: PILOT_DEFAULTS.coursesPerMonth, drafts: PILOT_DEFAULTS.itemsPerMonth, seats: PILOT_DEFAULTS.maxMembers })}</Body>
+          <Field label={t('b2bAdmin.detail.pilotDays', { max: ORGANIZATION_PILOT_MAX_DAYS })} value={pilotForm.days} onChangeText={(days) => setPilotForm((f) => ({ ...f, days }))} keyboardType="number-pad" />
+          <Field label={t('b2bAdmin.detail.limitCourses')} value={pilotForm.courses} placeholder={String(PILOT_DEFAULTS.coursesPerMonth)} onChangeText={(courses) => setPilotForm((f) => ({ ...f, courses }))} keyboardType="number-pad" />
+          <Field label={t('b2bAdmin.detail.limitDrafts')} value={pilotForm.drafts} placeholder={String(PILOT_DEFAULTS.itemsPerMonth)} onChangeText={(drafts) => setPilotForm((f) => ({ ...f, drafts }))} keyboardType="number-pad" />
+          <Field label={t('b2bAdmin.detail.limitSeats')} value={pilotForm.seats} placeholder={String(PILOT_DEFAULTS.maxMembers)} onChangeText={(seats) => setPilotForm((f) => ({ ...f, seats }))} keyboardType="number-pad" />
+          {pilotError && <Body style={{ color: colors.danger, fontSize: 13 }}>{pilotError}</Body>}
+          <Button variant="secondary" title={t('b2bAdmin.detail.grantPilot')} onPress={() => void grantPilot()} disabled={update.isPending} />
+        </Card>
+      )}
 
       <Card style={{ gap: space(1) }}>
         <SectionLabel>{periodLabel}</SectionLabel>

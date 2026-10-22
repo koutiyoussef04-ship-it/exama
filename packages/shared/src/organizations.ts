@@ -67,7 +67,7 @@ export type OrganizationMember = { userId: string; email: string; name: string; 
 
 /**
  * Per-organization allowances: the plan's defaults (ORGANIZATION_PLAN_CATALOG) with any owner overrides on top.
- * "PerMonth" counts are per calendar month on paid plans and for the WHOLE pilot on the pilot plan.
+ * "PerMonth" counts are per calendar month on paid plans and for the WHOLE pilot on a (manually granted) pilot.
  */
 export type OrganizationLimits = {
   /** Courses (uploads) per calendar month (pilot: in total). */
@@ -89,23 +89,37 @@ export type OrganizationUsage = {
   period: 'month' | 'pilot';
 };
 
-// ---- Plans (B2B). Billing is manual (invoice / bank transfer): nothing here charges anyone. The owner assigns
-// the plan from the admin tools after the customer has agreed to it; a new organization starts on the pilot.
+// ---- Plans (B2B). Billing is manual for now (invoice / bank transfer): nothing here charges anyone. The owner assigns
+// the plan from the owner tools after the customer has agreed to it.
+//
+// A new organization starts with NO plan (`none`): it can sign in, see its workspace and add reviewers, but cannot
+// upload courses or draft questions until the owner assigns a paid plan or grants a pilot. A pilot is never public or
+// automatic: it is an individually negotiated arrangement that only the B2B owner grants, with its own length and,
+// optionally, its own allowances.
 
-export const ORGANIZATION_PLANS = ['pilot', 'esencial', 'profesional', 'centro'] as const;
+/** Plans the owner can assign. `none` = no active plan (the default for every new organization). */
+export const ORGANIZATION_PLANS = ['none', 'pilot', 'esencial', 'profesional', 'centro'] as const;
 export type OrganizationPlan = (typeof ORGANIZATION_PLANS)[number];
+/** The paid plans, as presented publicly (website pricing, future Stripe products). Centro is custom-priced. */
+export const ORGANIZATION_PAID_PLANS = ['esencial', 'profesional', 'centro'] as const;
+export type OrganizationPaidPlan = (typeof ORGANIZATION_PAID_PLANS)[number];
 export const ORGANIZATION_BILLING_PERIODS = ['monthly', 'yearly'] as const;
 export type OrganizationBillingPeriod = (typeof ORGANIZATION_BILLING_PERIODS)[number];
-/** Length of the free pilot, from the organization's creation. */
+/** Default length of a manually granted pilot (the owner can choose another length or end date). */
 export const ORGANIZATION_PILOT_DAYS = 30;
+/** Longest pilot the owner can grant in one step (an extension can follow). */
+export const ORGANIZATION_PILOT_MAX_DAYS = 365;
 
 export type OrganizationPlanInfo = {
   limits: OrganizationLimits;
-  /** List prices in euro cents, VAT excluded; null = free (pilot) or custom (centro). */
+  /** List prices in euro cents, VAT excluded; null = no price: no plan, a pilot (free, granted by hand) or Centro (custom). */
   prices: { monthly: number; yearly: number } | null;
 };
 
 export const ORGANIZATION_PLAN_CATALOG: Record<OrganizationPlan, OrganizationPlanInfo> = {
+  // No active plan: nothing that costs anything (no uploads, no AI drafts); the creating admin only.
+  none: { limits: { coursesPerMonth: 0, itemsPerMonth: 0, maxItemsPerRequest: 20, maxMembers: 1 }, prices: null },
+  // Default allowances of a manually granted pilot (totals for the whole pilot); the owner can set others per organization.
   pilot: { limits: { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 }, prices: null },
   esencial: { limits: { coursesPerMonth: 10, itemsPerMonth: 500, maxItemsPerRequest: 20, maxMembers: 10 }, prices: { monthly: 14_900, yearly: 149_000 } },
   profesional: { limits: { coursesPerMonth: 100, itemsPerMonth: 2_000, maxItemsPerRequest: 20, maxMembers: 25 }, prices: { monthly: 34_900, yearly: 349_000 } },
@@ -113,10 +127,12 @@ export const ORGANIZATION_PLAN_CATALOG: Record<OrganizationPlan, OrganizationPla
   centro: { limits: { coursesPerMonth: 100, itemsPerMonth: 2_000, maxItemsPerRequest: 20, maxMembers: 25 }, prices: null },
 };
 
-/** Plan and pilot state of an organization (read-only for its members; the owner changes it). */
+/** Plan and pilot state of an organization (read-only for its members; only the B2B owner changes it). */
 export type OrganizationPlanState = {
   plan: OrganizationPlan;
   billingPeriod: OrganizationBillingPeriod | null;
+  /** Pilot only: when it started (ISO) — the moment the owner granted it. */
+  pilotStartedAt: string | null;
   /** Pilot only: when it ends (ISO). */
   pilotEndsAt: string | null;
   /** The pilot has ended: no new courses or AI drafts; everything already there can still be read, reviewed and exported. */
@@ -172,10 +188,16 @@ export const marketProfile = (market: OrganizationMarket): MarketProfile => MARK
 
 export const adminUpdateOrganizationSchema = z.object({
   status: z.enum(['active', 'suspended']).optional(),
-  /** Assign a plan (after the customer agreed to it; billing is manual). Leaving the pilot clears its end date. */
+  /**
+   * Assign a plan (after the customer agreed to it; billing is manual), grant a pilot (`pilot`, starts now) or remove
+   * the plan (`none`). The dates of the last pilot are kept as a record when the organization leaves it.
+   */
   plan: z.enum(ORGANIZATION_PLANS).optional(),
   billingPeriod: z.enum(ORGANIZATION_BILLING_PERIODS).nullable().optional(),
-  /** Pilot only: a new end date (ISO), e.g. to extend a pilot. */
+  /**
+   * Pilot only: its end date (ISO). With `plan: 'pilot'` (granting) it must be in the future, at most
+   * ORGANIZATION_PILOT_MAX_DAYS away; on a running pilot it extends it, or ends it now (a date not in the future).
+   */
   pilotEndsAt: z.iso.datetime({ offset: true }).optional(),
   limits: z
     .object({

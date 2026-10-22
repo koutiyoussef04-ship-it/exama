@@ -16,6 +16,8 @@ export type B2BOverview = {
     pilotsExpired: number;
     /** Pilots ending within the next 7 days. */
     pilotsEndingSoon: number;
+    /** Organizations with no active plan (`none`): waiting for a plan or a pilot. */
+    withoutPlan: number;
   };
   accounts: { organizationAccounts: number; verified: number; withoutOrganization: number; signupsLast30Days: number };
   /** Calendar month (UTC), all organizations. `aiCostMicroUsd` null when some calls had no price. */

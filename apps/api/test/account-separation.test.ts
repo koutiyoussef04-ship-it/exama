@@ -192,6 +192,8 @@ test('cross-business isolation: students never reach organizations, organization
   const s = await registerStudent(email);
   const o = await registerOrg(email, ORG_PW, 'iso');
   const orgId = o.body.user.organizations[0].id;
+  // A working organization (new ones have no plan): a pilot, as the owner grants it after agreeing one.
+  await sql`update organizations set plan = 'pilot', pilot_started_at = now(), pilot_ends_at = now() + interval '30 days' where id = ${orgId}`;
 
   // The student with the admin's very email sees nothing of the organization.
   assert.equal((await call(`/orgs/${orgId}`, { token: s.body.token })).status, 404);
@@ -328,11 +330,12 @@ test('B2B owner: provisioned only by the server command (idempotent, no password
   assert.ok(audit[0].n >= 4, 'dashboard requests are audited');
 
   // Unlimited usage, enforced on the server: the owner's organization has an expired pilot and zero allowances.
+  // (New organizations have no plan; the expired pilot is set directly, as one granted earlier would be.)
   const created = await call<OrganizationMembershipSummary>('/orgs', { ...json('POST', { name: `Sep owner-org ${RUN}`, market: 'training_center' }), token: owner.token });
   assert.equal(created.status, 201);
   for (const i of [2, 3]) assert.equal((await call('/orgs', { ...json('POST', { name: `Sep owner-org-${i} ${RUN}`, market: 'training_center' }), token: owner.token })).status, 201, 'no organization cap for the owner');
   const orgId = created.body.id;
-  await sql`update organizations set pilot_ends_at = now() - interval '1 day', limits = '{"coursesPerMonth":0,"itemsPerMonth":0,"maxMembers":1}'::jsonb where id = ${orgId}`;
+  await sql`update organizations set plan = 'pilot', pilot_started_at = now() - interval '31 days', pilot_ends_at = now() - interval '1 day', limits = '{"coursesPerMonth":0,"itemsPerMonth":0,"maxMembers":1}'::jsonb where id = ${orgId}`;
   const up = await upload(owner.token, orgId);
   assert.equal(up.status, 201, JSON.stringify(up.body));
   for (let i = 0; i < 100; i++) {
@@ -382,7 +385,7 @@ test('B2B owner role cannot be obtained by signing up: the sign-up body never se
   assert.deepEqual(writers.map((f) => f.pathname.split('/src/')[1]), [], 'no server code sets the role');
 });
 
-test('B2B dashboard actions: plan, pilot extension, suspension and reactivation work and are audited; refused attempts are audited too', async () => {
+test('B2B dashboard actions: grant, extend and end a pilot, plans, suspension and reactivation work and are audited; refused attempts are audited too', async () => {
   const owner = await registerOrg(`actions-owner-${RUN}@example.com`, ORG_PW);
   // The role as the provisioning command sets it (that command itself is covered above).
   await sql`update users set b2b_role = 'owner' where id = ${owner.body.user.id}`;
@@ -392,12 +395,25 @@ test('B2B dashboard actions: plan, pilot extension, suspension and reactivation 
   const patch = (body: unknown, token = t) => call<B2BOrganizationDetail>(`/b2b-admin/organizations/${orgId}`, { ...json('PATCH', body), token });
 
   const before = (await call<B2BOrganizationDetail>(`/b2b-admin/organizations/${orgId}`, { token: t })).body;
-  assert.equal(before.plan, 'pilot');
+  assert.equal(before.plan, 'none', 'no automatic pilot');
+  // Granting a negotiated pilot: its length and allowances, starting now.
+  const grantEnd = new Date(Date.now() + 21 * 86_400_000).toISOString();
+  const granted = await patch({ plan: 'pilot', pilotEndsAt: grantEnd, limits: { itemsPerMonth: 300, maxMembers: 5 } });
+  assert.equal(granted.status, 200, JSON.stringify(granted.body));
+  assert.deepEqual([granted.body.plan, Date.parse(granted.body.pilotEndsAt!), granted.body.limits], ['pilot', Date.parse(grantEnd), { coursesPerMonth: 5, itemsPerMonth: 300, maxItemsPerRequest: 20, maxMembers: 5 }]);
+  assert.ok(Math.abs(Date.parse(granted.body.pilotStartedAt!) - Date.now()) < 60_000);
   // Pilot extension: a new end date.
-  const newEnd = new Date(Date.parse(before.pilotEndsAt!) + 14 * 86_400_000).toISOString();
+  const newEnd = new Date(Date.parse(granted.body.pilotEndsAt!) + 14 * 86_400_000).toISOString();
   const extended = await patch({ pilotEndsAt: newEnd });
   assert.equal(extended.status, 200, JSON.stringify(extended.body));
   assert.equal(Date.parse(extended.body.pilotEndsAt!), Date.parse(newEnd));
+  assert.equal(extended.body.pilotStartedAt, granted.body.pilotStartedAt, 'extending keeps the start');
+  // Ending the pilot now (revocation): expired at once, its dates kept, nothing deleted.
+  const ended = await patch({ pilotEndsAt: new Date().toISOString() });
+  assert.deepEqual([ended.status, ended.body.plan, ended.body.pilotExpired, ended.body.pilotStartedAt], [200, 'pilot', true, granted.body.pilotStartedAt]);
+  // …and extending it again reopens it.
+  const reopened = await patch({ pilotEndsAt: newEnd });
+  assert.equal(reopened.body.pilotExpired, false);
   // Suspension: the organization becomes read-only for its members; reactivation restores it.
   assert.equal((await patch({ status: 'suspended' })).body.status, 'suspended');
   assert.equal((await call(`/orgs/${orgId}`, { ...json('PATCH', { name: 'Renamed' }), token: customer.body.token })).body.code, 'org_suspended');
@@ -408,23 +424,41 @@ test('B2B dashboard actions: plan, pilot extension, suspension and reactivation 
   const paid = await patch({ plan: 'profesional', billingPeriod: 'yearly' });
   assert.deepEqual([paid.body.plan, paid.body.billingPeriod, paid.body.pilotEndsAt], ['profesional', 'yearly', null]);
   assert.equal(paid.body.limits.coursesPerMonth, 100);
+  // Removing the plan: nothing to create with any more, no billing period.
+  const none = await patch({ plan: 'none' });
+  assert.deepEqual([none.body.plan, none.body.billingPeriod, none.body.limits.coursesPerMonth, none.body.limits.itemsPerMonth], ['none', null, 0, 0]);
   // Invalid changes are refused without changing anything.
   assert.equal((await patch({ plan: 'pilot', billingPeriod: 'monthly' })).status, 400);
   assert.equal((await patch({ status: 'deleted' })).status, 400);
+  assert.equal((await patch({ plan: 'pilot', pilotEndsAt: new Date(Date.now() - 60_000).toISOString() })).status, 400, 'a new pilot must end in the future');
+  assert.equal((await patch({ plan: 'pilot', pilotEndsAt: new Date(Date.now() + 400 * 86_400_000).toISOString() })).status, 400, 'at most 365 days');
+  assert.equal((await patch({ limits: { itemsPerMonth: 10 } })).status, 400, 'no allowances without a plan');
+  assert.equal((await call<B2BOrganizationDetail>(`/b2b-admin/organizations/${orgId}`, { token: t })).body.plan, 'none', 'nothing changed');
 
   // Every allowed change is audited with what it set; the customer's attempts are refused (404) and audited as refused.
   assert.equal((await patch({ status: 'suspended' }, customer.body.token)).status, 404);
   assert.equal((await call('/b2b-admin/overview', { token: customer.body.token })).status, 404);
   const rows = (await sql`select actor_user_id, action, params, allowed, status from admin_audit_log where actor_user_id in (${owner.body.user.id}, ${customer.body.user.id}) and action like 'b2b %' order by created_at`) as unknown as { actor_user_id: string; action: string; params: Record<string, string>; allowed: boolean; status: number }[];
   const changes = rows.filter((r) => r.actor_user_id === owner.body.user.id && r.action === 'b2b PATCH /b2b-admin/organizations/:id');
-  assert.deepEqual(changes.map((r) => [r.status, JSON.parse(r.params.change ?? '{}')]), [
-    [200, { pilotEndsAt: newEnd }],
-    [200, { status: 'suspended' }],
-    [200, { status: 'active' }],
-    [200, { plan: 'profesional', billingPeriod: 'yearly' }],
-    [400, { plan: 'pilot', billingPeriod: 'monthly' }],
-    [400, {}],
+  const audited = changes.map((r) => [r.status, JSON.parse(r.params.change ?? '{}')] as const);
+  assert.deepEqual(audited.map(([status, change]) => [status, Object.keys(change).sort().join(',')]), [
+    [200, 'limits,pilotEndsAt,plan'],
+    [200, 'pilotEndsAt'],
+    [200, 'pilotEndsAt'],
+    [200, 'pilotEndsAt'],
+    [200, 'status'],
+    [200, 'status'],
+    [200, 'billingPeriod,plan'],
+    [200, 'plan'],
+    [400, 'billingPeriod,plan'],
+    [400, ''],
+    [400, 'pilotEndsAt,plan'],
+    [400, 'pilotEndsAt,plan'],
+    [400, 'limits'],
   ], 'each change attempt, with what it set (an invalid body is refused before it is parsed, so it records no fields)');
+  assert.deepEqual(audited[0][1], { plan: 'pilot', pilotEndsAt: grantEnd, limits: { itemsPerMonth: 300, maxMembers: 5 } }, 'the grant: length and allowances');
+  assert.deepEqual(audited[1][1], { pilotEndsAt: newEnd }, 'the extension');
+  assert.equal(audited[7][1].plan, 'none', 'removing the plan');
   assert.ok(changes.every((r) => r.allowed && r.params.organizationId === orgId));
   const refused = rows.filter((r) => r.actor_user_id === customer.body.user.id);
   assert.deepEqual(refused.map((r) => [r.action, r.allowed, r.status]), [

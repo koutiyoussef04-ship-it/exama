@@ -10,7 +10,7 @@
  * when IT acts; everyone else is.
  */
 import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
-import { ORGANIZATION_PILOT_DAYS, type Organization, type OrganizationLimits, type OrganizationMarket, type OrganizationMember, type OrganizationMembershipSummary, type OrganizationOverview, type OrganizationRole } from '@study/shared';
+import { type Organization, type OrganizationLimits, type OrganizationMarket, type OrganizationMember, type OrganizationMembershipSummary, type OrganizationOverview, type OrganizationRole } from '@study/shared';
 import { normalizeEmail } from '@study/shared';
 import { countOrgCourses, getOrgUsage, orgPlanState, resolveOrgLimits } from '../billing/org-limits.js';
 import type { OrgContext } from '../auth/org-access.js';
@@ -34,14 +34,15 @@ const toOrganization = (o: OrgRow, role: OrganizationRole): Organization => ({
 });
 
 /**
- * Creates the organization on a 30-day pilot and makes `userId` its first admin (same transaction as a sign-up when
+ * Creates the organization with NO plan and makes `userId` its first admin (same transaction as a sign-up when
  * called from there).
  */
 export async function createOrganization(tx: Tx | typeof db, userId: string, input: { name: string; market: OrganizationMarket }): Promise<OrgRow> {
   const now = new Date();
   const [org] = await tx
     .insert(organizations)
-    .values({ name: input.name, market: input.market, createdBy: userId, plan: 'pilot', pilotStartedAt: now, pilotEndsAt: new Date(now.getTime() + ORGANIZATION_PILOT_DAYS * 86_400_000) })
+    // No automatic pilot: a pilot is negotiated individually and granted only by the B2B owner (admin/organizations.ts).
+    .values({ name: input.name, market: input.market, createdBy: userId, plan: 'none', pilotEndsAt: null, createdAt: now, updatedAt: now })
     .returning();
   await tx.insert(organizationMembers).values({ organizationId: org.id, userId, role: 'admin', addedBy: userId });
   return org;

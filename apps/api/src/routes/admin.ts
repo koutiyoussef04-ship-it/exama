@@ -20,7 +20,7 @@ import { listOrganizationsForOwner, updateOrganizationForOwner } from '../admin/
 import { adminUpdateOrganizationSchema } from '@study/shared';
 import { parseBody } from '../lib/errors.js';
 
-type AdminEnv = AuthEnv & { Variables: { auditTarget?: string } };
+type AdminEnv = AuthEnv & { Variables: { auditTarget?: string; auditExtra?: Record<string, string> } };
 
 /**
  * Only these query keys are kept in the audit log, each cut to 100 characters (never tokens or bodies).
@@ -61,7 +61,7 @@ const requireOwner = createMiddleware<AdminEnv>(async (c, next) => {
     status = err instanceof HttpError ? err.status : 500;
     throw err;
   } finally {
-    await audit({ actorUserId: c.var.userId, action: `${c.req.method} ${c.req.routePath}`, targetUserId: c.get('auditTarget'), params, allowed: true, status });
+    await audit({ actorUserId: c.var.userId, action: `${c.req.method} ${c.req.routePath}`, targetUserId: c.get('auditTarget'), params: { ...params, ...(c.get('auditExtra') ?? {}) }, allowed: true, status });
   }
 });
 
@@ -81,9 +81,11 @@ export const adminRoutes = new Hono<AdminEnv>()
   .get('/billing', async (c) => c.json(await billingReport(resolveRange(c.req.query()))))
   .get('/analytics', async (c) => c.json(await analyticsReport(resolveRange(c.req.query()))))
   .get('/health', async (c) => c.json(await health()))
-  // Organizations (B2B customers): list with usage; limits and status are set here, by hand, per pilot.
+  // Organizations (B2B customers): list with usage; plan, pilot, limits and status are set here by hand (as in /b2b-admin).
   .get('/organizations', async (c) => c.json(await listOrganizationsForOwner()))
   .patch('/organizations/:id', async (c) => {
     const input = parseBody(adminUpdateOrganizationSchema, await c.req.json().catch(() => ({})));
+    // The audit row records which organization and what was set (plan, period, pilot end, limits, status).
+    c.set('auditExtra', { organizationId: c.req.param('id').slice(0, 100), change: JSON.stringify(input).slice(0, 500) });
     return c.json(await updateOrganizationForOwner(c.req.param('id'), input));
   });
