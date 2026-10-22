@@ -1,0 +1,41 @@
+---
+/**
+ * The student landing page in one language (/for-students, /es/para-estudiantes, /fr/pour-les-etudiants,
+ * /ar/for-students). Its own hero and metadata; the sections are the home page's (the same components, so the
+ * facts stay in one place): upload, how it works, exams and grading, weak topics, study plan, the app, pricing.
+ * The home page stays the general entrance with the two audience choices.
+ */
+import Base from '../layouts/Base.astro';
+import Hero from './Hero.astro';
+import HowItWorks from './HowItWorks.astro';
+import Materials from './Materials.astro';
+import Grounded from './Grounded.astro';
+import Exams from './Exams.astro';
+import WeakTopics from './WeakTopics.astro';
+import StudyPlan from './StudyPlan.astro';
+import Product from './Product.astro';
+import Pricing from './Pricing.astro';
+import FinalCta from './FinalCta.astro';
+import { site } from '../config/site';
+import { copy, studentAlternates, studentPathFor, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang);
+const jsonLd = [{ '@context': 'https://schema.org', '@type': 'WebPage', name: c.students.meta.title, url: new URL(studentPathFor(lang), site.url).toString(), inLanguage: lang, isPartOf: { '@type': 'WebSite', name: site.name, url: site.url } }];
+---
+
+<Base title={c.students.meta.title} description={c.students.meta.description} ogAlt={c.students.meta.ogAlt} path={studentPathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={studentAlternates()} nav="students">
+  <Hero lang={lang} variant="students" />
+  <HowItWorks lang={lang} />
+  <Materials lang={lang} />
+  <Grounded lang={lang} />
+  <Exams lang={lang} />
+  <WeakTopics lang={lang} />
+  <StudyPlan lang={lang} />
+  <Product lang={lang} />
+  <Pricing lang={lang} />
+  <FinalCta lang={lang} signIn />
+</Base>

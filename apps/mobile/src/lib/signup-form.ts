@@ -2,15 +2,15 @@
  * Sign-up form rules that don't need the server. "Confirm password" exists only on the device: it is
  * compared with the password before anything is sent, and never included in the request or stored.
  *
- * Account type: a student (the study app) or an organization (a training provider or an oposiciones
- * academy, which opens the organization workspace). The choice is sent with the request; the server stores
+ * Account type: a student (the study app) or an organization (a university, school, training center, company or
+ * exam-preparation center, which opens the organization workspace). The choice is sent with the request; the server stores
  * it and decides which experience applies — the app only asks the question.
  *
  * An organization account either creates a new organization (name + market) or joins an existing one: then it is
  * created without an organization, and that organization's admin adds it by email. Student and organization accounts are
  * separate identities: the same email can have one of each.
  */
-import { MARKETING_CONSENT_VERSION, type AccountType, type AgeRange, type Language, type OrganizationMarket, type RegisterInput, type SignupAgeAnswer } from '@study/shared';
+import { MARKETING_CONSENT_VERSION, type AccountType, type AgeRange, type Language, type OrganizationCategory, type RegisterInput, type SignupAgeAnswer } from '@study/shared';
 
 /** Same minimum as the API (registerSchema). */
 export const MIN_PASSWORD_LENGTH = 8;
@@ -26,7 +26,7 @@ export type SignupForm = {
   /** null until the first step ("How will you use Exama?") is answered. */
   accountType?: AccountType | null;
   organizationName?: string;
-  market?: OrganizationMarket | null;
+  market?: OrganizationCategory | null;
   /** Organization accounts: join an existing organization (an admin adds you) instead of creating one. */
   joinExisting?: boolean;
 };

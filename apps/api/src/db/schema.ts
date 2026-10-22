@@ -317,7 +317,9 @@ export const passwordResetCodes = pgTable(
 // ---------------- Organizations (B2B) ----------------
 
 /**
- * A training provider or an oposiciones academy. The tenant of every organization-owned row
+ * A university, school, training center, company or exam-preparation center (`market`, see ORGANIZATION_CATEGORIES;
+ * `training_provider` / `academy` are the values of the organizations created before those categories existed). The
+ * tenant of every organization-owned row
  * (courses, question bank, usage). Created by an organization sign-up or by an organization account;
  * deleting one is an owner-only operation, never a cascade from a user.
  */
@@ -341,7 +343,8 @@ export const organizations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check('organizations_market_check', sql`${t.market} in ('training_provider', 'academy')`),
+    // Every value of ORGANIZATION_MARKETS (packages/shared): the six offered categories plus the two legacy values.
+    check('organizations_market_check', sql`${t.market} in ('university', 'school', 'training_center', 'corporate', 'exam_prep', 'other', 'training_provider', 'academy')`),
     check('organizations_plan_check', sql`${t.plan} in ('pilot', 'esencial', 'profesional', 'centro')`),
     check('organizations_billing_period_check', sql`${t.billingPeriod} is null or ${t.billingPeriod} in ('monthly', 'yearly')`),
   ],
@@ -892,7 +895,7 @@ export const bankItems = pgTable(
     reviewFlags: jsonb('review_flags').$type<ReviewFlag[]>().notNull().default([]),
     /** Advisory verifier result (does the passage support the keyed answer?). Never approves anything. */
     verification: jsonb('verification').$type<Verification>(),
-    /** Legal source metadata entered by staff (academy market). */
+    /** Legal source metadata entered by staff (legacy academy organizations). */
     legalRef: jsonb('legal_ref').$type<LegalRef>(),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),

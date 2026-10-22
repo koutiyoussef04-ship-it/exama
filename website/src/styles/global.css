@@ -1347,42 +1347,158 @@ html[lang='ar'] .eyebrow {
   margin-top: 24px;
 }
 
-/* ---------- For organizations (B2B pages) and the audience band on the student home ---------- */
+/* ---------- The home page's two entrances (students / organizations), under the hero ---------- */
 
-.audience-band {
+.audience-choice {
   background: var(--surface);
   border-block: 1px solid var(--border);
+  padding-block: 28px;
 }
-.audience-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
-  padding-block: 18px;
-}
-.audience-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-}
-.audience-inner p {
-  flex: 1 1 24rem;
+.choice-grid {
+  display: grid;
+  gap: 16px;
+  list-style: none;
   margin: 0;
-  font-size: 0.98rem;
-  color: var(--muted);
+  padding: 0;
 }
-.audience-link {
+@media (min-width: 720px) {
+  .choice-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.choice-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  height: 100%;
+  padding: 22px 24px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.choice-card:hover,
+.choice-card:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 16px 32px -24px rgba(21, 23, 63, 0.45);
+}
+.choice-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.choice-title {
+  font-size: 1.2rem;
+  font-weight: 750;
+  color: var(--navy);
+}
+.choice-text {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.choice-cta {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-top: 4px;
   font-weight: 650;
   color: var(--primary);
+}
+
+/* The student landing page: the hero's note sending teachers to the organizations page, and its second final button. */
+.hero-org-note {
+  margin-top: 18px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.hero-org-note a {
+  color: var(--primary);
+  font-weight: 650;
+}
+.final-ctas {
+  justify-content: center;
+}
+.btn-outline-light {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+.btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+}
+
+/* "Log in": a <details> dropdown with the two account types (header bar), styled like the language selector. */
+.login-menu {
+  position: relative;
+}
+.login-menu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: var(--navy);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  list-style: none;
+}
+.login-menu summary::-webkit-details-marker {
+  display: none;
+}
+.login-menu summary:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.login-panel {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 15rem;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 40px -24px rgba(21, 23, 63, 0.35);
+}
+.login-panel a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--navy);
+  font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
 }
-.audience-link:hover {
-  text-decoration: underline;
+.login-panel a:hover {
+  background: var(--primary-soft);
 }
+/* The same choice in the mobile menu: a label and the two links, indented. */
+.menu-login {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.menu-login-label {
+  display: block;
+  padding: 12px 8px 4px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.menu-login ul {
+  padding-inline-start: 8px;
+}
+
+/* ---------- For organizations (B2B pages) ---------- */
 
 /* The organizations header carries one more link: tighter nav below 1200px so the button stays visible. */
 @media (min-width: 1024px) and (max-width: 1199px) {

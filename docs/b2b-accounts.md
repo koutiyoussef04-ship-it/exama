@@ -22,6 +22,16 @@ Every signed-out lookup by email goes through `findAccount(email, accountType?)`
 - **Account type given:** the app's sign-in, forgot-password and sign-up forms send it. Exactly that identity is used.
 - **Account type absent:** older app versions and old emails send none. The student account is used if the email has one, otherwise the organization account. Every account that existed before the split keeps signing in as before.
 
+### Choosing which account to sign in to
+
+Choosing a type is not authenticating: `POST /auth/login` only ever issues a session for the identity whose password matched.
+
+- **Every "Log in" on the website is a two-way choice** ("Log in as a student" / "Log in as an organization"), on the home, student and organizations pages in all four languages. Each entry opens the app's `/start?mode=signin&account=student|organization`, and the sign-in form opens on that type. Opened directly, the form starts on the student account; the chips switch it.
+- **Right password, wrong type:** when the chosen type fails but the same email and password are valid for the *other* identity, the API answers `403 wrong_account_type` with `details.accountType` and **no token**. The app shows the message and a button "Sign in to the … account instead", which re-submits with the other type; the person chooses. This reveals nothing the caller could not learn by trying the other sign-in with the password they hold: with a wrong password the answer is `401 invalid_credentials` whether or not either account exists, and an unknown email answers exactly like a wrong password.
+- **Both identities:** the chips decide; the server authenticates only that one.
+- **Already signed in to the other identity:** a `/start` link naming an account type that is not the current session's (for example "Log in as an organization" while a student session is open) goes to `/switch-account`, never into the current session. That screen (also reachable from Account → Switch account) signs out first, then opens the sign-in on the other type, where the person types that account's own password. Nothing is merged and no session is carried over. Links without an account type keep whatever session there is.
+- **Password recovery** stays per identity (`accountType` on the request and confirm calls; the organization email's subject says so).
+
 ### Sessions
 
 Tokens carry an `act` claim (the account type), and `requireAuth` refuses a token whose claim doesn't match the account. Tokens issued before the claim existed have none and stay valid.
@@ -41,7 +51,7 @@ All of these are enforced on the server.
 
 An organization sign-up either:
 
-- **Creates an organization:** it needs a name and a market, as before.
+- **Creates an organization:** it needs a name and a category (`market`), one of `ORGANIZATION_CATEGORIES` in `packages/shared/src/organizations.ts`: `university`, `school`, `training_center`, `corporate`, `exam_prep`, `other` (for French-speaking markets and the Gulf). Organizations created before those categories keep `training_provider` or `academy` (`LEGACY_ORGANIZATION_MARKETS`): still valid, displayed and, for `academy`, still driving its workspace defaults (multiple-choice only, legal-reference fields), but no longer offered to new sign-ups or to `POST /orgs`. Migration 0025 only widened the database CHECK constraint to the eight values; it rewrote no row.
 - **Joins one:** it sends no organization fields. The account is created without an organization, and an admin of the existing organization adds it by email.
 
 ## B2B owner

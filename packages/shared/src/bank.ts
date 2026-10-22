@@ -19,7 +19,7 @@ export type Difficulty = (typeof DIFFICULTIES)[number];
 
 export const MAX_ITEMS_PER_GENERATION = 20;
 
-/** Legal source metadata (oposiciones): entered by staff, never invented by the AI. */
+/** Legal source metadata (legacy academy organizations): entered by staff, never invented by the AI. */
 export const legalRefSchema = z.object({
   /** Law or regulation, e.g. "Ley 39/2015". */
   law: z.string().trim().max(200),

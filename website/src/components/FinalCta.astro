@@ -5,8 +5,10 @@ import { copy, type Lang } from '../i18n';
 
 interface Props {
   lang: Lang;
+  /** Student landing page: a second button for existing students (the student sign-in). */
+  signIn?: boolean;
 }
-const { lang } = Astro.props;
+const { lang, signIn = false } = Astro.props;
 const c = copy(lang);
 const trial = site.webCheckoutAvailable;
 ---
@@ -15,7 +17,10 @@ const trial = site.webCheckoutAvailable;
   <div class="container final-inner">
     <h2 id="final-title">{c.final.title}</h2>
     <p>{c.final.text}</p>
-    <a class="btn btn-light btn-lg" href={site.links.primary(lang)}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
+    <div class="cta-row final-ctas">
+      <a class="btn btn-light btn-lg" href={site.links.primary(lang)}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
+      {signIn && <a class="btn btn-outline-light btn-lg" href={site.links.signIn(lang)} data-account="student">{c.students.signIn}</a>}
+    </div>
     <p class="final-note">{trial ? c.final.noteTrial(TRIAL_DAYS) : c.final.noteFree}</p>
   </div>
 </section>

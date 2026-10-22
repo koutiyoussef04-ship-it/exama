@@ -1,8 +1,10 @@
 # Exama marketing website
 
 The public landing site for **https://exama.app**, in English, Spanish, French and Arabic. Its job: turn
-visitors into students of the Exama app — and, since the organizations pages, send academies and training
-centers to the organization workspace (see "For organizations" below). Every button goes to the app's **`/start`** route
+visitors into students of the Exama app — and send universities, schools, training centers and companies to the
+organization workspace (see "For organizations" below). The home page is the general entrance with two prominent choices
+("For students" → the student landing page, "For organizations" → the organizations page); every "Log in" is a two-way
+choice ("Log in as a student" / "Log in as an organization"), each entry naming its account type. Every button goes to the app's **`/start`** route
 (`https://app.exama.app/start?…`), which works for new and existing accounts alike: signed out it shows sign-up
 (with a link to sign in) or sign-in; after signing up or in — or straight away when already signed in — it
 continues where the button said (the plans screen, with the chosen plan pre-selected, for the pricing buttons).
@@ -53,14 +55,15 @@ src/config/site.ts       domain, app URL, links into the app (/start), the web-c
 src/data/b2b.ts          organization plans (allowances, prices ex-VAT, pilot length) — checked against packages/shared/src/organizations.ts
 src/i18n/b2b/            types.ts + en.ts / es.ts / fr.ts / ar.ts: ALL text of the organizations pages
 src/components/b2b/      the organizations page (OrgPage.astro = hero, audiences, how, review, team, pricing, pilot, FAQ, final CTA) and the demo page
-src/components/AudienceBand.astro   the band under the student hero that points academies to the organizations page
+src/components/AudienceChoice.astro the two entrances under the home hero (students / organizations); LoginMenu.astro the "Log in" choice (header)
+src/components/StudentPage.astro    the student landing page (its own hero via Hero.astro `variant="students"`, then the home sections)
 src/i18n/                languages.ts (languages, URLs, direction), types.ts (the shape of the copy), en.ts / es.ts / fr.ts / ar.ts (ALL page text)
 src/data/content.ts      product facts shared by every language: trial length, prices, plan order, section anchors
 src/data/legal.ts        Privacy Policy + Terms (en/es/fr/ar) from legal.generated.json — exported from the app, never edited here
 src/components/*.astro   one component per page section (Hero, HowItWorks, …), each takes `lang`; Home.astro puts them together
 src/layouts/             Base.astro (head/SEO/hreflang/lang+dir), InfoPage.astro (support/404)
 src/components/LegalDocument.astro   one legal document in one language (language links, draft notice, hreflang)
-src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); for-organizations/ (index, demo), es/para-organizaciones/, fr/pour-les-organismes/, ar/for-organizations/ (each index, demo); 404, robots.txt, sitemap.xml
+src/pages/               index, support, privacy, terms; [lang]/index, [lang]/support, [lang]/privacy, [lang]/terms (es, fr, ar); for-students/, es/para-estudiantes/, fr/pour-les-etudiants/, ar/for-students/; for-organizations/ (index, demo), es/para-organizaciones/, fr/pour-les-organismes/, ar/for-organizations/ (each index, demo); 404, robots.txt, sitemap.xml
 src/styles/global.css    design tokens (the app's palette) + all styles
 public/                  favicon, apple-touch-icon, og-image.png, _headers, screenshots/
 scripts/                 check-pricing.mjs, verify-build.mjs, og-image.html (source of og-image.png)
@@ -78,9 +81,17 @@ planner section). When the app changes — a price, a plan feature, a supported 
 `/for-organizations`, `/es/para-organizaciones`, `/fr/pour-les-organismes` and `/ar/for-organizations` (right to left;
 the slug stays ASCII so shared links aren't percent-encoded), each with a `/demo` page, present the organization
 workspace — question banks drafted from an organization's own PDF/PowerPoint courses, each draft with its
-source, reviewed by the organization's team, exported as Moodle GIFT or CSV — to academies and training
-centers, in the same four languages as the student site. Each student home links to the organizations page in its own
-language (header link, audience band under the hero, footer link).
+source, reviewed by the organization's team, exported as Moodle GIFT or CSV — to universities, schools, training
+centers, companies and exam-preparation centers, in the same four languages as the student site. Each home page links to
+the organizations page in its own language (header link, audience choice under the hero, footer link).
+
+### For students
+
+`/for-students`, `/es/para-estudiantes`, `/fr/pour-les-etudiants` and `/ar/for-students` (right to left) are the
+student landing pages: a student hero (sign-up + "Log in as a student"), then the home page's own sections (how it
+works, materials, grounded answers, exams and grading, weak topics, study plan, the app, pricing) and a final block with
+both buttons. Each one is canonical on itself with the four student pages as hreflang alternates; the home page keeps
+its full content and gains the two audience choices.
 
 - **Facts** come from `src/data/b2b.ts`, which mirrors the app's plan catalog
   (`packages/shared/src/organizations.ts`): pilot 30 days — 5 courses, 150 question drafts and 3 admin/editor

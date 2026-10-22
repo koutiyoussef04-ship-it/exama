@@ -4,14 +4,17 @@ import logoMark from '../assets/brand/logo-mark.png';
 import Icon from './Icon.astro';
 import { SECTIONS, TRIAL_DAYS } from '../data/content';
 import { site } from '../config/site';
-import { copy, type Lang } from '../i18n';
+import { copy, orgPathFor, type Lang } from '../i18n';
 
 interface Props {
   lang: Lang;
+  /** The home page hero (default) or the student landing page's: same diagram, its own words and a sign-in button. */
+  variant?: 'home' | 'students';
 }
-const { lang } = Astro.props;
+const { lang, variant = 'home' } = Astro.props;
 const c = copy(lang);
 const h = c.hero;
+const s = variant === 'students' ? c.students : null;
 const formats = [
   { label: h.formats.pdf, icon: 'pdf' },
   { label: h.formats.slides, icon: 'slides' },
@@ -25,17 +28,26 @@ const trial = site.webCheckoutAvailable;
 <section class="hero" aria-labelledby="hero-title">
   <div class="container hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">{h.eyebrow}</p>
+      <p class="eyebrow">{s ? s.eyebrow : h.eyebrow}</p>
       <h1 id="hero-title">
-        {h.titleStart}<span class="grad-text">{h.titleHighlight}</span>
+        {s ? s.titleStart : h.titleStart}<span class="grad-text">{s ? s.titleHighlight : h.titleHighlight}</span>
       </h1>
-      <p class="lead">{h.lead}</p>
+      <p class="lead">{s ? s.lead : h.lead}</p>
 
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href={site.links.primary(lang)}>{trial ? c.cta.trial(TRIAL_DAYS) : c.cta.free}</a>
-        <a class="btn btn-secondary btn-lg" href={`#${SECTIONS.how}`}>{c.cta.secondary}</a>
+        {s ? (
+          <a class="btn btn-secondary btn-lg" href={site.links.signIn(lang)} data-account="student">{s.signIn}</a>
+        ) : (
+          <a class="btn btn-secondary btn-lg" href={`#${SECTIONS.how}`}>{c.cta.secondary}</a>
+        )}
       </div>
       <p class="cta-note">{trial ? h.noteTrial(TRIAL_DAYS) : h.noteFree}</p>
+      {s && (
+        <p class="hero-org-note">
+          {s.orgNote} <a href={orgPathFor(lang)}>{s.orgLink}</a>
+        </p>
+      )}
 
       <ul class="chips" aria-label={h.formatsAria}>
         {formats.map((f) => (

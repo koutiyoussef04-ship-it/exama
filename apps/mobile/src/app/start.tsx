@@ -1,7 +1,8 @@
 /**
  * /start — where the website's buttons land (see lib/start-intent.ts). Signed out: remembers where to
- * continue, then shows sign-up (or sign-in); the index screen continues there after sign-up/sign-in and
- * onboarding. Signed in: straight to the destination.
+ * continue, then shows sign-up (or sign-in) on the account type the link names; the index screen continues
+ * there after sign-up/sign-in and onboarding. Signed in to that identity: straight to the destination. Signed
+ * in to the other identity: the switch-account screen (startRedirect).
  */
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { Loading } from '@/components/ui';
 import { APP_LANGUAGE_KEY } from '@/i18n/prefs-store';
 import { useAuth } from '@/lib/auth';
 import { usePreferences } from '@/lib/preferences';
-import { parseStartLink, PENDING_START_KEY, startDestination } from '@/lib/start-intent';
+import { parseStartLink, PENDING_START_KEY, startRedirect } from '@/lib/start-intent';
 import { kv } from '@/lib/storage';
 
 export default function Start() {
@@ -32,8 +33,5 @@ export default function Start() {
   }, []);
 
   if (!ready) return <Loading />;
-  if (user) return <Redirect href={link.intent ? startDestination(link.intent) : '/'} />;
-  if (link.mode === 'signin') return <Redirect href={link.account ? { pathname: '/sign-in', params: { account: link.account } } : '/sign-in'} />;
-  // ?account=organization: the sign-up form opens on the organization step (no account-type question).
-  return <Redirect href={link.account ? { pathname: '/sign-up', params: { account: link.account } } : '/sign-up'} />;
+  return <Redirect href={startRedirect(link, user)} />;
 }

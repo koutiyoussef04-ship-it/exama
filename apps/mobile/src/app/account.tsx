@@ -170,7 +170,14 @@ export default function Account() {
       <Card style={{ gap: 0 }}>
         <SectionLabel>{t('account.settings')}</SectionLabel>
         <ListRow label={t('account.appLanguage')} value={NATIVE_NAMES[appLanguage]} onPress={() => router.push('/language')} />
-        <ListRow label={t('account.studyLanguage')} value={aiLabel} onPress={() => router.push('/language')} last />
+        <ListRow label={t('account.studyLanguage')} value={aiLabel} onPress={() => router.push('/language')} />
+        {/* The other identity of this email (student ↔ organization): sign out, then sign in there. Never a merge. */}
+        <ListRow
+          label={t('account.switchAccount')}
+          value={t(`auth.signInAs.${user?.accountType === 'organization' ? 'student' : 'organization'}`)}
+          onPress={() => router.push({ pathname: '/switch-account', params: { account: user?.accountType === 'organization' ? 'student' : 'organization' } })}
+          last
+        />
       </Card>
 
       <Card style={{ gap: 0 }}>

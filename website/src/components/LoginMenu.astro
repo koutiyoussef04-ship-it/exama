@@ -1,0 +1,32 @@
+---
+/**
+ * "Log in" is always a choice between the two identities an email can have: a student account and an organization
+ * account. Each entry carries the chosen type into the app's sign-in (/start?mode=signin&account=…), which never falls
+ * back to the other identity. A <details> dropdown, so it works without JavaScript (the header script only closes it).
+ */
+import Icon from './Icon.astro';
+import { site } from '../config/site';
+import { copy, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+  /** Which identity comes first: the organizations pages put the organization one first. */
+  primary?: 'student' | 'organization';
+}
+const { lang, primary = 'student' } = Astro.props;
+const c = copy(lang).nav;
+const entries = [
+  { label: c.loginStudent, href: site.links.signIn(lang), kind: 'student' },
+  { label: c.loginOrganization, href: site.links.orgSignIn(lang), kind: 'organization' },
+];
+if (primary === 'organization') entries.reverse();
+---
+
+<details class="login-menu">
+  <summary aria-label={c.loginAria}><span>{c.login}</span><Icon name="arrowDown" size={16} /></summary>
+  <ul class="login-panel">
+    {entries.map((e) => (
+      <li><a href={e.href} data-account={e.kind}>{e.label}</a></li>
+    ))}
+  </ul>
+</details>

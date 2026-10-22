@@ -1,0 +1,37 @@
+---
+/**
+ * Under the home hero: the two entrances of the site. Students go to the student landing page, organizations
+ * (universities, schools, training centers, companies) to the organizations page — each in the same language.
+ */
+import Icon from './Icon.astro';
+import { copy, orgPathFor, studentPathFor, type Lang } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const c = copy(lang).choice;
+const cards = [
+  { ...c.students, href: studentPathFor(lang), icon: 'graded', id: 'choice-students' },
+  { ...c.organizations, href: orgPathFor(lang), icon: 'building', id: 'choice-organizations' },
+];
+---
+
+<nav class="audience-choice" aria-label={c.aria}>
+  <div class="container">
+    <ul class="choice-grid">
+      {cards.map((card) => (
+        <li>
+          <a class="choice-card" href={card.href} aria-labelledby={card.id}>
+            <span class="card-icon" aria-hidden="true"><Icon name={card.icon} size={24} /></span>
+            <span class="choice-body">
+              <span class="choice-title" id={card.id}>{card.title}</span>
+              <span class="choice-text">{card.text}</span>
+              <span class="choice-cta">{card.cta} <Icon name="arrowRight" size={18} class="flip-rtl" /></span>
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</nav>

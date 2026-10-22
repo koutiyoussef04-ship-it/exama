@@ -2,7 +2,7 @@
  * French copy of the "pour les organismes" pages (/fr/pour-les-organisations, /fr/pour-les-organisations/demo).
  * Same facts and rules as en.ts: only what the workspace does; no clients, logos, testimonials, counts, statistics,
  * time savings or guarantees. Terms match the app's French workspace (apps/mobile/src/i18n/locales/fr.ts):
- * organisme de formation, académie de concours, brouillons de questions, relecteur, offre, pilote.
+ * organisme de formation, centre de préparation aux examens, brouillons de questions, relecteur, offre, pilote.
  */
 import type { OrgCopy } from './types';
 
@@ -12,7 +12,7 @@ export const frOrg: OrgCopy = {
   meta: {
     title: 'Exama pour les organismes — Des questions d’examen à partir de vos propres supports',
     description:
-      'Pour les académies et les organismes de formation : importez vos supports de cours, recevez des brouillons de questions rédigés par l’IA avec leur source, relisez-les et approuvez-les en équipe, exportez-les vers Moodle ou en CSV. Pilote gratuit de 30 jours.',
+      'Pour les universités, les écoles, les centres de formation et les entreprises : importez vos supports de cours, recevez des brouillons de questions rédigés par l’IA avec leur source, relisez-les et approuvez-les en équipe, exportez-les vers Moodle ou en CSV. Pilote gratuit de 30 jours.',
     demoTitle: 'Demander une démo — Exama pour les organismes',
     ogAlt: 'Exama pour les organismes : des questions d’examen à partir de vos propres supports, chacune avec sa source',
     demoDescription: 'Demandez par e-mail une présentation de l’espace de travail Exama pour les organismes, ou lancez vous-même le pilote gratuit de 30 jours.',
@@ -20,7 +20,7 @@ export const frOrg: OrgCopy = {
   nav: { how: 'Fonctionnement', pricing: 'Tarifs', faq: 'FAQ', students: 'Pour les étudiants', demo: 'Démo' },
   cta: { pilot: (days) => `Lancer le pilote gratuit de ${days} jours`, pilotShort: 'Lancer le pilote gratuit', demo: 'Demander une démo', seeHow: 'Voir le fonctionnement' },
   hero: {
-    eyebrow: 'Pour les académies de concours et les organismes de formation',
+    eyebrow: 'Pour les universités, les écoles, les centres de formation et les entreprises',
     titleStart: 'Transformez vos supports de cours en questions d’examen, ',
     titleHighlight: 'chacune avec sa source.',
     lead: 'Importez un PDF ou un PowerPoint. Exama rédige les questions et montre le passage dont chacune est tirée. Votre équipe relit et approuve chaque question avant de l’utiliser, puis les exporte vers Moodle ou en CSV.',
@@ -38,20 +38,26 @@ export const frOrg: OrgCopy = {
   },
   audiences: {
     eyebrow: 'Pour qui',
-    title: 'Deux types d’organismes, un seul espace de travail',
-    lead: 'En créant l’organisation, vous choisissez son type. Il fixe le format des questions et les champs que voient vos relecteurs ; rien d’autre ne change.',
+    title: 'Tous les types d’organismes, un seul espace de travail',
+    lead: 'En créant l’organisation, vous indiquez son type : université ou enseignement supérieur, école, centre de formation, entreprise, soutien scolaire ou préparation aux examens. L’espace de travail est le même pour tous.',
     items: [
       {
-        title: 'Académies de préparation aux concours',
-        text: 'Pour la préparation aux concours, où chaque question doit renvoyer au texte qu’elle évalue.',
-        icon: 'exam',
-        points: ['Questions à choix multiples à quatre options', 'Champs de loi, d’article et de référence au journal officiel, remplis par votre équipe : l’IA n’invente jamais de référence juridique', 'Questions classées par thème au sein de chaque cours'],
+        title: 'Universités et établissements scolaires',
+        text: 'Pour des cours enseignés à partir de votre propre programme, où l’équipe pédagogique garde la main sur chaque question.',
+        icon: 'building',
+        points: ['Questions à choix multiples et à réponse courte', 'Questions classées par module et par thème au sein de chaque cours', 'Chaque question affiche le passage sur lequel elle repose'],
       },
       {
-        title: 'Organismes de formation',
-        text: 'Pour la formation en entreprise et les formations professionnelles construites à partir de vos propres modules.',
+        title: 'Centres de formation et entreprises',
+        text: 'Pour les formations professionnelles et la formation des salariés construites à partir de vos propres modules.',
         icon: 'folder',
-        points: ['Questions à choix multiples et à réponse courte', 'Questions classées par module et par thème', 'Des exports qui s’importent directement dans Moodle ou dans vos outils'],
+        points: ['Des brouillons à partir de PDF et de diapositives PowerPoint', 'Relus et approuvés par votre équipe avant toute utilisation', 'Des exports qui s’importent directement dans Moodle ou dans vos outils'],
+      },
+      {
+        title: 'Soutien scolaire et préparation aux examens',
+        text: 'Pour les centres qui préparent des élèves à un examen, où l’entraînement doit suivre le support de près.',
+        icon: 'target',
+        points: ['Des questions qui restent dans le support importé', 'Approuvez, rejetez ou modifiez chaque brouillon', 'Des relecteurs sans frais, dans toutes les offres'],
       },
     ],
   },
@@ -115,7 +121,7 @@ export const frOrg: OrgCopy = {
       },
       esencial: {
         name: 'Esencial',
-        tagline: 'Pour une académie ou un service.',
+        tagline: 'Pour un centre ou un service.',
         features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cours importés par mois`, `${n(l!.itemsPerMonth)} brouillons de questions par mois`, `${n(l!.maxMembers)} administrateurs ou éditeurs`, 'Relecteurs illimités', `Jusqu’à ${n(perRequest)} brouillons par demande`, 'Export Moodle GIFT et CSV'],
         cta: 'Demander Esencial',
       },
@@ -205,7 +211,7 @@ export const frOrg: OrgCopy = {
     title: 'Demander une démo',
     intro: 'Présentez-nous votre organisme : nous vous répondrons par e-mail pour organiser une présentation de l’espace de travail, répondre à vos questions ou préparer une offre.',
     includeTitle: 'Utile à préciser',
-    include: ['Votre organisme et ce qu’il enseigne (préparation aux concours, formation en entreprise, formations professionnelles…)', 'Avec combien de cours ou de modules vous commenceriez, et dans quel format', 'Combien de personnes importeraient des supports, rédigeraient et relieraient des questions', 'L’offre que vous envisagez, ou ce dont vous auriez besoin avec Centro'],
+    include: ['Votre organisme et ce qu’il enseigne (cours universitaires ou scolaires, formation professionnelle, formation des salariés, préparation aux examens…)', 'Avec combien de cours ou de modules vous commenceriez, et dans quel format', 'Combien de personnes importeraient des supports, rédigeraient et relieraient des questions', 'L’offre que vous envisagez, ou ce dont vous auriez besoin avec Centro'],
     emailButton: 'Écrire à examaweb@gmail.com',
     emailHow: 'Le bouton ouvre votre messagerie avec un message prérempli. S’il ne s’ouvre pas, écrivez à l’adresse ci-dessous.',
     addressLead: 'Notre adresse pour les organismes :',

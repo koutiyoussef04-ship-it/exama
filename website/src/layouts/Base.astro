@@ -18,8 +18,8 @@ interface Props {
   lang?: Lang;
   /** The same page in every language: <link rel="alternate" hreflang> and the language selector. */
   alternates?: { lang: Lang; path: string }[];
-  /** Which navigation the header and footer show: the student site (default) or the organizations pages. */
-  nav?: 'student' | 'org';
+  /** Which navigation the header and footer show: the home (default), the student landing page or the organizations pages. */
+  nav?: 'student' | 'students' | 'org';
   /** Link-preview image (path on exama.app, 1200×630). Default: the student site's. */
   ogImage?: string;
   /** Description of the link-preview image. Default: the student site's. */
