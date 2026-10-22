@@ -1,6 +1,6 @@
 import { PAID_TIERS, RECOMMENDED_PLAN_ID, planById, type BillingPeriod, type Entitlement, type PaidTier, type PaywallTrigger, type Plan } from '@study/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { Link, Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +26,14 @@ function upgradeContext(trigger: PaywallTrigger, tier: Entitlement['tier'], t: T
 }
 
 export default function Paywall() {
+  const { user } = useAuth();
+  // Student plans are for the student account. An organization account has the plans for organizations, on its
+  // Account screen (and its server refuses student checkout anyway: requireAccountType('student')).
+  if (user?.accountType === 'organization') return <Redirect href="/account" />;
+  return <StudentPaywall />;
+}
+
+function StudentPaywall() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const params = useLocalSearchParams<{ trigger?: PaywallTrigger; message?: string; tier?: string; period?: string }>();

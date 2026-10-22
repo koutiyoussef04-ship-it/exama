@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { Badge, Body, Button, Card, colors, ErrorState, ErrorText, ListRow, Loading, ProgressBar, Screen, SectionLabel, space, TextButton, Title } from '@/components/ui';
 import { AdminEntry } from '@/admin/AdminEntry';
+import { OrganizationAccountPlans } from '@/components/org/account-plans';
 import { appVersion, isReleaseBuild } from '@/config/app-config';
 import { NATIVE_NAMES } from '@/i18n/languages';
 import { MarketingSettingsCard } from '@/components/marketing-consent';
@@ -30,9 +31,34 @@ const TEST_STATES: { state: MockState; key: `account.test${string}` }[] = [
 ];
 
 export default function Account() {
+  const { user } = useAuth();
+  // One email can hold two separate accounts with different plans. The organization account sees its organization's
+  // plan and the plans for organizations — never the student plans, trial or usage (that is the student account's).
+  return user?.accountType === 'organization' ? <OrganizationAccount /> : <StudentAccount />;
+}
+
+function OrganizationAccount() {
   const { t } = useTranslation();
-  const { user, signOut } = useAuth();
-  const { appLanguage, aiLanguagePref } = usePreferences();
+  const { user } = useAuth();
+  return (
+    <Screen>
+      <View style={{ gap: space(1) }}>
+        <Title>{user?.name}</Title>
+        <Body muted>{user?.email}</Body>
+        <View style={{ flexDirection: 'row' }}>
+          <Badge label={t('auth.signInAs.organization')} tone="primary" />
+        </View>
+      </View>
+      <OrganizationAccountPlans />
+      <AccountLinks />
+      <AccountExit />
+    </Screen>
+  );
+}
+
+function StudentAccount() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const entitlement = useEntitlement();
   const catalog = useCatalog();
@@ -42,9 +68,6 @@ export default function Account() {
   const resume = useMutation({ mutationFn: api.restorePurchases, ...onEntitlement });
   const setState = useMutation({ mutationFn: api.setMockBillingState, ...onEntitlement });
 
-  const askSignOut = async () => {
-    if (await confirm({ title: t('account.signOutTitle'), message: t('account.signOutMessage'), confirmText: t('account.signOut') })) await signOut();
-  };
   const askCancel = async () => {
     if (await confirm({ title: t('account.cancelTitle'), message: t('account.cancelMessage'), confirmText: t('account.cancelSubscription'), destructive: true })) {
       cancel.mutate();
@@ -66,12 +89,6 @@ export default function Account() {
   const u = e.usage;
   const l = e.limits;
   const freeLecture = e.lectureAllowance === 'once';
-  const aiLabel =
-    aiLanguagePref === 'app'
-      ? t('language.currentSameAsApp', { language: NATIVE_NAMES[appLanguage] })
-      : aiLanguagePref === 'source'
-        ? t('language.sameAsMaterial')
-        : NATIVE_NAMES[aiLanguagePref];
 
   return (
     <Screen onRefresh={() => entitlement.refetch()} refreshing={entitlement.isRefetching}>
@@ -154,6 +171,55 @@ export default function Account() {
       <ReminderSettingsCard />
       <MarketingSettingsCard />
 
+      <AccountLinks />
+
+      {devTools && (
+        <Card style={{ gap: space(3), borderColor: colors.warning }}>
+          <SectionLabel>{t('account.testTitle')}</SectionLabel>
+          <Body muted style={{ fontSize: 14 }}>{t('account.testBody')}</Body>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+            {TEST_STATES.map(({ state, key }) => (
+              <Pressable
+                key={state}
+                onPress={() => setState.mutate(state)}
+                disabled={setState.isPending}
+                accessibilityRole="button"
+                style={({ pressed }) => ({
+                  paddingHorizontal: space(3),
+                  paddingVertical: space(2),
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{t(key as 'account.testFree')}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <ErrorText error={setState.error} />
+        </Card>
+      )}
+
+      <AccountExit />
+    </Screen>
+  );
+}
+
+/** Both identities: the workspace link, the owner dashboards, settings (incl. switching identity), help. */
+function AccountLinks() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { appLanguage, aiLanguagePref } = usePreferences();
+  const aiLabel =
+    aiLanguagePref === 'app'
+      ? t('language.currentSameAsApp', { language: NATIVE_NAMES[appLanguage] })
+      : aiLanguagePref === 'source'
+        ? t('language.sameAsMaterial')
+        : NATIVE_NAMES[aiLanguagePref];
+  return (
+    <>
       {/* Members of an organization (students added by an admin, or organization accounts): the workspace. */}
       {!!user?.organizations?.length && (
         <Card style={{ gap: 0 }}>
@@ -186,40 +252,22 @@ export default function Account() {
         <ListRow label={t('nav.privacy')} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })} />
         <ListRow label={t('nav.terms')} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })} last />
       </Card>
+    </>
+  );
+}
 
-      {devTools && (
-        <Card style={{ gap: space(3), borderColor: colors.warning }}>
-          <SectionLabel>{t('account.testTitle')}</SectionLabel>
-          <Body muted style={{ fontSize: 14 }}>{t('account.testBody')}</Body>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
-            {TEST_STATES.map(({ state, key }) => (
-              <Pressable
-                key={state}
-                onPress={() => setState.mutate(state)}
-                disabled={setState.isPending}
-                accessibilityRole="button"
-                style={({ pressed }) => ({
-                  paddingHorizontal: space(3),
-                  paddingVertical: space(2),
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.card,
-                  opacity: pressed ? 0.6 : 1,
-                })}
-              >
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{t(key as 'account.testFree')}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <ErrorText error={setState.error} />
-        </Card>
-      )}
-
+function AccountExit() {
+  const { t } = useTranslation();
+  const { signOut } = useAuth();
+  const askSignOut = async () => {
+    if (await confirm({ title: t('account.signOutTitle'), message: t('account.signOutMessage'), confirmText: t('account.signOut') })) await signOut();
+  };
+  return (
+    <>
       <Button variant="secondary" title={t('account.signOut')} onPress={askSignOut} />
       <TextButton title={t('account.deleteAccount')} tone="danger" onPress={() => router.push('/delete-account')} />
       <Body muted style={{ fontSize: 12, textAlign: 'center' }}>{t('account.version', { version: appVersion })}</Body>
-    </Screen>
+    </>
   );
 }
 
