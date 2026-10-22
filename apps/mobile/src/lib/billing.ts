@@ -56,6 +56,9 @@ const locale = () => formattingLocale(isLanguage(i18n.language) ? i18n.language 
  */
 export const formatPrice = (cents: number, currency = 'EUR') =>
   new Intl.NumberFormat(locale(), { style: 'currency', currency }).format(cents / 100);
+/** A whole-euro list price (the organization plans: €149, not €149.00). */
+export const formatWholePrice = (cents: number, currency = 'EUR') =>
+  new Intl.NumberFormat(locale(), { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);
 export const monthlyEquivalent = (plan: Plan) => (plan.period === 'yearly' ? Math.round(plan.priceCents / 12) : plan.priceCents);
 export const tierName = (tier: Entitlement['tier']) => i18n.t(`plan.${tier}`);
 export const formatDate = (iso: string | null) =>
