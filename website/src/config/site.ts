@@ -61,7 +61,7 @@ const links = {
  * Demo requests from the organizations pages go by email (a mailto link with a pre-filled subject and body,
  * plus the address written out): no form, no backend, no third-party service. Confirmed address.
  */
-const B2B_DEMO_EMAIL = 'examaweb@gmail.com';
+const B2B_DEMO_EMAIL = 'contact@exama.app';
 const demoMailto = (subject: string, body: string) => `mailto:${B2B_DEMO_EMAIL}?${new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20')}`;
 
 export const site = {
@@ -75,12 +75,13 @@ export const site = {
   b2b: { demoEmail: B2B_DEMO_EMAIL, demoMailto },
   ogImage: { path: '/og-image.png', width: 1200, height: 630 },
   /**
-   * Confirmed legal/contact details. `null` = not confirmed yet (never guess). They fill {{company}},
+   * Confirmed legal/contact details. `null` = not confirmed yet (never guess). The contact email is Exama's public
+   * address (contact@exama.app), the same one as the demo requests and the app's Support screen. They fill {{company}},
    * {{address}} and {{email}} in the Privacy Policy and Terms (/privacy, /terms) — use the same values as
    * the app's EXPO_PUBLIC_COMPANY_NAME, EXPO_PUBLIC_COMPANY_ADDRESS and EXPO_PUBLIC_SUPPORT_EMAIL.
    */
   legal: {
-    supportEmail: null as string | null,
+    supportEmail: 'contact@exama.app' as string | null,
     companyName: null as string | null,
     companyAddress: null as string | null,
   },

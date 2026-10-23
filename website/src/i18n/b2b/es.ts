@@ -207,7 +207,7 @@ export const esOrg: OrgCopy = {
     intro: 'Cuéntanos cómo es tu organización y te responderemos por correo para concertar una demostración del espacio de trabajo, resolver tus dudas o preparar un plan.',
     includeTitle: 'Nos ayuda saber',
     include: ['Tu organización y qué enseña (cursos universitarios o escolares, formación profesional, formación de empleados, preparación de exámenes…)', 'Con cuántos cursos o módulos empezaríais, y en qué formato', 'Cuántas personas subirían material, redactarían y revisarían preguntas', 'Qué plan estáis valorando, o qué necesitaríais de Centro'],
-    emailButton: 'Escribir a examaweb@gmail.com',
+    emailButton: 'Escribir a contact@exama.app',
     emailHow: 'El botón abre tu aplicación de correo con un mensaje preparado. Si no se abre, escribe a la dirección de abajo.',
     addressLead: 'Nuestra dirección para organizaciones:',
     subject: 'Exama para organizaciones — solicitud de demo',

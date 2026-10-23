@@ -14,7 +14,7 @@ One text, three places: `apps/mobile/src/i18n/legal.ts` (en, es, fr, ar) → `np
 
 | Item | Where | Why it is still open | Who |
 |---|---|---|---|
-| Company name, postal address, contact email | `{{company}}`, `{{address}}`, `{{email}}` | not confirmed anywhere in the repo; filled from `EXPO_PUBLIC_COMPANY_*`/`EXPO_PUBLIC_SUPPORT_EMAIL` (app) and `site.legal` (website) | owner |
+| Company name, postal address | `{{company}}`, `{{address}}` | not confirmed anywhere in the repo (the contact email `{{email}}` is confirmed: contact@exama.app); filled from `EXPO_PUBLIC_COMPANY_*`/`EXPO_PUBLIC_SUPPORT_EMAIL` (app) and `site.legal` (website) | owner |
 | AssemblyAI model training | Privacy → AI processing | AssemblyAI may use "certain files" for training unless the account opted out or uses its EU servers; the API's `ASSEMBLYAI_BASE_URL` defaults to the US endpoint and the production value isn't visible from here | owner (AssemblyAI dashboard / contract) |
 | Transfer safeguards | Privacy → International transfers | the safeguard (EU–US Data Privacy Framework, SCCs…) must come from each provider's DPA, not be assumed | owner + lawyer |
 | Warranty disclaimer and liability | Terms | jurisdiction-specific; mandatory consumer law limits it | lawyer |

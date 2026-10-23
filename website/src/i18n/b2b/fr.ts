@@ -208,7 +208,7 @@ export const frOrg: OrgCopy = {
     intro: 'Présentez-nous votre organisme : nous vous répondrons par e-mail pour organiser une présentation de l’espace de travail, répondre à vos questions ou préparer une offre.',
     includeTitle: 'Utile à préciser',
     include: ['Votre organisme et ce qu’il enseigne (cours universitaires ou scolaires, formation professionnelle, formation des salariés, préparation aux examens…)', 'Avec combien de cours ou de modules vous commenceriez, et dans quel format', 'Combien de personnes importeraient des supports, rédigeraient et relieraient des questions', 'L’offre que vous envisagez, ou ce dont vous auriez besoin avec Centro'],
-    emailButton: 'Écrire à examaweb@gmail.com',
+    emailButton: 'Écrire à contact@exama.app',
     emailHow: 'Le bouton ouvre votre messagerie avec un message prérempli. S’il ne s’ouvre pas, écrivez à l’adresse ci-dessous.',
     addressLead: 'Notre adresse pour les organismes :',
     subject: 'Exama pour les organismes — demande de démo',

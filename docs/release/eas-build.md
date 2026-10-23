@@ -43,7 +43,7 @@ Guards (see `apps/mobile/src/config/api-url.js`, tested in `apps/mobile/test/api
 |---|---|---|
 | `APP_ENV` | set by `eas.json` | `production` |
 | `EXPO_PUBLIC_API_URL` | preview/production | `https://api.exama.app` |
-| `EXPO_PUBLIC_SUPPORT_EMAIL` | recommended | `support@exama.app` |
+| `EXPO_PUBLIC_SUPPORT_EMAIL` | recommended | `contact@exama.app` |
 | `EXPO_PUBLIC_PRIVACY_URL` | recommended (App Store needs a public URL anyway) | `https://exama.app/privacy` |
 | `EXPO_PUBLIC_TERMS_URL` | recommended | `https://exama.app/terms` |
 | `EXPO_PUBLIC_COMPANY_NAME` | recommended | `Exama Ltd` |

@@ -2,7 +2,7 @@
 
 # Exama — Help & support
 
-**Contact:** [support email — also set `EXPO_PUBLIC_SUPPORT_EMAIL`]
+**Contact:** contact@exama.app (also `EXPO_PUBLIC_SUPPORT_EMAIL`)
 We usually reply within [2 business days].
 
 ## Frequently asked questions
