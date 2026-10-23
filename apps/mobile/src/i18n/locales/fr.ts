@@ -1390,7 +1390,7 @@ const fr: LocaleDict = {
       formats: {
         csv: 'CSV (tableur)',
         gift: 'GIFT (Moodle)',
-        xlsx: 'Excel (.xlsx)',
+        xlsx: 'Excel',
         pdf: 'PDF',
       },
       pdfMode: 'Version du PDF',
@@ -1407,6 +1407,7 @@ const fr: LocaleDict = {
       approvedCount_one: '{{count}} question approuvée dans cette sélection',
       approvedCount_other: '{{count}} questions approuvées dans cette sélection',
       button: 'Exporter',
+      buttonExcel: 'Exporter vers Excel',
       nothing: 'Rien à exporter dans cette sélection.',
       resultTitle: 'Export',
       done_one: '{{count}} question exportée sous {{filename}}.',
