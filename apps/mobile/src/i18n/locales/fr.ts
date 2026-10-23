@@ -1121,7 +1121,7 @@ const fr: LocaleDict = {
         questions: 'Questions de ce cours',
         questionsHint: 'Tous les statuts. Les brouillons passent par la file de relecture ; les questions approuvées sont dans la banque.',
       },
-      export: { title: 'Exporter', subtitle: 'Questions approuvées uniquement, en CSV ou GIFT Moodle.' },
+      export: { title: 'Exporter', subtitle: 'Questions approuvées uniquement, en CSV, Excel, PDF ou GIFT Moodle.' },
       members: { title: 'Membres', subtitle: 'Qui peut importer, relire et approuver dans cette organisation.' },
       item: { back: 'Retour' },
     },
@@ -1390,7 +1390,19 @@ const fr: LocaleDict = {
       formats: {
         csv: 'CSV (tableur)',
         gift: 'GIFT (Moodle)',
+        xlsx: 'Excel (.xlsx)',
+        pdf: 'PDF',
       },
+      pdfMode: 'Version du PDF',
+      pdfModes: {
+        student: 'Version étudiants',
+        teacher: 'Version enseignants',
+      },
+      pdfModeHint: {
+        student: 'Les questions et leurs choix de réponse seulement. Ni réponses correctes ni explications.',
+        teacher: 'Le sujet, puis un corrigé séparé avec les réponses correctes et les explications.',
+      },
+      webOnly: 'Les fichiers Excel et PDF se téléchargent depuis l’application web (app.exama.app).',
       counting: 'Comptage des questions approuvées…',
       approvedCount_one: '{{count}} question approuvée dans cette sélection',
       approvedCount_other: '{{count}} questions approuvées dans cette sélection',

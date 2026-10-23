@@ -137,13 +137,16 @@ const org = new Hono<OrgEnv>()
     return c.body(null, 204);
   })
   // ---- export (approved items only)
+  // Every format: approved questions of this organization only, editors and admins only (requireOrgRole). The
+  // PDF mode (student without answers / teacher with the answer key) is decided here, on the server.
   .get('/export', requireOrgRole('editor'), async (c) => {
     const q = parseBody(exportQuerySchema, c.req.query());
-    const file = await exportApproved(c.var.org.id, q.format, q);
+    const file = await exportApproved(c.var.org, q);
     c.header('Content-Type', file.contentType);
     c.header('Content-Disposition', `attachment; filename="${file.filename}"`);
     c.header('X-Exama-Export-Count', String(file.count));
-    return c.body(file.body);
+    c.header('Cache-Control', 'no-store');
+    return c.body(typeof file.body === 'string' ? file.body : new Uint8Array(file.body));
   });
 
 export const orgRoutes = new Hono<AuthEnv>()

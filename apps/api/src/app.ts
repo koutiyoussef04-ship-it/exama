@@ -25,7 +25,9 @@ import { studyPlanRoutes } from './routes/study-plans.js';
 export const app = new Hono()
   .use(logger())
   // Native apps don't need CORS; this is for Expo web. Production allows only CORS_ORIGINS.
-  .use(cors({ origin: config.CORS_ORIGINS.length ? config.CORS_ORIGINS : config.NODE_ENV === 'production' ? [] : '*' }))
+  // exposeHeaders: the web app reads the export's file name and question count from these headers; without this
+  // the browser hides them cross-origin (api.exama.app → app.exama.app) and the app showed "0 questions exported".
+  .use(cors({ origin: config.CORS_ORIGINS.length ? config.CORS_ORIGINS : config.NODE_ENV === 'production' ? [] : '*', exposeHeaders: ['Content-Disposition', 'X-Exama-Export-Count'] }))
   .get('/health', (c) => c.json({ ok: true, ai: aiInfo }))
   .route('/auth', authRoutes)
   // Courses (with their study plans and materials) and exams: confirmed email required once the

@@ -1127,7 +1127,7 @@ const en = {
         questions: 'Questions from this course',
         questionsHint: 'Every status. Drafts go through the review queue; approved questions are in the bank.',
       },
-      export: { title: 'Export', subtitle: 'Approved questions only, as CSV or Moodle GIFT.' },
+      export: { title: 'Export', subtitle: 'Approved questions only, as CSV, Excel, PDF or Moodle GIFT.' },
       members: { title: 'Members', subtitle: 'Who can upload, review and approve in this organization.' },
       item: { back: 'Back' },
     },
@@ -1396,7 +1396,19 @@ const en = {
       formats: {
         csv: 'CSV (spreadsheet)',
         gift: 'GIFT (Moodle)',
+        xlsx: 'Excel (.xlsx)',
+        pdf: 'PDF',
       },
+      pdfMode: 'PDF version',
+      pdfModes: {
+        student: 'Student version',
+        teacher: 'Teacher version',
+      },
+      pdfModeHint: {
+        student: 'Questions and answer choices only. No correct answers, no explanations.',
+        teacher: 'The question paper, then a separate answer key with the correct answers and explanations.',
+      },
+      webOnly: 'Excel and PDF files can be downloaded from the web app (app.exama.app).',
       counting: 'Counting approved questions…',
       approvedCount_one: '{{count}} approved question in this selection',
       approvedCount_other: '{{count}} approved questions in this selection',
