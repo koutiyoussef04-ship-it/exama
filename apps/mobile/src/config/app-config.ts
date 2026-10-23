@@ -4,6 +4,7 @@
  */
 import Constants from 'expo-constants';
 import { parseAppEnv, resolveApiUrl } from './api-url';
+import { SUPPORT_EMAIL } from '../lib/support';
 
 export const appEnv = parseAppEnv(Constants.expoConfig?.extra?.appEnv);
 export const appVersion = Constants.expoConfig?.version ?? '1.0.0';
@@ -20,11 +21,14 @@ export const apiUrlResult = resolveApiUrl({
 
 const opt = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
 
-/** Business details for the legal and support screens. Missing values show as [placeholders]. */
+/**
+ * Business details for the legal and support screens. Missing values show as [placeholders], except the contact
+ * email: Exama's confirmed public address (SUPPORT_EMAIL) unless EXPO_PUBLIC_SUPPORT_EMAIL sets another one.
+ */
 export const legalConfig = {
   company: opt(process.env.EXPO_PUBLIC_COMPANY_NAME),
   address: opt(process.env.EXPO_PUBLIC_COMPANY_ADDRESS),
-  supportEmail: opt(process.env.EXPO_PUBLIC_SUPPORT_EMAIL),
+  supportEmail: opt(process.env.EXPO_PUBLIC_SUPPORT_EMAIL) ?? SUPPORT_EMAIL,
   privacyUrl: opt(process.env.EXPO_PUBLIC_PRIVACY_URL),
   termsUrl: opt(process.env.EXPO_PUBLIC_TERMS_URL),
 };

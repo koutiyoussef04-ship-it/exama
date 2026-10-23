@@ -123,7 +123,8 @@ services:
         value: https://api.exama.app
       # Add later in the dashboard (then redeploy), when you have the real details — the app shows
       # "[placeholders]" on its legal screens until you do:
-      #   EXPO_PUBLIC_COMPANY_NAME, EXPO_PUBLIC_COMPANY_ADDRESS, EXPO_PUBLIC_SUPPORT_EMAIL,
+      #   EXPO_PUBLIC_COMPANY_NAME, EXPO_PUBLIC_COMPANY_ADDRESS, EXPO_PUBLIC_SUPPORT_EMAIL (contact@exama.app;
+      #   the app uses that address when it is not set),
       #   EXPO_PUBLIC_PRIVACY_URL, EXPO_PUBLIC_TERMS_URL
 
   # ---------------------------------------------------------------- Marketing site (static)

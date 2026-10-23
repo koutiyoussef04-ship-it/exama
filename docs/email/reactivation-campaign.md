@@ -33,7 +33,7 @@ The unsubscribe link is the existing signed one-click link (RFC 8058 header plus
 4. Pace: batches of 20, 1.1 s between emails, 60 s between batches; the run stops on HTTP 401/403/429 from Resend or after 3 failures in a row. Daily cap 60 (`--max-per-day`): the Resend free plan allows 100 emails a day for everything, including password-reset and verification emails.
 5. Local evening only: 17:00–21:00 in the student's own time zone (the plan's, else the device's); no known zone: 15:00–19:00 UTC. Run it in the evening and people outside the window wait for the next run.
 
-Environment (Render → exama-api → Environment) before a send: `CAMPAIGN_SENDER_NAME`, `CAMPAIGN_SENDER_ADDRESS`, `CAMPAIGN_SUPPORT_EMAIL` (printed in every email footer; the send refuses without them) and, only for the approved run, `REACTIVATION_CAMPAIGN_SEND=true`. `API_PUBLIC_URL` or Render's `RENDER_EXTERNAL_URL`, `WEB_APP_URL`, `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` already exist.
+Environment (Render → exama-api → Environment) before a send: `CAMPAIGN_SENDER_NAME`, `CAMPAIGN_SENDER_ADDRESS`, `CAMPAIGN_SUPPORT_EMAIL` (`contact@exama.app`; printed in every email footer; the send refuses without them) and, only for the approved run, `REACTIVATION_CAMPAIGN_SEND=true`. `API_PUBLIC_URL` or Render's `RENDER_EXTERNAL_URL`, `WEB_APP_URL`, `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` already exist.
 
 ## Commands
 

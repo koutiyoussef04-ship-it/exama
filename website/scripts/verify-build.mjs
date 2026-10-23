@@ -33,7 +33,7 @@ const PRIMARY = (lang) => (TRIAL ? PLANS(lang) : SIGNUP(lang));
 const ORG_SIGNUP = (lang) => start(lang, { mode: 'signup', account: 'organization' });
 /** …and their "Log in" links: the sign-in form on "Organization account" (separate identity from the student account). */
 const ORG_SIGNIN = (lang) => start(lang, { mode: 'signin', account: 'organization' });
-const DEMO_EMAIL = 'examaweb@gmail.com';
+const DEMO_EMAIL = 'contact@exama.app';
 
 const LANGS = ['en', 'es', 'fr', 'ar'];
 const ORG_LANGS = ['en', 'es', 'fr', 'ar'];
@@ -147,7 +147,7 @@ const ORG_EXPECT = {
     noCheckout: /no online checkout/i,
     notCharged: /nothing is charged automatically/i,
     generations: /\bgenerations?\b/i,
-    emailButton: 'Email examaweb@gmail.com',
+    emailButton: 'Email contact@exama.app',
     faqCount: 8,
     trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
   },
@@ -168,7 +168,7 @@ const ORG_EXPECT = {
     noCheckout: /no hay pago en línea/i,
     notCharged: /no se cobra nada automáticamente/i,
     generations: /\bgeneraciones?\b/i,
-    emailButton: 'Escribir a examaweb@gmail.com',
+    emailButton: 'Escribir a contact@exama.app',
     faqCount: 8,
     trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
   },
@@ -190,7 +190,7 @@ const ORG_EXPECT = {
     noCheckout: /pas de paiement en ligne/i,
     notCharged: /rien n’est facturé automatiquement/i,
     generations: /\bgénérations?\b/i,
-    emailButton: 'Écrire à examaweb@gmail.com',
+    emailButton: 'Écrire à contact@exama.app',
     faqCount: 8,
     trust: ['Données hébergées dans l’UE (Francfort)', 'Seul votre organisme voit ses supports', 'Rien n’est approuvé sans relecteur', 'Export à tout moment : Moodle GIFT ou CSV'],
   },
@@ -213,13 +213,13 @@ const ORG_EXPECT = {
     noCheckout: /لا يوجد دفع عبر الإنترنت/,
     notCharged: /لا تُحتسب أي رسوم تلقائيًا/,
     generations: /توليدات/,
-    emailButton: 'راسلنا على examaweb@gmail.com',
+    emailButton: 'راسلنا على contact@exama.app',
     faqCount: 8,
     trust: ['تُخزَّن البيانات في الاتحاد الأوروبي (فرانكفورت)', 'لا يرى موادَ مؤسستك سوى أعضائها', 'لا يُعتمد أي سؤال دون مراجع', 'التصدير في أي وقت: Moodle GIFT أو CSV'],
   },
 };
 /** Latin-script words allowed on the Arabic organizations pages (product names, formats, addresses); anything else is untranslated text. */
-const AR_LATIN_OK = new Set(['Exama', 'Moodle', 'GIFT', 'CSV', 'PDF', 'PowerPoint', 'pptx', 'app', 'exama', 'examaweb', 'gmail', 'com', 'Anthropic', 'Esencial', 'Profesional', 'Centro']);
+const AR_LATIN_OK = new Set(['Exama', 'Moodle', 'GIFT', 'CSV', 'PDF', 'PowerPoint', 'pptx', 'app', 'exama', 'contact', 'Anthropic', 'Esencial', 'Profesional', 'Centro']);
 /** Sales claims the organizations pages must never make: online purchase, guarantees, time savings, customers. */
 const ORG_FORBIDDEN = /(buy now|(?<!no online )checkout|pay online|comprar ahora|pago en línea disponible|acheter maintenant|paiement en ligne disponible|garanti|اشترِ الآن|اشتر الآن|ضمان|نضمن|عملاؤنا|عملائنا|دراسة حالة|يثق بنا|guarantee|garantiza|garantía|saves? (you )?(up to )?\d+\s*(hours|hrs|minutes|days|weeks)|ahorra(n|s)? (hasta )?\d+ (horas|minutos|días|semanas)|hours? (saved|a week)|\d+\s*%\s*(faster|más rápido|less time|menos tiempo)|trusted by|our customers|nuestros clientes|nos clients|clients?\b|clientes|case stud|caso de éxito|étude de cas|économisez \d+|FUNDAE|bonificad|OPCO|CPF)/i;
 

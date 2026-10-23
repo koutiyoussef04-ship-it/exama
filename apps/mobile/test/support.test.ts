@@ -1,9 +1,9 @@
 /**
- * Support: the screen shows examaweb@gmail.com clearly, a button opens mailto:, and the address stays
+ * Support: the screen shows contact@exama.app (Exama's public contact address) clearly, a button opens mailto:, and the address stays
  * visible and copyable (selectable text; a Copy button on the web) when no email app is available.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import ar from '../src/i18n/locales/ar';
 import en from '../src/i18n/locales/en';
@@ -14,12 +14,23 @@ import { copyText, SUPPORT_EMAIL, supportMailto } from '../src/lib/support';
 const src = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
 
 test('the support address', () => {
-  assert.equal(SUPPORT_EMAIL, 'examaweb@gmail.com');
+  assert.equal(SUPPORT_EMAIL, 'contact@exama.app');
+});
+
+test('the legal screens show the same contact address unless EXPO_PUBLIC_SUPPORT_EMAIL sets another one', () => {
+  assert.match(src('config/app-config.ts'), /supportEmail: opt\(process\.env\.EXPO_PUBLIC_SUPPORT_EMAIL\) \?\? SUPPORT_EMAIL,/);
+  assert.match(src('lib/org-plans.ts'), /email: string = SUPPORT_EMAIL/, 'plan requests from Account go to the same address');
+  for (const dir of ['app', 'components', 'lib', 'config', 'i18n']) {
+    for (const f of readdirSync(new URL(`../src/${dir}`, import.meta.url), { recursive: true }) as string[]) {
+      if (!/\.(ts|tsx)$/.test(f)) continue;
+      assert.doesNotMatch(src(`${dir}/${f}`), /examaweb|@gmail\.com/i, `${dir}/${f} has no old address`);
+    }
+  }
 });
 
 test('mailto: opens the address with only a subject prefilled (no account or device details)', () => {
-  assert.equal(supportMailto('Exama support (v1.2.3)'), 'mailto:examaweb@gmail.com?subject=Exama%20support%20(v1.2.3)');
-  assert.equal(supportMailto('دعم Exama'), `mailto:examaweb@gmail.com?subject=${encodeURIComponent('دعم Exama')}`);
+  assert.equal(supportMailto('Exama support (v1.2.3)'), 'mailto:contact@exama.app?subject=Exama%20support%20(v1.2.3)');
+  assert.equal(supportMailto('دعم Exama'), `mailto:contact@exama.app?subject=${encodeURIComponent('دعم Exama')}`);
   assert.doesNotMatch(supportMailto('x'), /body=|cc=|bcc=/);
 });
 
@@ -31,7 +42,7 @@ test('copy: uses the browser clipboard when there is one, and reports failure ot
     const written: string[] = [];
     setNavigator({ clipboard: { writeText: async (t: string) => void written.push(t) } });
     assert.equal(await copyText(SUPPORT_EMAIL), true);
-    assert.deepEqual(written, ['examaweb@gmail.com']);
+    assert.deepEqual(written, ['contact@exama.app']);
     setNavigator({ clipboard: { writeText: async () => Promise.reject(new Error('NotAllowedError')) } });
     assert.equal(await copyText(SUPPORT_EMAIL), false, 'permission refused');
     setNavigator({});

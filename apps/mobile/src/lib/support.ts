@@ -1,9 +1,10 @@
 /**
- * Support contact: one email address, shown on the Support screen and opened with mailto:.
+ * Support contact: one email address (Exama's public contact address), shown on the Support screen and opened
+ * with mailto:, and used for plan requests from an organization's Account screen.
  * No ticket system and no extra service — the address is always visible and copyable, so it also
  * works on a device with no email app.
  */
-export const SUPPORT_EMAIL = 'examaweb@gmail.com';
+export const SUPPORT_EMAIL = 'contact@exama.app';
 
 /** mailto: link for the Support screen. Only the subject is prefilled (no account or device details). */
 export function supportMailto(subject: string, email: string = SUPPORT_EMAIL): string {

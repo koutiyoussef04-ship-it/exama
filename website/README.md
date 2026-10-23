@@ -181,8 +181,8 @@ The wordmark is rendered as text, exactly like in the app. `public/og-image.png`
    `[bracketed]` items with a lawyer (`docs/legal/open-items.md`), set `LEGAL_IS_DRAFT = false` and export
    again — indexing and the sitemap follow automatically. App Store Connect and Google Play need these URLs
    (`docs/release/eas-build.md` points `EXPO_PUBLIC_PRIVACY_URL` / `EXPO_PUBLIC_TERMS_URL` at them).
-2. **Support contact.** Set `site.legal.supportEmail` in `src/config/site.ts`; `/support` shows it
-   automatically. No company name, address or email is invented anywhere on the site.
+2. **Support contact.** `site.legal.supportEmail` in `src/config/site.ts` is `contact@exama.app`; `/support`,
+   `/privacy` and `/terms` show it. No company name or address is invented anywhere on the site.
 3. **Real screenshots** (see above).
 4. **The trial only when web billing is live.** Build with `PUBLIC_WEB_CHECKOUT_AVAILABLE=true` only after Stripe
    is configured in production (`STRIPE_ENABLED=true`, Prices, webhook, Customer Portal —

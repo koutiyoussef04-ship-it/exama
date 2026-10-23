@@ -207,7 +207,7 @@ export const enOrg: OrgCopy = {
     intro: 'Tell us about your organization and we will reply by email to arrange a walkthrough of the workspace, answer your questions or set up a plan.',
     includeTitle: 'Helpful to include',
     include: ['Your organization and what it teaches (university or school courses, professional training, employee training, exam preparation…)', 'How many courses or modules you would start with, and in what format', 'How many people would upload, draft and review questions', 'Which plan you are considering, or what you would need from Centro'],
-    emailButton: 'Email examaweb@gmail.com',
+    emailButton: 'Email contact@exama.app',
     emailHow: 'The button opens your email app with a pre-filled message. If it does not, write to the address below.',
     addressLead: 'Our address for organizations:',
     subject: 'Exama for organizations — demo request',
