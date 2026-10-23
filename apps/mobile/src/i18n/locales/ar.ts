@@ -1324,7 +1324,7 @@ const ar: LocaleDict = {
         questions: 'أسئلة هذه الدورة',
         questionsHint: 'بكل الحالات. تمر المسودات بقائمة المراجعة؛ والأسئلة المعتمدة في البنك.',
       },
-      export: { title: 'التصدير', subtitle: 'الأسئلة المعتمدة فقط، بصيغة CSV أو GIFT لموودل.' },
+      export: { title: 'التصدير', subtitle: 'الأسئلة المعتمدة فقط، بصيغة CSV أو Excel أو PDF أو GIFT لـ Moodle.' },
       members: { title: 'الأعضاء', subtitle: 'من يستطيع الرفع والمراجعة والاعتماد في هذه المؤسسة.' },
       item: { back: 'رجوع' },
     },
@@ -1617,7 +1617,19 @@ const ar: LocaleDict = {
       formats: {
         csv: 'CSV (جدول بيانات)',
         gift: 'GIFT (Moodle)',
+        xlsx: 'Excel ‏(.xlsx)',
+        pdf: 'PDF',
       },
+      pdfMode: 'نسخة PDF',
+      pdfModes: {
+        student: 'نسخة الطلاب',
+        teacher: 'نسخة المعلمين',
+      },
+      pdfModeHint: {
+        student: 'الأسئلة وخيارات الإجابة فقط، دون إجابات صحيحة ودون شرح.',
+        teacher: 'ورقة الأسئلة، ثم مفتاح إجابات منفصل يتضمن الإجابات الصحيحة والشرح.',
+      },
+      webOnly: 'تُنزَّل ملفات Excel وPDF من تطبيق الويب (app.exama.app).',
       counting: 'جارٍ عدّ الأسئلة المعتمدة…',
       approvedCount_zero: 'لا أسئلة معتمدة في هذا التحديد',
       approvedCount_one: 'سؤال معتمد واحد في هذا التحديد',

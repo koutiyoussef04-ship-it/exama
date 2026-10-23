@@ -6,7 +6,7 @@
  * version and sends the item back to `draft`; every action is recorded as an event.
  */
 import { z } from 'zod';
-import { aiLanguageSchema } from './languages';
+import { aiLanguageSchema, languageSchema } from './languages';
 
 export const BANK_ITEM_STATUSES = ['draft', 'approved', 'rejected', 'retired'] as const;
 export type BankItemStatus = (typeof BANK_ITEM_STATUSES)[number];
@@ -87,12 +87,27 @@ export const listBankItemsSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-export const EXPORT_FORMATS = ['csv', 'gift'] as const;
+/** Export formats: text (csv, gift) and binary (xlsx, pdf). Every format contains approved questions only. */
+export const EXPORT_FORMATS = ['csv', 'gift', 'xlsx', 'pdf'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+/** Formats the app can show as text to copy (the native apps); xlsx and pdf are files only. */
+export const TEXT_EXPORT_FORMATS = ['csv', 'gift'] as const satisfies readonly ExportFormat[];
+export const isTextExportFormat = (f: ExportFormat): f is 'csv' | 'gift' => f === 'csv' || f === 'gift';
+/**
+ * PDF only. `student`: questions and answer choices, no correct answers or explanations (the default, so an export
+ * never discloses answers by accident). `teacher`: the same paper followed by a separate answer key with the
+ * explanations. The server decides what goes in from this value; the app never receives answers it then hides.
+ */
+export const PDF_MODES = ['student', 'teacher'] as const;
+export type PdfMode = (typeof PDF_MODES)[number];
 export const exportQuerySchema = z.object({
   format: z.enum(EXPORT_FORMATS),
   documentId: z.uuid().optional(),
   topic: z.string().trim().min(1).max(200).optional(),
+  /** PDF only (ignored by the other formats). */
+  mode: z.enum(PDF_MODES).default('student'),
+  /** PDF only: the language of the fixed labels (title, "Answer key"…); questions keep their own language. */
+  language: languageSchema.optional(),
 });
 
 /**

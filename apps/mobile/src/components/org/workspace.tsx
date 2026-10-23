@@ -424,13 +424,14 @@ export function FilterSelect<T extends string>({ label, value, options, onChange
 }
 
 /** Compact pill group for two or three mutually exclusive choices (e.g. all / needs attention / no issues). */
-export function Segmented<T extends string>({ options, value, onChange, label }: { options: Option<T>[]; value: T; onChange: (v: T) => void; label: string }) {
+/** `wrap`: lets the options flow onto a second row on narrow screens (four or more options). */
+export function Segmented<T extends string>({ options, value, onChange, label, wrap }: { options: Option<T>[]; value: T; onChange: (v: T) => void; label: string; wrap?: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden', alignSelf: 'flex-start' }} accessibilityRole="radiogroup" accessibilityLabel={label}>
+    <View style={{ flexDirection: 'row', flexWrap: wrap ? 'wrap' : 'nowrap', borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden', alignSelf: 'flex-start', maxWidth: '100%' }} accessibilityRole="radiogroup" accessibilityLabel={label}>
       {options.map((o, i) => {
         const selected = o.value === value;
         return (
-          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: selected }} aria-checked={selected} onPress={() => onChange(o.value)} style={{ paddingHorizontal: space(3), minHeight: 36, justifyContent: 'center', backgroundColor: selected ? colors.primarySoft : 'transparent', borderLeftWidth: i === 0 ? 0 : 1, borderLeftColor: colors.border }}>
+          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: selected }} aria-checked={selected} onPress={() => onChange(o.value)} style={{ paddingHorizontal: space(3), minHeight: 36, justifyContent: 'center', backgroundColor: selected ? colors.primarySoft : 'transparent', borderLeftWidth: i === 0 ? 0 : 1, borderLeftColor: colors.border, ...(wrap && { borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: -1 }) }}>
             <Text style={{ color: selected ? colors.primary : colors.muted, fontSize: 13, fontWeight: '600' }}>{o.label}</Text>
           </Pressable>
         );

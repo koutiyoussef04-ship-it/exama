@@ -56,6 +56,7 @@ import type {
   OrganizationMember,
   OrganizationMembershipSummary,
   OrganizationOverview,
+  PdfMode,
   TopicCount,
   UpdateBankItemInput,
   UpdateMemberInput,
@@ -126,6 +127,10 @@ const adminQuery = (q: Record<string, string | number | undefined>) => {
   const s = p.toString();
   return s ? `?${s}` : '';
 };
+
+/** Fallbacks when the file name header is missing; the API's own names carry the date. */
+const EXPORT_EXTENSIONS: Record<ExportFormat, string> = { csv: 'csv', gift: 'txt', xlsx: 'xlsx', pdf: 'pdf' };
+const EXPORT_CONTENT_TYPES: Record<ExportFormat, string> = { csv: 'text/csv;charset=utf-8', gift: 'text/plain;charset=utf-8', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf: 'application/pdf' };
 
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
@@ -353,8 +358,13 @@ export const api = {
     post<BankItemDetail>(`/orgs/${orgId}/items/${id}/${action}`, { note }),
   orgDeleteItem: (orgId: string, id: string) => request<void>(`/orgs/${orgId}/items/${id}`, { method: 'DELETE' }),
   orgTopics: (orgId: string, documentId?: string) => request<TopicCount[]>(`/orgs/${orgId}/topics${adminQuery({ documentId })}`),
-  /** The export file as text (the caller saves or shares it). */
-  orgExport: async (orgId: string, format: ExportFormat, query: { documentId?: string; topic?: string } = {}): Promise<{ text: string; filename: string; count: number }> => {
+  /**
+   * The export file as bytes (the web app downloads them; the native apps show the text formats to copy). The bytes
+   * are kept as sent — the CSV's UTF-8 byte-order mark included, which is what makes Excel read accents correctly.
+   * The file name and the question count come from response headers the API exposes cross-origin
+   * (Content-Disposition, X-Exama-Export-Count).
+   */
+  orgExport: async (orgId: string, format: ExportFormat, query: { documentId?: string; topic?: string; mode?: PdfMode; language?: Language } = {}): Promise<{ bytes: Uint8Array; contentType: string; filename: string; count: number }> => {
     if (!API_URL) throw new ApiError(0, API_CONFIG_ERROR ?? 'API not configured', 'app_misconfigured');
     const res = await fetch(`${API_URL}/orgs/${orgId}/export${adminQuery({ format, ...query })}`, { headers: headersFor() });
     if (res.status === 401 && authToken) onUnauthorized?.();
@@ -363,7 +373,8 @@ export const api = {
       throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.code, data);
     }
     const disposition = res.headers.get('content-disposition') ?? '';
-    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `exama-questions.${format === 'csv' ? 'csv' : 'txt'}`;
-    return { text: await res.text(), filename, count: Number(res.headers.get('x-exama-export-count') ?? 0) };
+    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `exama-questions.${EXPORT_EXTENSIONS[format]}`;
+    const count = Number(res.headers.get('x-exama-export-count'));
+    return { bytes: new Uint8Array(await res.arrayBuffer()), contentType: res.headers.get('content-type') ?? EXPORT_CONTENT_TYPES[format], filename, count: Number.isFinite(count) ? count : 0 };
   },
 };
