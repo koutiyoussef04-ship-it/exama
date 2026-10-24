@@ -116,6 +116,8 @@ function languageRule(language: string, what: string): string {
  */
 export const QUESTIONS_PER_CALL = 6;
 export const QUESTION_REPLY_TOKENS = 900;
+/** Per-question budget when a batch has already proved verbose and is retried one question at a time (partial mode). */
+export const QUESTION_REPLY_TOKENS_ROOMY = 1800;
 export const FLASHCARDS_PER_CALL = 11;
 export const FLASHCARD_REPLY_TOKENS = 450;
 const REPLY_OVERHEAD_TOKENS = 600;
@@ -141,25 +143,41 @@ const rotate = <T>(items: T[], part: number, parts: number): T[] => {
   return [...items.slice(k), ...items.slice(0, k)];
 };
 
+/** One request of a batched call: `roomy` = a larger per-item reply budget (a retry after a cut-off reply). */
+type BatchRun<T> = (count: number, part: number, parts: number, roomy: boolean) => Promise<T[]>;
+
 /**
- * Generates `count` items as parallel batches of at most `perCall`. A batch cut off by the response
- * limit is split in two halves, each requested once (the same oversized request is never repeated).
- * If any batch still fails, the whole call fails: callers never get a silently partial result.
- * Malformed replies are retried once per batch (in `json`), so one bad batch never re-runs the others.
+ * Generates `count` items as parallel batches of at most `perCall`. Malformed replies are retried once per
+ * batch (in `json`), so one bad batch never re-runs the others.
+ *
+ * Default (student exams and decks, which need an exact count): a batch cut off by the response limit is
+ * split in two halves, each requested once (the same oversized request is never repeated). If any batch
+ * still fails, the whole call fails: callers never get a silently partial result.
+ *
+ * `partial` (an organization's question bank, where fewer drafts than asked is a normal outcome): a cut-off
+ * batch is retried as single-item requests in parallel, each with a roomy budget and its own share of the
+ * material; whatever fails after that is dropped, and the call fails only if nothing at all came back.
  */
-async function inBatches<T>(count: number, perCall: number, run: (count: number, part: number, parts: number) => Promise<T[]>): Promise<T[]> {
+async function inBatches<T>(count: number, perCall: number, run: BatchRun<T>, options: { partial?: boolean } = {}): Promise<T[]> {
   const sizes = batchSizes(count, perCall);
+  const parts = sizes.length;
   const batch = async (n: number, part: number): Promise<T[]> => {
     try {
-      return await run(n, part, sizes.length);
+      return await run(n, part, parts, false);
     } catch (err) {
       if (!(err instanceof AIError && err.truncated) || n < 2) throw err;
+      if (options.partial) {
+        console.warn(`[ai] a reply for ${n} items hit the response limit: retrying as ${n} single-item requests`);
+        // Finer parts (part·n + i of parts·n) give each single request its own topics/passage order, so they don't repeat each other.
+        return settleSome(Array.from({ length: n }, (_, i) => run(1, part * n + i, parts * n, true)));
+      }
       console.warn(`[ai] a reply for ${n} items hit the response limit: retrying as two smaller requests`);
       const half = Math.ceil(n / 2);
-      return settleAll([run(half, part, sizes.length), run(n - half, part, sizes.length)]);
+      return settleAll([run(half, part, parts, false), run(n - half, part, parts, false)]);
     }
   };
-  return settleAll(sizes.map((n, part) => batch(n, part)));
+  const batches = sizes.map((n, part) => batch(n, part));
+  return options.partial ? settleSome(batches) : settleAll(batches);
 }
 
 /** Waits for every batch (no request is left running), then returns all items or throws the first failure. */
@@ -168,6 +186,19 @@ async function settleAll<T>(batches: Promise<T[]>[]): Promise<T[]> {
   const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
   if (failed) throw failed.reason;
   return results.flatMap((r) => (r as PromiseFulfilledResult<T[]>).value);
+}
+
+/** Waits for every batch, then returns what succeeded; throws the first failure only when every batch failed. */
+async function settleSome<T>(batches: Promise<T[]>[]): Promise<T[]> {
+  const results = await Promise.allSettled(batches);
+  const ok = results.filter((r): r is PromiseFulfilledResult<T[]> => r.status === 'fulfilled');
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (ok.length === 0 && failed.length > 0) throw failed[0].reason;
+  if (failed.length > 0) {
+    const why = failed.map((f) => (f.reason instanceof AIError ? `${f.reason.code}${f.reason.truncated ? ' (cut off)' : ''}` : 'error')).join(', ');
+    console.warn(`[ai] kept ${ok.length} of ${results.length} requests; dropped: ${why}`);
+  }
+  return ok.flatMap((r) => r.value);
 }
 
 /** Tells one batch which part of a longer exam or deck it writes, so batches don't repeat each other. */
@@ -221,13 +252,18 @@ ${input.avoid.map((p) => `- ${p}`).join('\n')}
 `
       : '';
 
-    const questions = await inBatches(input.count, QUESTIONS_PER_CALL, async (count, part, parts) => {
+    const questions = await inBatches(
+      input.count,
+      QUESTIONS_PER_CALL,
+      async (count, part, parts, roomy) => {
       const own = topicsForPart(allTopics, part, parts);
       const excerpts = own.length < allTopics.length ? input.excerpts : rotate(input.excerpts, part, parts);
       const prompt = `Write exactly ${count} exam questions that test understanding of the course material below.
 ${followUp}${avoid}${partNote('exam', part, parts, own.length < allTopics.length)}
 Requirements:
 - Every question must be answerable from the material alone. Do not ask about anything the material does not state.
+- Ask about the subject the material teaches. Do not ask about the document itself or its logistics (the order or numbering of sections or modules, schedules, dates, durations, prerequisites, prices, places, contact details, names of trainers or how the course is assessed), unless the material teaches nothing else.
+- Keep every field short: "prompt" at most 40 words, each option at most 20 words, "explanation" at most 50 words. Never copy whole tables, lists, code or formulas into a field.
 - "topic": one of exactly these names, copied exactly (never translated): ${own.map((t) => JSON.stringify(t)).join(', ')}.
 ${
         input.mcqOnly
@@ -244,8 +280,10 @@ Return JSON: {"questions": [{"type","topic","prompt","options","correctAnswer","
 <material>
 ${excerpts.join('\n\n---\n\n')}
 </material>`;
-      return (await this.json(prompt, questionsSchema, replyBudget(count, QUESTION_REPLY_TOKENS))).questions;
-    });
+      return (await this.json(prompt, questionsSchema, replyBudget(count, roomy ? QUESTION_REPLY_TOKENS_ROOMY : QUESTION_REPLY_TOKENS))).questions;
+      },
+      { partial: input.allowPartial },
+    );
     return questions.map((q) => ({ ...q, options: q.type === 'mcq' ? (q.options ?? null) : null }));
   }
 
@@ -375,8 +413,10 @@ ${excerpts.join('\n\n---\n\n')}
     });
   }
 
-  async verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]> {
+  async verifyQuestions(items: QuestionToVerify[], options: { language?: string } = {}): Promise<QuestionVerification[]> {
     if (items.length === 0) return [];
+    // The note is read by the organization's reviewers: same language as the questions, never the prompt's English.
+    const noteLanguage = options.language ? `\n- ${languageRule(options.language, '"note"')} Quotes from the passage stay in the passage's language.` : '';
     const blocks = items
       .map(
         (it) => `<item id="${it.id}">
@@ -394,7 +434,7 @@ For each item decide, using ONLY the passage (no outside knowledge):
 - "supported": the passage states what the keyed answer says, and for multiple choice exactly one option is supported.
 - "partial": the passage supports the keyed answer only partly, or the explanation adds a claim the passage does not make.
 - "unsupported": the passage does not state the keyed answer, contradicts it, or supports another option too.
-- "note": one sentence for a human reviewer saying why, quoting the passage where useful.
+- "note": one sentence for a human reviewer saying why, quoting the passage where useful.${noteLanguage}
 
 Return JSON: {"verdicts": [{"id","verdict","note"}]} with exactly one entry for each item id.
 

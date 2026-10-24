@@ -52,6 +52,11 @@ export type GenerateQuestionsInput = {
   avoid?: string[];
   /** Organizations: multiple-choice only (4 options), no short answers. Default: the usual 60/40 mix. */
   mcqOnly?: boolean;
+  /**
+   * Organizations' question bank: return what succeeded when some requests fail or stay cut off (fewer drafts
+   * than asked is normal there). Default false: a student exam is all or nothing.
+   */
+  allowPartial?: boolean;
 };
 
 /** A generated question plus the one passage it was located in, for the verifier. */
@@ -153,5 +158,5 @@ export interface StudyAI {
    * Organizations' question bank: does each passage really support the keyed answer (and only it)?
    * Advisory — the result is shown to the reviewer, it never approves anything.
    */
-  verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]>;
+  verifyQuestions(items: QuestionToVerify[], options?: { language?: string }): Promise<QuestionVerification[]>;
 }

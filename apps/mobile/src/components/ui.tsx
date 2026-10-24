@@ -187,13 +187,16 @@ export const scoreColor = (v: number) => (v >= 0.7 ? colors.success : v >= 0.4 ?
 export const scoreTone = (v: number): BadgeTone => (v >= 0.7 ? 'success' : v >= 0.4 ? 'warning' : 'danger');
 export const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-/** Error message in the user's language (API errors are translated from their codes). */
-export function ErrorText({ error }: { error: unknown }) {
+/**
+ * Error message in the user's language (API errors are translated from their codes). `format` replaces the
+ * generic wording for one action (e.g. a failed draft generation), keeping the same look.
+ */
+export function ErrorText({ error, format = errorMessage }: { error: unknown; format?: (error: unknown) => string }) {
   useTranslation(); // re-render on language change
   if (!error) return null;
   return (
     <Text style={styles.errorText} accessibilityRole="alert">
-      {errorMessage(error)}
+      {format(error)}
     </Text>
   );
 }

@@ -437,6 +437,90 @@ test('generation rules: a legacy academy is multiple-choice only; unknown topic 
   }
 });
 
+test('generation fixes (outreach, 24 Oct 2026): partial results kept, a total failure is a readable 422, "multiple choice only" enforced, verifier note language, symbol-font bullets', async () => {
+  const admin = await orgSignup('genfix');
+  const orgId = orgOf(admin);
+  const doc = await uploadCourse(admin.token, orgId);
+  const usage = async () => (await call<OrganizationOverview>(`/orgs/${orgId}`, { token: admin.token })).body.usage.itemsThisMonth;
+  const original = studyAI.generateQuestions.bind(studyAI);
+  const originalVerify = studyAI.verifyQuestions.bind(studyAI);
+  try {
+    // The bank asks the engine for partial results (a cut-off batch no longer fails everything), and the verifier
+    // gets the generation language for its reviewer note.
+    let seenPartial: boolean | undefined;
+    let seenLanguage: string | undefined;
+    studyAI.generateQuestions = async (input) => ((seenPartial = input.allowPartial), original(input));
+    studyAI.verifyQuestions = async (items, options) => ((seenLanguage = options?.language), originalVerify(items, options));
+    const g = await generate(admin.token, orgId, doc.id, { count: 2, language: 'fr' });
+    assert.equal(g.status, 201, JSON.stringify(g.body));
+    assert.equal(seenPartial, true);
+    assert.equal(seenLanguage, 'fr');
+
+    // "Multiple choice only" is enforced on the server: short answers the model writes anyway are discarded.
+    studyAI.generateQuestions = async (input) => {
+      const qs = await original(input);
+      return [...qs.map((q) => ({ ...q, type: 'short_answer' as const, options: null, prompt: `${q.prompt} (short)` })), ...qs];
+    };
+    const mcq = await generate(admin.token, orgId, doc.id, { count: 3, questionTypes: 'mcq' });
+    assert.equal(mcq.status, 201, JSON.stringify(mcq.body));
+    assert.ok(mcq.body.items.length > 0);
+    assert.ok(mcq.body.items.every((i) => i.type === 'mcq' && i.options?.length === 4), 'no short answer when multiple choice only is asked');
+
+    // The production failure: every request cut off → 422 generation_failed (readable by the app, never a 502 that
+    // the browser showed as "could not send this file"), nothing charged.
+    const before = await usage();
+    studyAI.generateQuestions = async () => {
+      throw new AIError('bad_output', 'Response truncated at max_tokens=3300', { truncated: true });
+    };
+    const failed = await generate(admin.token, orgId, doc.id, { count: 3 });
+    assert.equal(failed.status, 422);
+    assert.equal((failed.body as unknown as { code: string }).code, 'generation_failed');
+    assert.equal(await usage(), before, 'nothing delivered, nothing charged');
+
+    // First round partly done, the top-up fails: the drafts already written are kept, not thrown away.
+    let round = 0;
+    studyAI.generateQuestions = async (input) => {
+      if (round++ === 0) return original({ ...input, count: 1 });
+      throw new AIError('bad_output', 'cut off again', { truncated: true });
+    };
+    const kept = await generate(admin.token, orgId, doc.id, { count: 3 });
+    assert.equal(kept.status, 201, JSON.stringify(kept.body));
+    assert.ok(kept.body.items.length >= 1 && kept.body.items.length < 3);
+    assert.equal(await usage(), before + kept.body.items.length, 'charged for what was kept');
+  } finally {
+    studyAI.generateQuestions = original;
+    studyAI.verifyQuestions = originalVerify;
+  }
+
+  // Symbol-font bullets (Private Use Area, e.g. U+F0B7) are shown as "•", not "□", in passages already stored;
+  // the replacement is one-for-one, so the quote highlight still points at the same characters.
+  const { chunkHash } = await import('../src/services/sources/locate.js');
+  const item = (await call<BankItemList>(`/orgs/${orgId}/items?documentId=${doc.id}&limit=50`, { token: admin.token })).body.items.find((i) => i.sources[0]?.located && (i.sources[0].quoteStart ?? 0) > 0);
+  assert.ok(item, 'a located draft');
+  const src = item.sources[0];
+  const [chunk] = await sql<{ content: string }[]>`select content from document_chunks where id = ${src.chunkId}`;
+  const withBullet = '' + chunk.content.slice(1);
+  await sql`update document_chunks set content = ${withBullet} where id = ${src.chunkId}`;
+  await sql`update question_sources set chunk_hash = ${chunkHash(withBullet)} where chunk_id = ${src.chunkId}`;
+  const detail = await call<BankItemDetail>(`/orgs/${orgId}/items/${item.id}`, { token: admin.token });
+  const passage = detail.body.passages.find((p) => p.sourceId === src.id);
+  assert.ok(passage, 'the passage is still shown');
+  assert.equal(passage.text[0], '•');
+  assert.ok(!/[-]/.test(passage.text));
+  assert.equal(passage.text.length, withBullet.length, 'one-for-one');
+  assert.equal(passage.quoteStart, src.quoteStart, 'the highlight still matches');
+});
+
+test('symbol-font bullets: normalised one-for-one at extraction and display', async () => {
+  const { normalizeGlyphs } = await import('../src/lib/glyphs.js');
+  assert.equal(normalizeGlyphs(' Saisir une formule\n Recopier'), '• Saisir une formule\n• Recopier');
+  assert.equal(normalizeGlyphs('Critère 4 – é ü ç ñ « » ’ أ 中'), 'Critère 4 – é ü ç ñ « » ’ أ 中', 'ordinary characters untouched');
+  const s = 'abc';
+  assert.equal(normalizeGlyphs(s).length, s.length);
+  const src = await readFile(new URL('../src/lib/document-text.ts', import.meta.url), 'utf8');
+  assert.match(src, /return \(await extractRawPages\(bytes, format\)\)\.map\(normalizeGlyphs\);/, 'every PDF and PowerPoint page goes through it');
+});
+
 test('isolation: organization B cannot read, write, download or delete anything of organization A, even with valid ids', async () => {
   const a = await orgSignup('isoA');
   const b = await orgSignup('isoB');

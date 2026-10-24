@@ -22,6 +22,7 @@ import {
   FLASHCARDS_PER_CALL,
   LLMStudyAI,
   QUESTION_REPLY_TOKENS,
+  QUESTION_REPLY_TOKENS_ROOMY,
   QUESTIONS_PER_CALL,
   replyBudget,
   topicsForPart,
@@ -191,6 +192,70 @@ test('partial failure: one batch fails, the call fails — the successful batche
     await assert.rejects(ai.generateQuestions(arExam(22)), (err: unknown) => err instanceof AIError && err.code === 'unavailable');
     assert.equal(requests.length, 4, 'each batch requested once');
   });
+});
+
+// ---------------------------------------------------------------- partial mode (organizations' question bank)
+
+test('partial mode: a cut-off batch is retried as single questions with a roomy budget, and every question comes back', async () => {
+  // 1,100 tokens a question: a batch of 6 needs 6,600 > 6,000 and is cut off. Partial mode goes straight to single
+  // questions (no halves, which were cut off too in production) with 600 + 1,800 = 2,400 tokens each: they fit.
+  await withModel({ tokensPerItem: 1100, item: arQuestion }, async (ai, requests) => {
+    const out = await ai.generateQuestions({ ...arExam(12), allowPartial: true });
+    assert.equal(out.length, 12);
+    const counts = requests.map((r) => countOf(promptOf(r)));
+    assert.deepEqual(counts.slice(0, 2), [6, 6], 'two batches of 6, both cut off');
+    assert.deepEqual(counts.slice(2), Array(12).fill(1), 'then 12 single-question requests');
+    for (const r of requests.slice(2)) assert.equal(r.body.max_tokens, replyBudget(1, QUESTION_REPLY_TOKENS_ROOMY));
+    assert.equal(new Set(requests.slice(2).map((r) => promptOf(r))).size, 12, 'each single request has its own part, so they do not repeat each other');
+  });
+});
+
+test('partial mode: questions that stay cut off are dropped, the rest is returned (the production failure no longer fails the whole request)', async () => {
+  // 22 questions = batches 6, 6, 5, 5. Batch 2 is always cut off; of its 6 single-question retries (parts 6–11 of 24),
+  // two are cut off too. Before, that one batch failed the whole generation.
+  const cut = { text: '{"questions": [', stopReason: 'max_tokens' };
+  const stubborn = (req: FakeRequest) => (/This is part (2 of 4|7 of 24|9 of 24) of the exam/.test(promptOf(req)) ? cut : null);
+  await withModel({ tokensPerItem: 300, item: arQuestion, override: stubborn }, async (ai, requests) => {
+    const out = await ai.generateQuestions({ ...arExam(22), allowPartial: true });
+    assert.equal(out.length, 20, 'everything except the two questions that stayed cut off');
+    assert.equal(requests.length, 4 + 6, 'four batches, then six single-question retries for the cut-off one; nothing else');
+  });
+});
+
+test('partial mode: one failing batch no longer fails the call; if every batch fails, the error is still raised', async () => {
+  const failSecond = (req: FakeRequest) => (/This is part 2 of/.test(promptOf(req)) ? ({ status: 500, errorType: 'api_error' } as FakeReply) : null);
+  await withModel({ tokensPerItem: 300, item: arQuestion, override: failSecond }, async (ai, requests) => {
+    const out = await ai.generateQuestions({ ...arExam(22), allowPartial: true });
+    assert.equal(out.length, 16, '4 batches (6, 6, 5, 5): the second (6) is dropped');
+    assert.equal(requests.length, 4, 'nothing re-run');
+  });
+  await withModel({ tokensPerItem: 5000, item: arQuestion }, async (ai) => {
+    await assert.rejects(ai.generateQuestions({ ...arExam(12), allowPartial: true }), (err: unknown) => err instanceof AIError && err.code === 'bad_output' && err.truncated);
+  });
+});
+
+test('every exam prompt keeps fields short and asks about the subject, not the document’s logistics', async () => {
+  await withModel({ tokensPerItem: 300, item: arQuestion }, async (ai, requests) => {
+    await ai.generateQuestions(arExam(3));
+    const p = promptOf(requests[0]);
+    assert.match(p, /"prompt" at most 40 words, each option at most 20 words, "explanation" at most 50 words/);
+    assert.match(p, /Never copy whole tables, lists, code or formulas into a field/);
+    assert.match(p, /Do not ask about the document itself or its logistics \(the order or numbering of sections or modules, schedules, dates, durations, prerequisites/);
+  });
+});
+
+test('the verifier writes its reviewer note in the requested language (not in English by default)', async () => {
+  const fake = await startFakeAnthropic(() => ({ text: JSON.stringify({ verdicts: [{ id: '0', verdict: 'supported', note: 'Le passage le dit.' }] }) }));
+  try {
+    const ai = new LLMStudyAI(new AnthropicProvider({ apiKey: KEY, model: 'claude-test', baseURL: fake.url, maxRetries: 0 }));
+    const item = { id: '0', prompt: 'Q ?', options: ['A', 'B', 'C', 'D'], correctAnswer: 'A', explanation: 'E', passage: 'P' };
+    await ai.verifyQuestions([item], { language: 'fr' });
+    assert.match(promptOf(fake.requests[0]), /Output language: write "note" in French \(français\)\./);
+    await ai.verifyQuestions([item]);
+    assert.doesNotMatch(promptOf(fake.requests[1]), /Output language/, 'no language given: prompt unchanged');
+  } finally {
+    await fake.close();
+  }
 });
 
 test('malformed output: only the bad batch is retried once; twice malformed fails the whole call', async () => {

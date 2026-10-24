@@ -39,6 +39,20 @@ export function documentErrorMessage(code: string | null, fallback: string | nul
   return fallback && i18n.language === 'en' ? fallback : t('errors.codes.processing_failed');
 }
 
+/**
+ * A failed draft generation (organization workspace). Never the upload wording: the file is already in and its
+ * topics are extracted, so the message says the generation failed and how to make the next try succeed.
+ * Business errors with their own code (plan, allowance, too little text, rate limit) keep their own message.
+ */
+export function generationErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'generation_failed' || err.code === 'ai_bad_output') return t('org.course.generate.failed');
+    if (err.code === 'ai_rate_limited') return errorMessage(err);
+    if (err.status === 0 || err.status >= 500) return t('org.course.generate.failedServer');
+  }
+  return errorMessage(err);
+}
+
 export function errorMessage(err: unknown): string {
   // The file picker failed, or the app could not prepare/send the file: no server response to take a code from.
   const clientKey = clientFailureMessageKey(err);
