@@ -111,7 +111,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     // (e.g. an unsupported body). Log the real cause and only blame the network when it is one.
     const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     log.error(`[api] ${method} ${path} failed before a response:`, err);
-    const isNetwork = /network request failed|fetch failed|timed? ?out|offline|could not connect|connection/i.test(detail);
+    // Browsers reject with their own wording when no readable response arrives (dropped connection, a proxy's
+    // error page without CORS headers): Chrome "Failed to fetch", Safari "Load failed", Firefox "NetworkError…".
+    const isNetwork = /network request failed|fetch failed|failed to fetch|load failed|networkerror|timed? ?out|offline|could not connect|connection/i.test(detail);
     throw new ApiError(0, detail, isNetwork ? 'network' : 'request_failed');
   }
   if (res.status === 401 && authToken) onUnauthorized?.();

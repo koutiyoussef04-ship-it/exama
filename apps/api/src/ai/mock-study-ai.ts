@@ -160,7 +160,7 @@ export class MockStudyAI implements StudyAI {
   }
 
   /** Deterministic verifier: supported when the keyed answer's words are in the passage, otherwise unsupported. */
-  async verifyQuestions(items: QuestionToVerify[]): Promise<QuestionVerification[]> {
+  async verifyQuestions(items: QuestionToVerify[], _options?: { language?: string }): Promise<QuestionVerification[]> {
     return items.map((it) => {
       const passage = new Set(words(it.passage));
       const key = words(it.correctAnswer).filter((w) => !STOP.has(w));

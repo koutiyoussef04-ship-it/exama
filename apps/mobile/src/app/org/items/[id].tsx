@@ -206,7 +206,12 @@ function Item(ctx: OrgContext) {
               <Badge label={verdictLabel(it.verification.verdict)} tone={VERDICT_TONE[it.verification.verdict]} />
               <Text style={{ color: colors.muted, fontSize: 12 }}>{t('org.item.verification')}</Text>
             </View>
-            {!!it.verification.note && <Body muted style={{ fontSize: 14 }}>{it.verification.note}</Body>}
+            {/* "Not checked" notes are fixed English sentences from the server: show them in the interface language. */}
+            {it.verification.verdict === 'unavailable' ? (
+              <Body muted style={{ fontSize: 14 }}>{t('org.item.verificationUnavailable')}</Body>
+            ) : (
+              !!it.verification.note && <Body muted style={{ fontSize: 14 }}>{it.verification.note}</Body>
+            )}
           </View>
         ) : (
           <Body muted style={{ fontSize: 14 }}>{t('org.item.noVerification')}</Body>

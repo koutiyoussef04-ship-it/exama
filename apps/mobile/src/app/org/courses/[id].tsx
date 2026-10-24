@@ -15,7 +15,7 @@ import { Chips } from '@/components/planner';
 import { Badge, Body, Card, colors, ContentDirection, ErrorState, ErrorText, Field, Loading, SectionLabel, space, WorkingCard } from '@/components/ui';
 import { api } from '@/lib/api';
 import { confirm } from '@/lib/confirm';
-import { documentErrorMessage, isRetryableDocumentError } from '@/lib/errors';
+import { documentErrorMessage, generationErrorMessage, isRetryableDocumentError } from '@/lib/errors';
 import { canEdit } from '@/lib/org';
 import { usePreferences } from '@/lib/preferences';
 
@@ -222,7 +222,7 @@ function GenerateCard({ ctx, courseId, topics, pageCount }: { ctx: OrgContext; c
           <SmallButton title={t('org.dashboard.reviewDrafts')} variant="ghost" onPress={() => router.push({ pathname: '/org/review', params: { orgId: org.id, documentId: courseId } })} style={{ alignSelf: 'flex-start' }} />
         </View>
       )}
-      <ErrorText error={generate.error} />
+      <ErrorText error={generate.error} format={generationErrorMessage} />
     </Card>
   );
 }

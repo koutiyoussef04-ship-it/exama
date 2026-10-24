@@ -14,6 +14,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { ExportFormat, Language, PdfMode } from '@study/shared';
 import { db } from '../../db/client.js';
 import { bankItems, documents, questionSources } from '../../db/schema.js';
+import { normalizeGlyphs } from '../../lib/glyphs.js';
 import { xlsx } from '../../lib/xlsx.js';
 import { renderPdf, type PdfQuestion } from './export-pdf.js';
 
@@ -44,7 +45,7 @@ async function approvedItems(orgId: string, filter: { documentId?: string; topic
   for (const s of sources) if (!byItem.has(s.bankItemId)) byItem.set(s.bankItemId, s);
   return rows.map(({ item, documentTitle }) => {
     const src = byItem.get(item.id);
-    return { ...item, documentTitle, sourceLabel: sourceLabel(documentTitle, src), quote: src?.quote ?? null };
+    return { ...item, documentTitle, sourceLabel: sourceLabel(documentTitle, src), quote: src?.quote != null ? normalizeGlyphs(src.quote) : null };
   });
 }
 

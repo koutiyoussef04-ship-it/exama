@@ -13,6 +13,7 @@ import { db } from '../../db/client.js';
 import { bankItemEvents, bankItemRevisions, bankItems, documentChunks, documents, questionSources, users } from '../../db/schema.js';
 import { HttpError } from '../../lib/errors.js';
 import { getOrgDocument } from '../org-documents.js';
+import { normalizeGlyphs } from '../../lib/glyphs.js';
 import { normalizeText } from '../../lib/grounding.js';
 import { chunkHash } from '../sources/locate.js';
 
@@ -30,7 +31,7 @@ const toSource = (s: SourceRow): BankItem['sources'][number] => ({
   pageEnd: s.pageEnd,
   startSeconds: s.startSeconds,
   endSeconds: s.endSeconds,
-  quote: s.quote,
+  quote: normalizeGlyphs(s.quote),
   quoteStart: s.quoteStart,
   quoteEnd: s.quoteEnd,
   matchScore: s.matchScore,
@@ -157,7 +158,8 @@ async function loadPassages(item: BankItem): Promise<SourcePassage[]> {
     if (text === undefined || chunkHash(text) !== s.chunkHash) continue;
     // Offsets point into the raw chunk text; the quote itself was matched after whitespace/case normalisation.
     const exact = s.quoteStart != null && s.quoteEnd != null && normalizeText(text.slice(s.quoteStart, s.quoteEnd)) === normalizeText(s.quote);
-    out.push({ sourceId: s.id, text, quoteStart: exact ? s.quoteStart : null, quoteEnd: exact ? s.quoteEnd : null, pageStart: s.pageStart, pageEnd: s.pageEnd, startSeconds: s.startSeconds, endSeconds: s.endSeconds });
+    // normalizeGlyphs: courses read before symbol-font bullets were normalised show "•", not "□" (one-for-one: offsets unchanged).
+    out.push({ sourceId: s.id, text: normalizeGlyphs(text), quoteStart: exact ? s.quoteStart : null, quoteEnd: exact ? s.quoteEnd : null, pageStart: s.pageStart, pageEnd: s.pageEnd, startSeconds: s.startSeconds, endSeconds: s.endSeconds });
   }
   return out;
 }

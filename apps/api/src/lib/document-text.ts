@@ -4,6 +4,7 @@
  */
 import { PDF_MIME, PPTX_MIME } from '@study/shared';
 import { HttpError } from './errors.js';
+import { normalizeGlyphs } from './glyphs.js';
 import { extractPdfPages } from './pdf.js';
 import { bufferReader, extractPptxSlides, isPptx, looksLikeOle, looksLikeZip, PptxError } from './pptx.js';
 
@@ -21,8 +22,12 @@ export async function detectDocumentFormat(bytes: Uint8Array): Promise<DocumentF
   throw new HttpError(415, 'Only PDF and PowerPoint (.pptx) files are supported', 'not_pdf');
 }
 
-/** Text per page/slide. Throws a 422 HttpError with a stable code the apps translate. */
+/** Text per page/slide, symbol-font bullets made readable (lib/glyphs.ts). Throws a 422 HttpError with a stable code the apps translate. */
 export async function extractDocumentPages(bytes: Uint8Array, format: DocumentFormat): Promise<string[]> {
+  return (await extractRawPages(bytes, format)).map(normalizeGlyphs);
+}
+
+async function extractRawPages(bytes: Uint8Array, format: DocumentFormat): Promise<string[]> {
   if (format === 'pptx') {
     try {
       return await extractPptxSlides(bufferReader(bytes));

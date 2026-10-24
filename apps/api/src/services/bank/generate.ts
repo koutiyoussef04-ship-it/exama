@@ -100,14 +100,23 @@ export async function generateDraftItems(org: OrgContext, actorUserId: string, d
     const kept: GeneratedQuestion[] = [];
     let generated = 0;
     const generate = async (n: number) => {
+      // allowPartial: requests that fail or stay cut off are dropped instead of failing the whole generation.
       const raw = await withAIUsage({ userId: actorUserId, organizationId: org.id, feature: 'bank_generation' }, () =>
-        studyAI.generateQuestions({ excerpts, topics: doc.topics, focusTopics: request.topic ? [request.topic] : [], count: n, language, mcqOnly, avoid: kept.map((q) => q.prompt) }),
+        studyAI.generateQuestions({ excerpts, topics: doc.topics, focusTopics: request.topic ? [request.topic] : [], count: n, language, mcqOnly, avoid: kept.map((q) => q.prompt), allowPartial: true }),
       );
       generated += raw.length;
-      kept.push(...validateQuestions(raw, { material, allowedTopics, alreadyKept: kept }).kept);
+      // "Multiple choice only" is enforced here, not just asked of the model: a short answer it writes anyway is discarded.
+      const allowed = mcqOnly ? raw.filter((q) => q.type === 'mcq') : raw;
+      kept.push(...validateQuestions(allowed, { material, allowedTopics, alreadyKept: kept }).kept);
     };
-    await generate(count + 2);
-    if (kept.length < count) await generate(count - kept.length + 2);
+    try {
+      await generate(count + 2);
+      if (kept.length < count) await generate(count - kept.length + 2);
+    } catch (err) {
+      // Drafts from the first round are kept when only the top-up fails; nothing at all → a clear, retryable 422.
+      if (kept.length === 0) throw generationFailure(err);
+      console.warn('[bank] top-up generation failed; keeping', kept.length, 'drafts:', err instanceof AIError ? `${err.code}: ${err.detail}` : err);
+    }
     const drafts = kept.slice(0, count);
 
     // Locate each quote in one chunk; deterministic checks; advisory verifier on the located passages.
@@ -116,7 +125,7 @@ export async function generateDraftItems(org: OrgContext, actorUserId: string, d
       const passage = loc ? (chunks.find((c) => c.id === loc.chunkId)?.content ?? null) : null;
       return { q, loc, passage, flags: reviewFlags(q, loc, passage) };
     });
-    const verdicts = await verify(org.id, actorUserId, located);
+    const verdicts = await verify(org.id, actorUserId, located, language);
 
     const rows = await db.transaction(async (tx) => {
       const out = [];
@@ -181,8 +190,23 @@ function sourceRow(organizationId: string, bankItemId: string, documentId: strin
       { organizationId, bankItemId, documentId, materialId: null, chunkId: null, chunkHash: '', pageStart: null, pageEnd: null, startSeconds: null, endSeconds: null, quote: q.sourceQuote, quoteStart: null, quoteEnd: null, matchScore: 0, located: false };
 }
 
+const GENERATION_FAILED_MESSAGE = 'No usable questions could be written from this selection. Try fewer questions, one topic or a shorter page range.';
+
+/**
+ * A generation that produced nothing. Unusable or cut-off AI output becomes a 422 `generation_failed` (a normal
+ * response the app can read and translate) instead of a 502, which looks like a gateway failure and was shown
+ * as an upload error. A busy or unreachable AI service keeps its own code (`ai_rate_limited`, `ai_unavailable`).
+ */
+function generationFailure(err: unknown): unknown {
+  if (err instanceof AIError && err.code === 'bad_output') {
+    console.warn('[bank] generation produced nothing:', err.detail);
+    return new HttpError(422, GENERATION_FAILED_MESSAGE, 'generation_failed');
+  }
+  return err;
+}
+
 /** One verifier call for the located questions. A failure never fails generation: those items are flagged "verifier unavailable". */
-async function verify(orgId: string, actorUserId: string, located: { q: GeneratedQuestion; passage: string | null; flags: ReviewFlag[] }[]): Promise<Map<string, Verification>> {
+async function verify(orgId: string, actorUserId: string, located: { q: GeneratedQuestion; passage: string | null; flags: ReviewFlag[] }[], language: string): Promise<Map<string, Verification>> {
   const out = new Map<string, Verification>();
   const toCheck = located.map((x, i) => ({ i, ...x })).filter((x) => x.passage);
   for (const x of located.map((v, i) => ({ v, i })).filter((x) => !x.v.passage)) {
@@ -193,6 +217,7 @@ async function verify(orgId: string, actorUserId: string, located: { q: Generate
     const verdicts = await withAIUsage({ userId: actorUserId, organizationId: orgId, feature: 'bank_verification' }, () =>
       studyAI.verifyQuestions(
         toCheck.map((x) => ({ id: String(x.i), prompt: x.q.prompt, options: x.q.options ?? null, correctAnswer: x.q.correctAnswer, explanation: x.q.explanation, passage: x.passage! })),
+        { language },
       ),
     );
     for (const v of verdicts) out.set(v.id, { verdict: v.verdict, note: v.note });
