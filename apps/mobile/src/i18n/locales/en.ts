@@ -1396,7 +1396,7 @@ const en = {
       formats: {
         csv: 'CSV (spreadsheet)',
         gift: 'GIFT (Moodle)',
-        xlsx: 'Excel (.xlsx)',
+        xlsx: 'Excel',
         pdf: 'PDF',
       },
       pdfMode: 'PDF version',
@@ -1413,6 +1413,7 @@ const en = {
       approvedCount_one: '{{count}} approved question in this selection',
       approvedCount_other: '{{count}} approved questions in this selection',
       button: 'Export',
+      buttonExcel: 'Export to Excel',
       nothing: 'Nothing to export in this selection.',
       resultTitle: 'Export',
       done_one: '{{count}} question exported as {{filename}}.',

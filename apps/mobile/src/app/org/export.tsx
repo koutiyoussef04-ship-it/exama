@@ -82,6 +82,8 @@ function Export(ctx: OrgContext) {
   const textFormat = isTextExportFormat(format);
   // The native apps have no file download: Excel and PDF are exported from the web app.
   const unavailableHere = !web && !textFormat;
+  // The format control says "Excel" (not the file extension); the button then says what happens: "Export to Excel".
+  const exportLabel = format === 'xlsx' ? t('org.export.buttonExcel') : t('org.export.button');
 
   return (
     <WorkspaceShell {...ctx} active="export" title={t('org.ws.export.title')} subtitle={t('org.export.intro')} maxWidth={880}>
@@ -113,7 +115,7 @@ function Export(ctx: OrgContext) {
         )}
         {unavailableHere && <Body muted style={{ fontSize: 13 }}>{t('org.export.webOnly')}</Body>}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space(3) }}>
-          <SmallButton title={t('org.export.button')} variant="primary" icon="export" onPress={() => exportNow.mutate()} loading={exportNow.isPending} disabled={unavailableHere || (!topics.isLoading && approvedCount === 0)} />
+          <SmallButton title={exportLabel} variant="primary" icon="export" onPress={() => exportNow.mutate()} loading={exportNow.isPending} disabled={unavailableHere || (!topics.isLoading && approvedCount === 0)} />
           <Body style={{ fontWeight: '600', fontSize: 14 }}>{topics.isLoading ? t('org.export.counting') : t('org.export.approvedCount', { count: approvedCount })}</Body>
         </View>
         {!topics.isLoading && approvedCount === 0 && <Body muted style={{ fontSize: 13 }}>{t('org.export.nothing')}</Body>}

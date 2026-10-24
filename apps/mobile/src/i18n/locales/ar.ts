@@ -1617,7 +1617,7 @@ const ar: LocaleDict = {
       formats: {
         csv: 'CSV (جدول بيانات)',
         gift: 'GIFT (Moodle)',
-        xlsx: 'Excel ‏(.xlsx)',
+        xlsx: 'Excel',
         pdf: 'PDF',
       },
       pdfMode: 'نسخة PDF',
@@ -1638,6 +1638,7 @@ const ar: LocaleDict = {
       approvedCount_many: '{{count}} سؤالًا معتمدًا في هذا التحديد',
       approvedCount_other: '{{count}} سؤال معتمد في هذا التحديد',
       button: 'تصدير',
+      buttonExcel: 'تصدير إلى Excel',
       nothing: 'لا شيء للتصدير في هذا التحديد.',
       resultTitle: 'التصدير',
       done_zero: 'لم يُصدَّر أي سؤال في {{filename}}.',
