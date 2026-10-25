@@ -139,6 +139,21 @@ test('unusable output is retried once, then reported as bad_output', async () =>
   await withFake([{ text: 'nope' }], async (ai) => expectAIError(ai.analyzeDocument('x', EN), 'bad_output'));
 });
 
+test('analysis: a long topic list (a study plan with many modules) is trimmed to 12, never refused', async () => {
+  // Production, 25 Oct 2026: "Plan d'études LRDBHD 2026" came back with more than 12 topics; the schema's max(12)
+  // rejected the reply twice and the course failed with "the AI returned an unusable response".
+  const topics = Array.from({ length: 23 }, (_, i) => `Module ${i + 1}`);
+  const reply = { text: JSON.stringify({ summary: 'Plan d’études en 23 modules.', topics: [' Module 1', ...topics, 'module 2', '', 'Module 1'], sourceLanguage: 'fr' }) };
+  await withFake([reply], async (ai, fake) => {
+    const res = await ai.analyzeDocument('x', { language: 'fr' });
+    assert.equal(fake.requests.length, 1, 'accepted first time');
+    assert.deepEqual(res.topics, topics.slice(0, 12), 'first 12, trimmed and de-duplicated (case-insensitively)');
+    assert.equal(res.sourceLanguage, 'fr');
+  });
+  // Still refused when there is no topic at all.
+  await withFake([{ text: '{"summary":"S","topics":[" "]}' }], async (ai) => expectAIError(ai.analyzeDocument('x', EN), 'bad_output'));
+});
+
 test('truncated responses (max_tokens) are rejected', async () => {
   await withFake([{ text: '{"summary":"cut', stopReason: 'max_tokens' }], async (ai) => expectAIError(ai.analyzeDocument('x', EN), 'bad_output'));
 });
