@@ -44,7 +44,8 @@ const knowledgeSchema = z.object({
         sourceQuote: z.string().default(''),
       }),
     )
-    .max(20),
+    // A long list is trimmed, never refused: knowledge.ts keeps at most MAX_TOPICS_PER_MATERIAL anyway.
+    .transform((a) => a.slice(0, 20)),
 });
 
 /** Keeps long material within budget by sampling evenly spaced windows (never just the start). */
@@ -56,9 +57,26 @@ export function fitText(text: string, max = MAX_EXTRACTION_CHARS): string {
   return Array.from({ length: slices }, (_, i) => text.slice(i * step, i * step + window)).join('\n[…]\n');
 }
 
+/** A course has at most this many topics from its own analysis (the prompt asks for 3-10). */
+export const MAX_ANALYSIS_TOPICS = 12;
+/**
+ * The model is asked for 3-10 topics, but a programme or study plan with many modules can come back with 20
+ * or more. Those are trimmed to the first MAX_ANALYSIS_TOPICS (after removing blanks and duplicates), never
+ * refused: refusing made the whole course fail ("the AI returned an unusable response") for a study plan in
+ * production, on upload and on retry alike.
+ */
 const analysisSchema = z.object({
   summary: z.string().min(1),
-  topics: z.array(z.string().min(1)).min(1).max(12),
+  topics: z
+    .array(z.string())
+    .transform((a) => {
+      const seen = new Set<string>();
+      return a
+        .map((t) => t.trim())
+        .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+        .slice(0, MAX_ANALYSIS_TOPICS);
+    })
+    .refine((a) => a.length >= 1, 'at least one topic'),
   sourceLanguage: z.string().nullable().optional(),
 });
 
