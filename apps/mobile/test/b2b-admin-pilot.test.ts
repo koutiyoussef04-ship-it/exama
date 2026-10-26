@@ -28,7 +28,7 @@ test('invalid lengths and allowances are refused before anything is sent', () =>
 test('no plan is a real state: no allowances, nothing to sell; a pilot is not a public plan and is only granted from its own form', () => {
   assert.deepEqual([ORGANIZATION_PLAN_CATALOG.none.limits.coursesPerMonth, ORGANIZATION_PLAN_CATALOG.none.limits.itemsPerMonth, ORGANIZATION_PLAN_CATALOG.none.prices], [0, 0, null]);
   const screen = readFileSync(new URL('../src/app/b2b-admin/[id].tsx', import.meta.url), 'utf8');
-  assert.match(screen, /const ASSIGNABLE_PLANS = \['none', 'esencial', 'profesional', 'centro'\] as const/, 'the plan selector does not offer the pilot');
+  assert.match(screen, /const ASSIGNABLE_PLANS = \['none', 'starter', 'esencial', 'profesional', 'centro'\] as const/, 'the plan selector does not offer the pilot');
   assert.match(screen, /update\.mutate\(\{ pilotEndsAt: new Date\(\)\.toISOString\(\) \}\)/, 'ending a pilot sets its end to now (kept as a record)');
   const dashboard = readFileSync(new URL('../src/app/org/index.tsx', import.meta.url), 'utf8');
   assert.match(dashboard, /o\.plan === 'none' && \(/, 'the workspace says when there is no active plan');

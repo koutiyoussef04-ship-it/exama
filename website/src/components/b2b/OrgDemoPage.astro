@@ -16,6 +16,9 @@ const { lang } = Astro.props;
 const c = orgCopy(lang);
 const d = c.demo;
 const mailto = site.b2b.demoMailto(d.subject, d.body);
+// Optional booking page (PUBLIC_B2B_BOOKING_URL, e.g. a Google Calendar appointment page): a second button only when
+// the URL is set and the language has the copy; email stays the main route and the fallback.
+const booking = site.b2b.bookingUrl && d.booking ? { url: site.b2b.bookingUrl, ...d.booking } : null;
 ---
 
 <Base title={c.meta.demoTitle} description={c.meta.demoDescription} path={orgPathFor(lang, 'demo')} lang={lang} alternates={orgAlternatesFor('demo')} nav="org" ogImage={orgOgImage(lang)} ogAlt={c.meta.ogAlt}>
@@ -31,6 +34,13 @@ const mailto = site.b2b.demoMailto(d.subject, d.body);
         <p class="demo-address">{d.addressLead} <a href={`mailto:${site.b2b.demoEmail}`}>{site.b2b.demoEmail}</a></p>
         <p class="fineprint">{d.replyNote}</p>
       </div>
+      {booking && (
+        <div class="card demo-booking">
+          <h2>{booking.title}</h2>
+          <p>{booking.text}</p>
+          <a class="btn btn-secondary" href={booking.url} rel="noopener"><Icon name="calendar" size={20} />{booking.button}</a>
+        </div>
+      )}
 
       <h2>{d.includeTitle}</h2>
       <ul class="checks">

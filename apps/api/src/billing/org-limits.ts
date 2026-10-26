@@ -1,6 +1,6 @@
 /**
  * Organization plans and allowances. Organizations are not on the student plans: each has a B2B plan
- * (`organizations.plan`: none | pilot | esencial | profesional | centro, catalog in @study/shared) whose allowances
+ * (`organizations.plan`: none | pilot | starter | esencial | profesional | centro, catalog in @study/shared) whose allowances
  * apply, with owner overrides (`organizations.limits`, partial) on top — that is how Centro's custom limits and a
  * pilot's agreed allowances are set.
  *
@@ -123,7 +123,7 @@ export async function reserveOrgCourseUpload(tx: Exec, orgId: string, actorUserI
     const limits = resolveOrgLimits(plan);
     const usage = await getOrgUsage(orgId, tx, new Date(), plan);
     if (usage.coursesThisMonth >= limits.coursesPerMonth) {
-      throw new HttpError(402, limitMessage(usage.period, 'course'), 'org_limit_reached', { limit: 'courses', period: usage.period, used: usage.coursesThisMonth, max: limits.coursesPerMonth });
+      throw new HttpError(402, limitMessage(usage.period, 'course'), 'org_limit_reached', { limit: 'courses', period: usage.period, used: usage.coursesThisMonth, max: limits.coursesPerMonth, plan: plan.plan });
     }
   }
   await tx.insert(usageLedger).values({ organizationId: orgId, userId: actorUserId, kind: 'course_upload', amount: 1 });
@@ -142,7 +142,7 @@ export async function reserveOrgItems(orgId: string, actorUserId: string, count:
     if (!owner) {
       const usage = await getOrgUsage(orgId, tx, new Date(), plan);
       const left = limits.itemsPerMonth - usage.itemsThisMonth;
-      if (left <= 0) throw new HttpError(402, limitMessage(usage.period, 'question'), 'org_limit_reached', { limit: 'items', period: usage.period, used: usage.itemsThisMonth, max: limits.itemsPerMonth });
+      if (left <= 0) throw new HttpError(402, limitMessage(usage.period, 'question'), 'org_limit_reached', { limit: 'items', period: usage.period, used: usage.itemsThisMonth, max: limits.itemsPerMonth, plan: plan.plan });
       amount = Math.min(count, left);
     }
     const [row] = await tx.insert(usageLedger).values({ organizationId: orgId, userId: actorUserId, kind: 'bank_items', amount }).returning({ id: usageLedger.id });

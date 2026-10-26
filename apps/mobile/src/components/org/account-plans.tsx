@@ -1,11 +1,12 @@
 /**
  * Account screen of an ORGANIZATION account: the organization's plan (no plan, a pilot granted by Exama, or a paid
- * plan) with its usage, and the plans for organizations — Esencial, Profesional, Centro — instead of the student
+ * plan) with its usage, and the plans for organizations (Starter, Esencial, Profesional, Centro: named in the user's
+ * language through `org.plan.name.<id>`) instead of the student
  * plans. There is no checkout: an admin requests a plan by email and Exama activates it (b2b-admin). Prices and
  * allowances come from ORGANIZATION_PLAN_CATALOG (shared with the website and the owner dashboard).
  */
 import type { OrganizationBillingPeriod, OrganizationOverview, OrganizationPaidPlan } from '@study/shared';
-import { ORGANIZATION_PLAN_CATALOG } from '@study/shared';
+import { ORGANIZATION_PAID_PLANS, ORGANIZATION_PLAN_CATALOG, ORGANIZATION_RECOMMENDED_PLAN } from '@study/shared';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -99,7 +100,7 @@ function CurrentPlanCard({ o }: { o: OrganizationOverview }) {
       {o.plan === 'pilot' && o.pilotEndsAt && (
         <Body muted>{o.pilotExpired ? t('org.plan.pilotEnded', { date: formatDate(o.pilotEndsAt) }) : t('org.plan.pilotActive', { date: formatDate(o.pilotEndsAt) })}</Body>
       )}
-      {(o.plan === 'esencial' || o.plan === 'profesional' || o.plan === 'centro') && (
+      {(ORGANIZATION_PAID_PLANS as readonly string[]).includes(o.plan) && (
         <Body muted>{o.billingPeriod ? t(`orgAccount.billed.${o.billingPeriod}`) : t('orgAccount.activatedByExama')}</Body>
       )}
       {o.plan !== 'none' && (
@@ -129,7 +130,7 @@ function Usage({ label, used, limit }: { label: string; used: number; limit: num
   );
 }
 
-/** Esencial · Profesional · Centro, monthly or yearly, with "Request …" by email (admins only). */
+/** The paid plans (Starter · Esencial · Profesional · Centro, localized names), monthly or yearly, with "Request …" by email (admins only). */
 function OrganizationPlans({ orgName, current, canRequest }: { orgName: string | null; current: OrganizationOverview | null; canRequest: boolean }) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<OrganizationBillingPeriod>(current?.billingPeriod ?? 'monthly');
@@ -198,7 +199,7 @@ function OrganizationPlans({ orgName, current, canRequest }: { orgName: string |
                 t('orgAccount.feature.export'),
               ];
         return (
-          <Card key={plan} style={{ gap: space(2), borderWidth: 2, borderColor: isCurrent ? colors.primary : plan === 'profesional' ? colors.primarySoft : colors.border }}>
+          <Card key={plan} style={{ gap: space(2), borderWidth: 2, borderColor: isCurrent ? colors.primary : plan === ORGANIZATION_RECOMMENDED_PLAN ? colors.primarySoft : colors.border }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: space(2) }}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={{ fontSize: 19, fontWeight: '800', color: colors.text }}>{t(`org.plan.name.${plan}`)}</Text>
@@ -206,6 +207,8 @@ function OrganizationPlans({ orgName, current, canRequest }: { orgName: string |
               </View>
               {isCurrent ? (
                 <Badge label={t('orgAccount.current')} tone="primary" />
+              ) : plan === ORGANIZATION_RECOMMENDED_PLAN ? (
+                <Badge label={t('orgAccount.mostChosen')} tone="primary" />
               ) : period === 'yearly' && saving ? (
                 <Badge label={t('orgAccount.save', { pct: saving })} tone="success" />
               ) : null}
@@ -227,7 +230,7 @@ function OrganizationPlans({ orgName, current, canRequest }: { orgName: string |
               </Text>
             ))}
             {!isCurrent && canRequest && (
-              <Button variant={plan === 'profesional' ? 'primary' : 'secondary'} title={t(`orgAccount.request.${plan}`)} onPress={() => request(plan)} />
+              <Button variant={plan === ORGANIZATION_RECOMMENDED_PLAN ? 'primary' : 'secondary'} title={t(`orgAccount.request.${plan}`)} onPress={() => request(plan)} />
             )}
           </Card>
         );

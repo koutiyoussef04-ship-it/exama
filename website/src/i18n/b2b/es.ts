@@ -11,7 +11,7 @@ export const esOrg: OrgCopy = {
   meta: {
     title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
     description:
-      'Para universidades, centros educativos, centros de formación y empresas: sube tu material, recibe borradores de preguntas redactados por IA con su fuente, revísalos y apruébalos en equipo y expórtalos a Moodle o CSV. Planes mensuales o anuales, activados por Exama.',
+      'Para universidades, centros educativos, centros de formación y empresas: sube tu material, recibe borradores de preguntas redactados por IA con su fuente, revísalos y apruébalos en equipo y expórtalos en PDF, Excel, CSV o Moodle GIFT. Planes mensuales o anuales, activados por Exama.',
     demoTitle: 'Solicitar una demo — Exama para organizaciones',
     ogAlt: 'Exama para organizaciones: preguntas tipo test a partir de tu temario, cada una con su fuente',
     demoDescription: 'Pide por correo una demostración del espacio de trabajo para organizaciones de Exama o cuéntanos qué plan encaja con tu organización.',
@@ -22,10 +22,10 @@ export const esOrg: OrgCopy = {
     eyebrow: 'Para universidades, centros educativos, centros de formación y empresas',
     titleStart: 'Convierte tu temario en preguntas tipo test, ',
     titleHighlight: 'cada una con su fuente.',
-    lead: 'Sube un PDF o un PowerPoint. Exama redacta las preguntas y muestra el pasaje del que sale cada una. Tu equipo revisa y aprueba cada pregunta antes de usarla y después las exporta a Moodle o CSV.',
+    lead: 'Sube un PDF o un PowerPoint. Exama redacta las preguntas y muestra el pasaje del que sale cada una. Tu equipo revisa y aprueba cada pregunta antes de usarla y después las exporta en PDF, Excel, CSV o Moodle GIFT.',
     note: 'Planes mensuales o anuales · Precios sin IVA · Sin cargos automáticos',
     trustAria: 'Cómo se trata tu material',
-    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
+    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: PDF, Excel, CSV o Moodle GIFT'],
     shotAlt: 'La pantalla de revisión de Exama: el pasaje del curso junto a la pregunta redactada, con los controles de aprobar y rechazar',
     flowAria: 'Del material del curso a un banco de preguntas revisado: entra el material, salen borradores con su fuente, los revisa tu equipo y se exportan',
     flowIn: 'Tu material',
@@ -33,7 +33,7 @@ export const esOrg: OrgCopy = {
     flowCore: 'Borradores con su fuente',
     flowCoreSub: 'Cada pregunta cita el pasaje en el que se basa',
     flowOut: 'Tras tu revisión',
-    outputs: ['Banco de preguntas aprobadas', 'Exportación Moodle GIFT', 'Exportación CSV'],
+    outputs: ['Banco de preguntas aprobadas', 'PDF para alumnos y para formadores', 'Excel, CSV o Moodle GIFT'],
   },
   audiences: {
     eyebrow: 'Para quién es',
@@ -50,7 +50,7 @@ export const esOrg: OrgCopy = {
         title: 'Centros de formación y empresas',
         text: 'Para cursos profesionales y formación de empleados construidos a partir de tus propios módulos.',
         icon: 'folder',
-        points: ['Borradores a partir de PDF y diapositivas de PowerPoint', 'Revisados y aprobados por tu equipo antes de usarse', 'Exportaciones que entran directamente en Moodle o en tus herramientas'],
+        points: ['Borradores a partir de PDF y diapositivas de PowerPoint', 'Revisados y aprobados por tu equipo antes de usarse', 'Exportaciones en PDF, Excel, CSV o Moodle GIFT'],
       },
       {
         title: 'Clases particulares y preparación de exámenes',
@@ -68,7 +68,7 @@ export const esOrg: OrgCopy = {
       { title: 'Sube un curso', text: 'Un PDF o PowerPoint (.pptx) con texto real. Exama lo lee, lo divide en páginas o diapositivas y detecta sus temas.', icon: 'upload' },
       { title: 'Redacta preguntas', text: 'Pide hasta 20 borradores de una vez, para todo el curso o para un tema. Cada borrador llega con el pasaje citado, su página o diapositiva y comprobaciones automáticas.', icon: 'sparkle' },
       { title: 'Revisad en equipo', text: 'La cola de revisión muestra la fuente junto a la pregunta. Los revisores editan, aprueban o rechazan, una a una, con atajos de teclado en el ordenador.', icon: 'graded' },
-      { title: 'Exporta lo aprobado', text: 'Solo las preguntas aprobadas salen del espacio de trabajo: Moodle GIFT o CSV, de un curso, de un tema o de todo.', icon: 'export' },
+      { title: 'Exporta lo aprobado', text: 'Solo las preguntas aprobadas salen del espacio de trabajo: un PDF para alumnos (solo preguntas) o para formadores (con las respuestas), Excel, CSV o Moodle GIFT, de un curso, de un tema o de todo.', icon: 'export' },
     ],
   },
   review: {
@@ -110,25 +110,32 @@ export const esOrg: OrgCopy = {
     custom: 'A medida',
     customSub: 'precio y límites',
     plans: {
+      starter: {
+        name: 'Inicial',
+        tagline: 'Para formadores independientes y organizaciones pequeñas.',
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos subidos al mes`, `${n(l!.itemsPerMonth)} borradores de preguntas al mes`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación PDF, Excel, CSV y Moodle GIFT'],
+        cta: 'Solicitar Inicial',
+      },
       esencial: {
         name: 'Esencial',
         tagline: 'Para un centro o un departamento.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos subidos al mes`, `${n(l!.itemsPerMonth)} borradores de preguntas al mes`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación Moodle GIFT y CSV'],
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos subidos al mes`, `${n(l!.itemsPerMonth)} borradores de preguntas al mes`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación PDF, Excel, CSV y Moodle GIFT'],
         cta: 'Solicitar Esencial',
       },
       profesional: {
         name: 'Profesional',
         tagline: 'Para varios cursos en marcha a la vez.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos subidos al mes`, `${n(l!.itemsPerMonth)} borradores de preguntas al mes`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación Moodle GIFT y CSV'],
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} cursos subidos al mes`, `${n(l!.itemsPerMonth)} borradores de preguntas al mes`, `${n(l!.maxMembers)} administradores o editores`, 'Revisores ilimitados', `Hasta ${n(perRequest)} borradores por petición`, 'Exportación PDF, Excel, CSV y Moodle GIFT'],
         cta: 'Solicitar Profesional',
       },
       centro: {
         name: 'Centro',
         tagline: 'Para centros con sus propios volúmenes.',
-        features: () => ['Límites de cursos y borradores acordados contigo', 'Plazas de administrador y editor acordadas contigo', 'Revisores ilimitados', 'Exportación Moodle GIFT y CSV'],
+        features: () => ['Límites de cursos y borradores acordados contigo', 'Plazas de administrador y editor acordadas contigo', 'Revisores ilimitados', 'Exportación PDF, Excel, CSV y Moodle GIFT'],
         cta: 'Hablar con nosotros',
       },
     },
+    mostChosen: 'El más elegido',
     vatNote: 'Precios sin IVA. El IVA se añade al tipo aplicable cuando se factura el plan.',
     billingNote: 'Los planes se acuerdan por correo y los activa Exama; nunca se te cobra sin haber solicitado un plan.',
     pilotNote: {
@@ -143,7 +150,7 @@ export const esOrg: OrgCopy = {
     lead: 'Exama activa los planes, así que para empezar basta con una breve conversación con nosotros.',
     steps: [
       { title: 'Cuéntanos sobre tu organización', text: 'Solicita una demo o escríbenos: qué enseñáis y cuántos cursos y personas participarían.', icon: 'mail' },
-      { title: 'Acordamos un plan', text: 'Esencial, Profesional o Centro, mensual o anual. Confirmamos el plan y sus condiciones por correo.', icon: 'check' },
+      { title: 'Acordamos un plan', text: 'Inicial, Esencial, Profesional o Centro, mensual o anual. Confirmamos el plan y sus condiciones por correo.', icon: 'check' },
       { title: 'Crea la cuenta de la organización', text: 'Tu nombre, tu correo y el nombre y el tipo de la organización. Confirma tu correo con el enlace que te enviamos.', icon: 'users' },
       { title: 'Activamos tu plan', text: 'Una vez activo, tu equipo puede subir cursos, redactar preguntas y añadir compañeros como editores o revisores.', icon: 'upload' },
     ],
@@ -162,7 +169,7 @@ export const esOrg: OrgCopy = {
         q: '¿Qué cuenta como un borrador de pregunta?',
         a: [
           'Un borrador es una pregunta que Exama redacta y guarda para tu revisión. Pides un número de borradores (hasta 20 por petición) y solo cuentan los que se entregan. Las preguntas que tus editores añaden a mano no cuentan.',
-          'En Esencial y Profesional el límite es por mes natural.',
+          'En Inicial, Esencial y Profesional el límite es por mes natural.',
         ],
       },
       {
@@ -178,7 +185,7 @@ export const esOrg: OrgCopy = {
       },
       {
         q: '¿Cómo llevamos las preguntas a Moodle?',
-        a: ['Exporta las preguntas aprobadas como archivo Moodle GIFT e impórtalo en un banco de preguntas de Moodle. También hay exportación CSV para otras herramientas. Las exportaciones incluyen solo preguntas aprobadas, de un curso, de un tema o de todo.'],
+        a: ['Exporta las preguntas aprobadas como archivo Moodle GIFT e impórtalo en un banco de preguntas de Moodle. También puedes exportar un PDF para alumnos (solo preguntas) o para formadores (con las respuestas), un Excel o un CSV para otras herramientas. Las exportaciones incluyen solo preguntas aprobadas, de un curso, de un tema o de todo.'],
       },
       {
         q: '¿Dónde se guarda nuestro material y quién lo ve?',
@@ -193,7 +200,7 @@ export const esOrg: OrgCopy = {
       },
       {
         q: '¿Cómo se paga un plan?',
-        a: ['Solicita Esencial, Profesional o Centro por correo. Acordamos contigo el plan y el periodo de facturación y lo activamos; los precios no incluyen IVA. No hay pago en línea y no se cobra nada automáticamente: ni al empezar ni en la renovación.'],
+        a: ['Solicita Inicial, Esencial, Profesional o Centro por correo. Acordamos contigo el plan y el periodo de facturación y lo activamos; los precios no incluyen IVA. No hay pago en línea y no se cobra nada automáticamente: ni al empezar ni en la renovación.'],
       },
     ],
   },

@@ -25,7 +25,7 @@ import { api, ApiError } from '@/lib/api';
 import { extendedPilotEnd, formatMicroUsd, pilotGrantInput, type PilotGrantForm } from '@/lib/b2b-admin';
 
 /** Plans assigned with the plan selector. A pilot is granted with its own form (length and allowances), never as a plain plan. */
-const ASSIGNABLE_PLANS = ['none', 'esencial', 'profesional', 'centro'] as const satisfies readonly OrganizationPlan[];
+const ASSIGNABLE_PLANS = ['none', 'starter', 'esencial', 'profesional', 'centro'] as const satisfies readonly OrganizationPlan[];
 const PILOT_DEFAULTS = ORGANIZATION_PLAN_CATALOG.pilot.limits;
 import { formatDate, formatNumber } from '@/lib/billing';
 import { confirm } from '@/lib/confirm';

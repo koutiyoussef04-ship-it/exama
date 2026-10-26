@@ -190,6 +190,13 @@
       "when": 1792681527171,
       "tag": "0026_organization_no_default_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793017817651,
+      "tag": "0027_organization_starter_plan",
+      "breakpoints": true
     }
   ]
 }

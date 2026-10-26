@@ -4,7 +4,9 @@ import Base from '../../layouts/Base.astro';
 import OrgHero from './OrgHero.astro';
 import OrgAudiences from './OrgAudiences.astro';
 import OrgHow from './OrgHow.astro';
+import OrgQualiopi from './OrgQualiopi.astro';
 import OrgReview from './OrgReview.astro';
+import OrgExports from './OrgExports.astro';
 import OrgTeam from './OrgTeam.astro';
 import OrgPricing from './OrgPricing.astro';
 import OrgStart from './OrgStart.astro';
@@ -33,8 +35,10 @@ const jsonLd = [
 
 <Base title={c.meta.title} description={c.meta.description} path={orgPathFor(lang)} jsonLd={jsonLd} lang={lang} alternates={orgAlternatesFor('')} nav="org" ogImage={orgOgImage(lang)} ogAlt={c.meta.ogAlt}>
   <OrgHero lang={lang} />
+  {c.qualiopi && <OrgQualiopi lang={lang} />}
   <OrgHow lang={lang} />
   <OrgReview lang={lang} />
+  {c.exports && <OrgExports lang={lang} />}
   <OrgAudiences lang={lang} />
   <OrgTeam lang={lang} />
   <OrgPricing lang={lang} />

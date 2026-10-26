@@ -63,6 +63,13 @@ const links = {
  */
 const B2B_DEMO_EMAIL = 'contact@exama.app';
 const demoMailto = (subject: string, body: string) => `mailto:${B2B_DEMO_EMAIL}?${new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20')}`;
+/**
+ * Optional booking page for the organizations' demo/pilot requests (a Google Calendar appointment page, say). Build-time
+ * setting PUBLIC_B2B_BOOKING_URL (https only); empty = no booking button, email only. Set it in the exama-marketing
+ * environment on Render and redeploy.
+ */
+const rawBooking = import.meta.env.PUBLIC_B2B_BOOKING_URL?.trim() ?? '';
+const B2B_BOOKING_URL: string | null = /^https:\/\/[^\s"<>]+$/.test(rawBooking) ? rawBooking : null;
 
 export const site = {
   name: 'Exama',
@@ -72,7 +79,7 @@ export const site = {
   appUrl: APP_URL,
   webCheckoutAvailable,
   links,
-  b2b: { demoEmail: B2B_DEMO_EMAIL, demoMailto },
+  b2b: { demoEmail: B2B_DEMO_EMAIL, demoMailto, bookingUrl: B2B_BOOKING_URL },
   ogImage: { path: '/og-image.png', width: 1200, height: 630 },
   /**
    * Confirmed legal/contact details. `null` = not confirmed yet (never guess). The contact email is Exama's public

@@ -98,15 +98,22 @@ export type OrganizationUsage = {
 // optionally, its own allowances.
 
 /** Plans the owner can assign. `none` = no active plan (the default for every new organization). */
-export const ORGANIZATION_PLANS = ['none', 'pilot', 'esencial', 'profesional', 'centro'] as const;
+export const ORGANIZATION_PLANS = ['none', 'pilot', 'starter', 'esencial', 'profesional', 'centro'] as const;
 export type OrganizationPlan = (typeof ORGANIZATION_PLANS)[number];
-/** The paid plans, as presented publicly (website pricing, future Stripe products). Centro is custom-priced. */
-export const ORGANIZATION_PAID_PLANS = ['esencial', 'profesional', 'centro'] as const;
+/**
+ * The paid plans, as presented publicly (website pricing, future Stripe products), in display order. The ids are
+ * internal and never shown: every surface shows the plan's name in the user's language (website src/i18n/b2b, app
+ * `org.plan.name.<id>`): en Starter · Essential · Professional · Institution, fr Indépendant · Essentiel ·
+ * Professionnel · Établissement, es Inicial · Esencial · Profesional · Centro. Centro is custom-priced.
+ */
+export const ORGANIZATION_PAID_PLANS = ['starter', 'esencial', 'profesional', 'centro'] as const;
 export type OrganizationPaidPlan = (typeof ORGANIZATION_PAID_PLANS)[number];
+/** The plan the pricing recommends ("most chosen"); the one a Starter organization is pointed to at its limit. */
+export const ORGANIZATION_RECOMMENDED_PLAN: OrganizationPaidPlan = 'esencial';
 export const ORGANIZATION_BILLING_PERIODS = ['monthly', 'yearly'] as const;
 export type OrganizationBillingPeriod = (typeof ORGANIZATION_BILLING_PERIODS)[number];
-/** Default length of a manually granted pilot (the owner can choose another length or end date). */
-export const ORGANIZATION_PILOT_DAYS = 30;
+/** Default length of a manually granted pilot (the owner can choose another length or end date): the 2-week pilot offered to organizations. */
+export const ORGANIZATION_PILOT_DAYS = 14;
 /** Longest pilot the owner can grant in one step (an extension can follow). */
 export const ORGANIZATION_PILOT_MAX_DAYS = 365;
 
@@ -121,6 +128,8 @@ export const ORGANIZATION_PLAN_CATALOG: Record<OrganizationPlan, OrganizationPla
   none: { limits: { coursesPerMonth: 0, itemsPerMonth: 0, maxItemsPerRequest: 20, maxMembers: 1 }, prices: null },
   // Default allowances of a manually granted pilot (totals for the whole pilot); the owner can set others per organization.
   pilot: { limits: { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 }, prices: null },
+  // Independent trainers and small organizations: an entry test and an end-of-training test for several sessions a month.
+  starter: { limits: { coursesPerMonth: 3, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 2 }, prices: { monthly: 5_900, yearly: 59_000 } },
   esencial: { limits: { coursesPerMonth: 10, itemsPerMonth: 500, maxItemsPerRequest: 20, maxMembers: 10 }, prices: { monthly: 14_900, yearly: 149_000 } },
   profesional: { limits: { coursesPerMonth: 100, itemsPerMonth: 2_000, maxItemsPerRequest: 20, maxMembers: 25 }, prices: { monthly: 34_900, yearly: 349_000 } },
   // Custom terms: starts from Profesional's allowances; the owner sets the agreed ones per organization.

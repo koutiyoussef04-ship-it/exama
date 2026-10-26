@@ -1,6 +1,7 @@
 /**
- * The plans an ORGANIZATION account sees on its Account screen (never the student plans): Esencial, Profesional and
- * Centro, with the list prices and allowances of ORGANIZATION_PLAN_CATALOG — the same source as the website pricing
+ * The plans an ORGANIZATION account sees on its Account screen (never the student plans): Starter, Esencial, Profesional
+ * and Centro (ids; the names come from i18n, `org.plan.name.<id>`), with the list prices and allowances of
+ * ORGANIZATION_PLAN_CATALOG — the same source as the website pricing
  * and the owner dashboard. There is no checkout: a plan is requested by email and the B2B owner activates it
  * (b2b-admin). Pure helpers, unit-tested (test/org-account-plans.test.ts).
  */
