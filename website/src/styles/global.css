@@ -1600,10 +1600,14 @@ html[lang='ar'] .eyebrow {
 }
 @media (min-width: 1000px) {
   .org-pricing {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .org-pricing .plan {
+    padding: 28px 18px;
   }
 }
-/* Under the plans: a pilot can be discussed individually (never a plan card). */
+/* Under the plans: en/es/ar — a pilot can be discussed individually; fr — the free 2-week pilot with its terms. Never a plan card. */
 .pilot-note {
   display: grid;
   justify-items: center;
@@ -1618,6 +1622,111 @@ html[lang='ar'] .eyebrow {
 }
 .pilot-note p {
   margin: 0;
+}
+.pilot-offer {
+  max-width: 54rem;
+  padding: 32px 28px;
+  border: 2px solid var(--primary);
+}
+.pilot-offer h3 {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+.pilot-points {
+  margin: 6px 0 8px;
+  gap: 8px 24px;
+  text-align: start;
+}
+.pilot-points li {
+  font-size: 0.95rem;
+}
+@media (min-width: 720px) {
+  .pilot-points {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Qualiopi (French page): what the référentiel asks, what the workspace does. */
+.qualiopi-grid {
+  display: grid;
+  gap: 32px;
+}
+.qualiopi-grid h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+.qualiopi-asks .roles {
+  margin-top: 16px;
+}
+.qualiopi-asks .role dd {
+  color: var(--text);
+}
+.qualiopi-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.qualiopi-card {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  background: var(--surface);
+}
+.section-alt .qualiopi-card {
+  background: var(--surface);
+}
+.qualiopi-card .card-icon {
+  flex: none;
+}
+.qualiopi-card strong {
+  display: block;
+  color: var(--navy);
+}
+.qualiopi-card p {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.qualiopi-note {
+  max-width: 60rem;
+  margin: 28px auto 0;
+  text-align: center;
+}
+@media (min-width: 900px) {
+  .qualiopi-grid {
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 40px;
+  }
+}
+.export-grid {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 600px) {
+  .export-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1000px) {
+  .export-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .export-grid .product-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+.demo-booking {
+  margin-top: 20px;
+}
+.demo-booking h2 {
+  margin-top: 0;
+}
+.demo-booking p {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.demo-booking .btn {
+  margin-top: 16px;
 }
 
 .cta-center {

@@ -1,26 +1,22 @@
 ---
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import Icon from '../Icon.astro';
 import { ORG_SECTIONS } from '../../data/b2b';
 import { type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
+import { orgScreenshot } from '../../lib/org-screenshots';
 
 interface Props {
   lang: OrgLang;
 }
-const c = orgCopy(Astro.props.lang).review;
+const { lang } = Astro.props;
+const c = orgCopy(lang).review;
 
 /**
- * Real workspace screens only. Drop genuine screenshots of the organization workspace (app.exama.app/org)
- * into `public/screenshots/` named org-review, org-queue and org-dashboard (.webp, .png or .jpg) and they
- * appear here automatically. Until a file exists, the card shows an icon — this site never mocks up screens.
+ * Real workspace screens only (src/lib/org-screenshots.ts): genuine captures of the organization workspace named
+ * after each screen's id appear here automatically; until a file exists, the card shows an icon — this site never
+ * mocks up screens, and the French page only ever shows French captures.
  */
-const EXTENSIONS = ['webp', 'png', 'jpg'];
-const screens = c.screens.map((s) => {
-  const ext = EXTENSIONS.find((e) => existsSync(join(process.cwd(), 'public', 'screenshots', `${s.id}.${e}`)));
-  return { ...s, src: ext ? `/screenshots/${s.id}.${ext}` : null };
-});
+const screens = c.screens.map((s) => ({ ...s, src: orgScreenshot(lang, s.id) }));
 ---
 
 <section id={ORG_SECTIONS.review} class="section" aria-labelledby="review-title">

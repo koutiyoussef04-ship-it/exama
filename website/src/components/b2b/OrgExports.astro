@@ -1,0 +1,35 @@
+---
+/**
+ * The export formats (PDF for trainees and for trainers, Excel, CSV, Moodle GIFT — apps/api/src/services/bank/export*.ts).
+ * Rendered only when the language's copy has `exports`.
+ */
+import Icon from '../Icon.astro';
+import { ORG_SECTIONS } from '../../data/b2b';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).exports!;
+---
+
+<section id={ORG_SECTIONS.exports} class="section section-alt" aria-labelledby="exports-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="exports-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+    <ul class="product-grid export-grid">
+      {c.items.map((item) => (
+        <li class="product-card">
+          <span class="card-icon"><Icon name={item.icon} size={24} /></span>
+          <h3>{item.title}</h3>
+          <p>{item.text}</p>
+        </li>
+      ))}
+    </ul>
+    <p class="fineprint center">{c.note}</p>
+  </div>
+</section>

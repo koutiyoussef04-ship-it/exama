@@ -11,7 +11,7 @@ export const enOrg: OrgCopy = {
   meta: {
     title: 'Exama for organizations — Test questions from your own course material',
     description:
-      'For universities, schools, training centers and companies: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export to Moodle or CSV. Monthly or yearly plans, activated by Exama.',
+      'For universities, schools, training centers and companies: upload your course material, get AI-drafted questions with their source, review and approve them as a team, export them as PDF, Excel, CSV or Moodle GIFT. Monthly or yearly plans, activated by Exama.',
     demoTitle: 'Request a demo — Exama for organizations',
     ogAlt: 'Exama for organizations: test questions from your own course material, each one with its source',
     demoDescription: 'Ask for a walkthrough of the Exama organization workspace by email, or tell us which plan fits your organization.',
@@ -22,10 +22,10 @@ export const enOrg: OrgCopy = {
     eyebrow: 'For universities, schools, training centers and companies',
     titleStart: 'Turn your course material into test questions, ',
     titleHighlight: 'each one with its source.',
-    lead: 'Upload a PDF or PowerPoint. Exama drafts the questions and shows the passage each one comes from. Your team reviews and approves every question before it is used, then exports them to Moodle or CSV.',
+    lead: 'Upload a PDF or PowerPoint. Exama drafts the questions and shows the passage each one comes from. Your team reviews and approves every question before it is used, then exports them as PDF, Excel, CSV or Moodle GIFT.',
     note: 'Monthly or yearly plans · Prices exclude VAT · Nothing is charged automatically',
     trustAria: 'How your material is handled',
-    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
+    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: PDF, Excel, CSV or Moodle GIFT'],
     shotAlt: 'The Exama review screen: the source passage from the course next to the drafted question, with approve and reject controls',
     flowAria: 'From course material to a reviewed question bank: material in, drafts with their source, review by your team, export',
     flowIn: 'Your material',
@@ -33,7 +33,7 @@ export const enOrg: OrgCopy = {
     flowCore: 'Drafts with their source',
     flowCoreSub: 'Each question quotes the passage it is based on',
     flowOut: 'After your review',
-    outputs: ['Approved question bank', 'Moodle GIFT export', 'CSV export'],
+    outputs: ['Approved question bank', 'PDF for trainees and trainers', 'Excel, CSV or Moodle GIFT'],
   },
   audiences: {
     eyebrow: 'Who it is for',
@@ -50,7 +50,7 @@ export const enOrg: OrgCopy = {
         title: 'Training centers and companies',
         text: 'For professional courses and employee training built from your own modules.',
         icon: 'folder',
-        points: ['Drafts from PDFs and PowerPoint slides', 'Reviewed and approved by your team before use', 'Exports that drop into Moodle or your own tools'],
+        points: ['Drafts from PDFs and PowerPoint slides', 'Reviewed and approved by your team before use', 'Exports as PDF, Excel, CSV or Moodle GIFT'],
       },
       {
         title: 'Tutoring and exam preparation',
@@ -68,7 +68,7 @@ export const enOrg: OrgCopy = {
       { title: 'Upload a course', text: 'A PDF or PowerPoint (.pptx) with real text. Exama reads it, splits it into pages or slides and finds its topics.', icon: 'upload' },
       { title: 'Draft questions', text: 'Ask for up to 20 drafts at a time, for the whole course or one topic. Each draft comes with the quoted passage, its page or slide and automatic checks.', icon: 'sparkle' },
       { title: 'Review as a team', text: 'The review queue shows the source next to the question. Reviewers edit, approve or reject — one by one, with keyboard shortcuts on a desktop.', icon: 'graded' },
-      { title: 'Export what was approved', text: 'Only approved questions leave the workspace: Moodle GIFT or CSV, for one course, one topic or everything.', icon: 'export' },
+      { title: 'Export what was approved', text: 'Only approved questions leave the workspace: a PDF for trainees (questions only) or for trainers (with the answer key), Excel, CSV or Moodle GIFT, for one course, one topic or everything.', icon: 'export' },
     ],
   },
   review: {
@@ -110,25 +110,32 @@ export const enOrg: OrgCopy = {
     custom: 'Custom',
     customSub: 'pricing and allowances',
     plans: {
+      starter: {
+        name: 'Starter',
+        tagline: 'For independent trainers and small organizations.',
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'PDF, Excel, CSV and Moodle GIFT export'],
+        cta: 'Request Starter',
+      },
       esencial: {
-        name: 'Esencial',
+        name: 'Essential',
         tagline: 'For one center or department.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'Moodle GIFT and CSV export'],
-        cta: 'Request Esencial',
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'PDF, Excel, CSV and Moodle GIFT export'],
+        cta: 'Request Essential',
       },
       profesional: {
-        name: 'Profesional',
+        name: 'Professional',
         tagline: 'For several courses running at once.',
-        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'Moodle GIFT and CSV export'],
-        cta: 'Request Profesional',
+        features: (l, perRequest) => [`${n(l!.coursesPerMonth)} course uploads per month`, `${n(l!.itemsPerMonth)} question drafts per month`, `${n(l!.maxMembers)} admins or editors`, 'Unlimited reviewers', `Up to ${n(perRequest)} drafts per request`, 'PDF, Excel, CSV and Moodle GIFT export'],
+        cta: 'Request Professional',
       },
       centro: {
-        name: 'Centro',
+        name: 'Institution',
         tagline: 'For centers with their own volumes.',
-        features: () => ['Course and draft allowances set with you', 'Admin and editor seats set with you', 'Unlimited reviewers', 'Moodle GIFT and CSV export'],
+        features: () => ['Course and draft allowances set with you', 'Admin and editor seats set with you', 'Unlimited reviewers', 'PDF, Excel, CSV and Moodle GIFT export'],
         cta: 'Talk to us',
       },
     },
+    mostChosen: 'Most chosen',
     vatNote: 'Prices exclude VAT. VAT is added at the applicable rate when the plan is invoiced.',
     billingNote: 'Plans are agreed by email and activated by Exama; you are never charged without having asked for a plan.',
     pilotNote: {
@@ -143,7 +150,7 @@ export const enOrg: OrgCopy = {
     lead: 'Plans are activated by Exama, so getting started goes through a short conversation with us.',
     steps: [
       { title: 'Tell us about your organization', text: 'Request a demo or write to us: what you teach, and how many courses and people are involved.', icon: 'mail' },
-      { title: 'Agree on a plan', text: 'Esencial, Profesional or Centro, monthly or yearly. We confirm the plan and its terms by email.', icon: 'check' },
+      { title: 'Agree on a plan', text: 'Starter, Essential, Professional or Institution, monthly or yearly. We confirm the plan and its terms by email.', icon: 'check' },
       { title: 'Create the organization account', text: 'Your name, your email, and the organization’s name and type. Confirm your email with the link we send you.', icon: 'users' },
       { title: 'We activate your plan', text: 'Once it is active, your team can upload courses, draft questions and add colleagues as editors or reviewers.', icon: 'upload' },
     ],
@@ -162,7 +169,7 @@ export const enOrg: OrgCopy = {
         q: 'What counts as a question draft?',
         a: [
           'A draft is one question Exama writes and keeps for your review. You ask for a number of drafts (up to 20 per request) and only the ones delivered count against your allowance. Questions your editors add by hand do not count.',
-          'On Esencial and Profesional the allowance is per calendar month.',
+          'On Starter, Essential and Professional the allowance is per calendar month.',
         ],
       },
       {
@@ -178,7 +185,7 @@ export const enOrg: OrgCopy = {
       },
       {
         q: 'How do we get the questions into Moodle?',
-        a: ['Export approved questions as a Moodle GIFT file and import it into a question bank in Moodle. A CSV export is also available for other tools. Exports include approved questions only, for one course, one topic or everything.'],
+        a: ['Export approved questions as a Moodle GIFT file and import it into a question bank in Moodle. Exports are also available as a PDF for trainees (questions only) or for trainers (with the answer key), as Excel and as CSV for other tools. Exports include approved questions only, for one course, one topic or everything.'],
       },
       {
         q: 'Where is our material stored, and who sees it?',
@@ -193,7 +200,7 @@ export const enOrg: OrgCopy = {
       },
       {
         q: 'How is a plan paid?',
-        a: ['Request Esencial, Profesional or Centro by email. We agree the plan and billing period with you and activate it; prices exclude VAT. There is no online checkout, and nothing is charged automatically — not at the start, not at renewal.'],
+        a: ['Request Starter, Essential, Professional or Institution by email. We agree the plan and billing period with you and activate it; prices exclude VAT. There is no online checkout, and nothing is charged automatically — not at the start, not at renewal.'],
       },
     ],
   },
@@ -206,7 +213,7 @@ export const enOrg: OrgCopy = {
     title: 'Request a demo',
     intro: 'Tell us about your organization and we will reply by email to arrange a walkthrough of the workspace, answer your questions or set up a plan.',
     includeTitle: 'Helpful to include',
-    include: ['Your organization and what it teaches (university or school courses, professional training, employee training, exam preparation…)', 'How many courses or modules you would start with, and in what format', 'How many people would upload, draft and review questions', 'Which plan you are considering, or what you would need from Centro'],
+    include: ['Your organization and what it teaches (university or school courses, professional training, employee training, exam preparation…)', 'How many courses or modules you would start with, and in what format', 'How many people would upload, draft and review questions', 'Which plan you are considering, or what you would need from Institution'],
     emailButton: 'Email contact@exama.app',
     emailHow: 'The button opens your email app with a pre-filled message. If it does not, write to the address below.',
     addressLead: 'Our address for organizations:',

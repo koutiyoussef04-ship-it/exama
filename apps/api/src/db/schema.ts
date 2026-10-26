@@ -352,7 +352,7 @@ export const organizations = pgTable(
   (t) => [
     // Every value of ORGANIZATION_MARKETS (packages/shared): the six offered categories plus the two legacy values.
     check('organizations_market_check', sql`${t.market} in ('university', 'school', 'training_center', 'corporate', 'exam_prep', 'other', 'training_provider', 'academy')`),
-    check('organizations_plan_check', sql`${t.plan} in ('none', 'pilot', 'esencial', 'profesional', 'centro')`),
+    check('organizations_plan_check', sql`${t.plan} in ('none', 'pilot', 'starter', 'esencial', 'profesional', 'centro')`),
     check('organizations_billing_period_check', sql`${t.billingPeriod} is null or ${t.billingPeriod} in ('monthly', 'yearly')`),
   ],
 );

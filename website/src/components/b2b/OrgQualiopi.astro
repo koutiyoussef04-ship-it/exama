@@ -1,0 +1,54 @@
+---
+/**
+ * The quality-framework section (French page: Qualiopi), high on the page: what the référentiel asks, quoted from the
+ * official text (left), and what the workspace demonstrably does about it (right). Rendered only when the language's
+ * copy has `qualiopi`. Never a certification or audit-result claim: the copy's note says so in so many words.
+ */
+import Icon from '../Icon.astro';
+import { ORG_SECTIONS } from '../../data/b2b';
+import { type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+interface Props {
+  lang: OrgLang;
+}
+const c = orgCopy(Astro.props.lang).qualiopi!;
+---
+
+<section id={ORG_SECTIONS.qualiopi} class="section section-alt" aria-labelledby="qualiopi-title">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">{c.eyebrow}</p>
+      <h2 id="qualiopi-title">{c.title}</h2>
+      <p class="section-lead">{c.lead}</p>
+    </div>
+    <div class="qualiopi-grid">
+      <div class="qualiopi-asks">
+        <h3>{c.requirementsTitle}</h3>
+        <dl class="roles">
+          {c.requirements.map((r) => (
+            <div class="role">
+              <dt>{r.title}</dt>
+              <dd>{r.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div class="qualiopi-helps">
+        <h3>{c.helpsTitle}</h3>
+        <ul class="qualiopi-list">
+          {c.helps.map((h) => (
+            <li class="card qualiopi-card">
+              <span class="card-icon"><Icon name={h.icon} size={22} /></span>
+              <div>
+                <strong>{h.title}</strong>
+                <p>{h.text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+    <p class="fineprint qualiopi-note">{c.note}</p>
+  </div>
+</section>

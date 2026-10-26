@@ -2,7 +2,7 @@
  * Turns any error into a message in the user's language. The API sends stable codes
  * (see apps/api/src/lib/errors.ts); the English text from the server is only a last resort.
  */
-import type { BillingProviderId, LimitErrorBody } from '@study/shared';
+import { ORGANIZATION_RECOMMENDED_PLAN, type BillingProviderId, type LimitErrorBody } from '@study/shared';
 import i18n from '@/i18n';
 import { ApiError } from './api';
 import { isFreeLectureLimit } from './material-options';
@@ -62,9 +62,11 @@ export function errorMessage(err: unknown): string {
     if (err.status === 0) return t('errors.network');
     if (err.status === 402 && err.body && typeof err.body === 'object' && 'feature' in err.body) return limitMessage(err.body as LimitErrorBody);
     if (err.code && i18n.exists(`errors.codes.${err.code}`)) {
-      const details = (err.body as { details?: { maxMb?: number; maxDays?: number; max?: number; provider?: BillingProviderId; period?: string } } | undefined)?.details;
+      const details = (err.body as { details?: { maxMb?: number; maxDays?: number; max?: number; provider?: BillingProviderId; period?: string; plan?: string } } | undefined)?.details;
       // An organization's pilot allowances are totals for the whole pilot, not monthly.
       if (err.code === 'org_limit_reached' && details?.period === 'pilot') return t('errors.codes.org_pilot_limit_reached', { max: details.max ?? 0 });
+      // The Starter plan at its monthly limit: the next step is the recommended plan (named in the user's language).
+      if (err.code === 'org_limit_reached' && details?.plan === 'starter') return t('errors.codes.org_starter_limit_reached', { max: details.max ?? 0, plan: t(`org.plan.name.${ORGANIZATION_RECOMMENDED_PLAN}`) });
       // A subscription bought on the web: there is no store to name.
       if (err.code === 'subscribed_elsewhere' && details?.provider === 'stripe') return t('errors.codes.subscribed_on_web');
       return t(`errors.codes.${err.code}` as 'errors.codes.file_too_large', {

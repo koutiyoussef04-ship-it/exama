@@ -81,8 +81,14 @@ planner section). When the app changes — a price, a plan feature, a supported 
 `/for-organizations`, `/es/para-organizaciones`, `/fr/pour-les-organismes` and `/ar/for-organizations` (right to left;
 the slug stays ASCII so shared links aren't percent-encoded), each with a `/demo` page, present the organization
 workspace — question banks drafted from an organization's own PDF/PowerPoint courses, each draft with its
-source, reviewed by the organization's team, exported as Moodle GIFT or CSV — to universities, schools, training
-centers, companies and exam-preparation centers, in the same four languages as the student site. Each home page links to
+source, reviewed by the organization's team, exported as PDF (trainee and trainer versions), Excel, CSV or Moodle GIFT —
+to universities, schools, training centers, companies and exam-preparation centers, in the same four languages as the
+student site. The French page is written for training organizations (organismes de formation): a Qualiopi section high
+on the page (indicators 8 and 11 quoted from the official text, what the workspace does, never a certification or
+audit-result claim), an exports section, the free 2-week pilot, and a FAQ on Word files, data, the pilot, results
+tracking (not offered) and VAT. Old addresses (`/fr/for-organizations`, `/fr/pour-les-organisations`,
+`/es/for-organizations`, each with `/demo`) redirect to the real pages (`redirects` in `astro.config.mjs`; a host-level
+301 can be added in the Render dashboard). Each home page links to
 the organizations page in its own language (header link, audience choice under the hero, footer link).
 
 ### For students
@@ -94,28 +100,41 @@ both buttons. Each one is canonical on itself with the four student pages as hre
 its full content and gains the two audience choices.
 
 - **Facts** come from `src/data/b2b.ts`, which mirrors the app's plan catalog
-  (`packages/shared/src/organizations.ts`): Esencial €149/month · €1,490/year — 10 course uploads and 500 question drafts **per
-  calendar month**, 10 seats; Profesional €349/month · €3,490/year — 100 / 2,000 per month, 25 seats; Centro
-  custom; reviewers unlimited; at most 20 drafts per request. `npm run check:pricing` fails if any of it drifts
-  from the app. Prices are shown **excluding VAT** (`+ VAT` / `+ IVA` and a note).
-- **No public pilot.** A pilot is negotiated individually and granted by Exama by hand (owner tools); it is never a
-  plan card, a price, a length or a sign-up button. Under the plans, one note says a pilot can be discussed for some
-  projects, without promising one, and links to the demo page. `verify-build` fails if "free pilot" wording, a pilot
-  section or a pilot plan card appears on any page (all four languages) or in the link-preview sources.
-- **Buttons.** "Request a demo" is the main call to action (header, hero, getting started, final block) → the demo page.
-  Esencial, Profesional and Centro → the demo page too. "Create an organization account" →
+  (`packages/shared/src/organizations.ts`): starter €59/month · €590/year — 3 course uploads and 150 question drafts
+  **per calendar month**, 2 seats; esencial €149/month · €1,490/year — 10 / 500 per month, 10 seats (the recommended
+  plan, "most chosen"); profesional €349/month · €3,490/year — 100 / 2,000 per month, 25 seats; centro custom;
+  reviewers unlimited; at most 20 drafts per request. The ids are internal: each language shows its own plan names
+  (en Starter · Essential · Professional · Institution, fr Indépendant · Essentiel · Professionnel · Établissement,
+  es Inicial · Esencial · Profesional · Centro, ar الانطلاق · الأساسية · الاحترافية · المؤسسات), the same names as
+  the app's `org.plan.name.<id>`. `npm run check:pricing` fails if allowances, prices, the plan order, the recommended
+  plan, the pilot length or any plan name drifts from the app. Prices are shown **excluding VAT** (`+ VAT` / `+ IVA`
+  and a note).
+- **Pilot.** A pilot is granted by Exama by hand (owner tools), never started from the site, and never a plan card.
+  en/es/ar: one note under the plans says a pilot can be discussed, without promising one. **fr**: the free 2-week
+  pilot is offered openly (`ORG_PILOT_DAYS` = the app's `ORGANIZATION_PILOT_DAYS` = 14): "ouvert au nom de votre
+  organisme, activé par nos soins, sans engagement ni carte bancaire" — the main call to action on the French pages
+  asks for it. `verify-build` requires that wording on the French organizations pages and still forbids any pilot
+  offer elsewhere on the site.
+- **Buttons.** "Request a demo" (fr: "Demander un pilote gratuit de 2 semaines") is the main call to action (header,
+  hero, getting started, final block) → the demo page. The four plans → the demo page too. "Create an organization account" →
   `https://app.exama.app/start?mode=signup&account=organization&lang=…`: the new organization has **no plan** until
   Exama activates the one agreed with it. **There is no online checkout**: plans are requested by email and activated
   by Exama; nothing is charged automatically, and the copy says so. "Log in" is the two-way choice (student /
   organization), with the organization entry first on these pages.
 - **Demo requests** are a `mailto:` link to the confirmed address in `src/config/site.ts` (`site.b2b.demoEmail`),
   with a pre-filled subject and body, and the address written out. No form, no backend, no third-party widget.
+  Optional booking button (fr): set `PUBLIC_B2B_BOOKING_URL` (https, e.g. a Google Calendar appointment page) at build
+  time and the French demo page adds "Réserver un créneau"; empty = email only.
 - **Screenshots**: real captures of the workspace only — `public/screenshots/org-review.jpg`, `org-queue.jpg`
   and `org-dashboard.jpg` are genuine captures of app.exama.app/org (the demo organization "Academia Demo Exama",
   whose only course is the Spanish Constitution, arts. 1–55, from the BOE). `org-review` is also the hero image.
   The same captures are used on every language's page (the workspace shown is in Spanish; the alt texts are translated).
   To replace them, drop sharper captures (landscape, about 1280×800, `.webp`, `.png` or `.jpg`) under the same
-  names; the build requires all three.
+  names; the build requires all three on the en/es/ar pages.
+  **The French page never shows the Spanish captures** (`verify-build` fails if it does): it reads
+  `public/screenshots/fr/org-review-fr.*`, `org-queue-fr.*` and `org-dashboard-fr.*` only (French workspace, about
+  1280×800) and shows its fallbacks (the workflow diagram in the hero, icon cards) until they exist
+  (`src/lib/org-screenshots.ts`).
 - **Link previews**: `public/og-image-org-{en,es,fr,ar}.png` (from `scripts/og-image-org-{en,es,fr,ar}.html`),
   so links shared by email, LinkedIn or WhatsApp show the organizations headline, not the student one.
 - **House rules**, enforced by `npm run verify` on these pages: no customer names, logos, counts, testimonials,

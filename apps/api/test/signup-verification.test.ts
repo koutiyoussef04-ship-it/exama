@@ -3,7 +3,7 @@
  *
  * Sign-up: registering stores a pending sign-up and emails a link — no account, organization or session exists until the
  * link is opened; the link is single-use and expires; a new link replaces the old one; duplicates, cooldowns and per-IP
- * limits; organizations are not asked their age group. Plans: pilot (30 days, totals), member seats (admins + editors;
+ * limits; organizations are not asked their age group. Plans: pilot (ORGANIZATION_PILOT_DAYS = 14 days, totals), member seats (admins + editors;
  * reviewers unlimited), an ended pilot keeps data and exports but can't create, the owner assigns paid plans by hand.
  * Tokens are only ever read from the test outbox, never printed.
  */
@@ -242,7 +242,7 @@ test('no automatic pilot: a new organization has no plan; a pilot granted by the
   const firstReviewer = await add('reviewer');
   assert.equal(firstReviewer.r.status, 201);
 
-  // The owner grants the pilot it negotiated: it starts now, for 30 days by default, with the pilot allowances.
+  // The owner grants the pilot it negotiated: it starts now, for ORGANIZATION_PILOT_DAYS (14) by default, with the pilot allowances.
   const granted = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token });
   assert.equal(granted.status, 200, JSON.stringify(granted.body));
   const o = (await overview(admin.token, orgId)).body;
@@ -251,7 +251,7 @@ test('no automatic pilot: a new organization has no plan; a pilot granted by the
   assert.equal(o.pilotExpired, false);
   assert.ok(Math.abs(new Date(o.pilotStartedAt!).getTime() - Date.now()) < 60_000, 'starts when granted');
   const days = (new Date(o.pilotEndsAt!).getTime() - Date.now()) / 86_400_000;
-  assert.ok(days > 29.9 && days <= 30, String(days));
+  assert.ok(days > 13.9 && days <= 14, String(days));
   assert.deepEqual(o.limits, { coursesPerMonth: 5, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 3 });
   assert.equal(o.usage.period, 'pilot');
 
@@ -280,9 +280,11 @@ test('pilot totals count the whole pilot; an ended pilot keeps data and exports 
   assert.ok(items.total > 0);
   await call(`/orgs/${orgId}/items/${items.items[0].id}/approve`, { method: 'POST', token: admin.token });
 
-  // Usage since the pilot started counts, whatever the month; usage before it doesn't.
+  // Usage since the pilot started counts, whatever the month; usage before it doesn't. (The pre-pilot row is 45 days
+  // old so that it is also outside the calendar month once the organization moves to a paid plan below, whatever
+  // today's date.)
   await sql`update organizations set pilot_started_at = now() - interval '20 days' where id = ${orgId}`;
-  await sql`insert into usage_ledger (organization_id, user_id, kind, amount, created_at) values (${orgId}, ${admin.id}, 'bank_items', 100, now() - interval '15 days'), (${orgId}, ${admin.id}, 'bank_items', 999, now() - interval '25 days')`;
+  await sql`insert into usage_ledger (organization_id, user_id, kind, amount, created_at) values (${orgId}, ${admin.id}, 'bank_items', 100, now() - interval '15 days'), (${orgId}, ${admin.id}, 'bank_items', 999, now() - interval '45 days')`;
   const used = (await overview(admin.token, orgId)).body.usage.itemsThisMonth;
   assert.ok(used >= 100 && used < 999, String(used));
   await sql`insert into usage_ledger (organization_id, user_id, kind, amount, created_at) values (${orgId}, ${admin.id}, 'bank_items', ${150 - used}, now() - interval '1 day')`;
@@ -319,10 +321,64 @@ test('pilot totals count the whole pilot; an ended pilot keeps data and exports 
   assert.deepEqual([centro.body.plan, centro.body.limits.itemsPerMonth, centro.body.limits.maxMembers], ['centro', 5000, 60]);
   const pro = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'profesional', billingPeriod: 'monthly' }), token: owner.token });
   assert.deepEqual(pro.body.limits, { coursesPerMonth: 100, itemsPerMonth: 2000, maxItemsPerRequest: 20, maxMembers: 25 });
-  // Back to a pilot: a fresh 30 days.
+  // Back to a pilot: a fresh ORGANIZATION_PILOT_DAYS (14 days).
   const back = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'pilot' }), token: owner.token });
   assert.equal(back.body.billingPeriod, null);
-  assert.ok(new Date(back.body.pilotEndsAt!).getTime() > Date.now() + 29 * 86_400_000);
+  assert.ok(new Date(back.body.pilotEndsAt!).getTime() > Date.now() + 13 * 86_400_000 && new Date(back.body.pilotEndsAt!).getTime() < Date.now() + 15 * 86_400_000);
+});
+
+test('Starter plan: in the catalog before Esencial; the owner assigns it; 3 courses, 150 drafts and 2 seats a month are enforced with the existing 402s, which name the plan', async () => {
+  const { ORGANIZATION_PAID_PLANS, ORGANIZATION_PLAN_CATALOG, ORGANIZATION_PLANS, ORGANIZATION_PILOT_DAYS, ORGANIZATION_RECOMMENDED_PLAN } = await import('@study/shared');
+  assert.deepEqual([...ORGANIZATION_PAID_PLANS], ['starter', 'esencial', 'profesional', 'centro'], 'display order: Starter first');
+  assert.ok(ORGANIZATION_PLANS.includes('starter'));
+  assert.deepEqual(ORGANIZATION_PLAN_CATALOG.starter, { limits: { coursesPerMonth: 3, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 2 }, prices: { monthly: 5_900, yearly: 59_000 } });
+  assert.equal(Math.round(((5_900 * 12 - 59_000) / (5_900 * 12)) * 100), 17, 'yearly = 17% saving, the same rule as the other plans');
+  assert.equal(ORGANIZATION_RECOMMENDED_PLAN, 'esencial');
+  assert.equal(ORGANIZATION_PILOT_DAYS, 14, 'the 2-week pilot offered to organizations');
+
+  const owner = await theOwner();
+  const admin = await orgSignUp('starter');
+  const orgId = admin.user.organizations[0].id;
+  assert.equal((await call(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'starter' }), token: admin.token })).status, 403, 'owner only');
+  const assigned = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'starter', billingPeriod: 'monthly' }), token: owner.token });
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+  assert.deepEqual([assigned.body.plan, assigned.body.billingPeriod, assigned.body.usage.period], ['starter', 'monthly', 'month']);
+  assert.deepEqual(assigned.body.limits, { coursesPerMonth: 3, itemsPerMonth: 150, maxItemsPerRequest: 20, maxMembers: 2 });
+  assert.equal((await overview(admin.token, orgId)).body.plan, 'starter', 'the organization sees its plan');
+
+  // Seats: the creating admin + 1 editor; the 3rd admin/editor is refused; reviewers are unlimited.
+  const add = (role: string) => signUp(`st-${role}`, { accountType: 'organization' }).then(async (m) => ({ m, r: await call<OrganizationMember[]>(`/orgs/${orgId}/members`, { ...json('POST', { email: m.email, role }), token: admin.token }) }));
+  assert.equal((await add('editor')).r.status, 201);
+  const third = await add('editor');
+  assert.deepEqual([third.r.status, third.r.body.code], [402, 'org_member_limit_reached']);
+  assert.equal((await add('reviewer')).r.status, 201);
+
+  // Courses: 3 a month; the 4th is refused with the existing 402 and the plan named in the details.
+  const docs = [];
+  for (let i = 0; i < 3; i++) {
+    const up = await upload(admin.token, orgId);
+    assert.equal(up.status, 201, `course ${i + 1}: ${JSON.stringify(up.body)}`);
+    docs.push(await ready(admin.token, orgId, up.body.id));
+  }
+  const fourth = await upload(admin.token, orgId);
+  assert.equal(fourth.status, 402);
+  assert.deepEqual([fourth.body.code, fourth.body.details?.limit, fourth.body.details?.max, fourth.body.details?.plan], ['org_limit_reached', 'courses', 3, 'starter']);
+
+  // Drafts: 150 a month; a request at 150 is refused, and a request near the limit is trimmed to what is left.
+  await sql`insert into usage_ledger (organization_id, user_id, kind, amount) values (${orgId}, ${admin.id}, 'bank_items', 148)`;
+  const trimmed = await generate(admin.token, orgId, docs[0]!.id, 5);
+  assert.equal(trimmed.status, 201, JSON.stringify(trimmed.body));
+  const requested = (trimmed.body as { requested?: number }).requested ?? NaN;
+  assert.ok(requested <= 2, `requested trimmed to what is left (${requested})`);
+  await sql`insert into usage_ledger (organization_id, user_id, kind, amount) values (${orgId}, ${admin.id}, 'bank_items', 150)`;
+  const refused = await generate(admin.token, orgId, docs[0]!.id, 1);
+  assert.equal(refused.status, 402);
+  assert.deepEqual([refused.body.code, refused.body.details?.limit, refused.body.details?.max, refused.body.details?.plan], ['org_limit_reached', 'items', 150, 'starter']);
+
+  // Moving up to Esencial (the recommended plan) lifts the limit at once.
+  const up = await call<AdminOrganization>(`/admin/organizations/${orgId}`, { ...json('PATCH', { plan: 'esencial', billingPeriod: 'monthly' }), token: owner.token });
+  assert.equal(up.body.limits.itemsPerMonth, 500);
+  assert.equal((await generate(admin.token, orgId, docs[0]!.id, 1)).status, 201);
 });
 
 test('separate identities with confirmed sign-up: a student and an organization sign-up for one address are independent', async () => {

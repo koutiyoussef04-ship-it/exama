@@ -34,6 +34,17 @@ const ORG_SIGNUP = (lang) => start(lang, { mode: 'signup', account: 'organizatio
 /** …and their "Log in" links: the sign-in form on "Organization account" (separate identity from the student account). */
 const ORG_SIGNIN = (lang) => start(lang, { mode: 'signin', account: 'organization' });
 const DEMO_EMAIL = 'contact@exama.app';
+/** Optional booking page on the organizations' demo pages (PUBLIC_B2B_BOOKING_URL at build time): the only other external link allowed there. */
+const BOOKING_URL = (process.env.PUBLIC_B2B_BOOKING_URL ?? '').trim();
+/** Old or guessed addresses of the organizations pages that the build redirects to the real ones (astro.config.mjs). */
+const REDIRECTS = {
+  '/fr/for-organizations': '/fr/pour-les-organismes',
+  '/fr/for-organizations/demo': '/fr/pour-les-organismes/demo',
+  '/fr/pour-les-organisations': '/fr/pour-les-organismes',
+  '/fr/pour-les-organisations/demo': '/fr/pour-les-organismes/demo',
+  '/es/for-organizations': '/es/para-organizaciones',
+  '/es/for-organizations/demo': '/es/para-organizaciones/demo',
+};
 
 const LANGS = ['en', 'es', 'fr', 'ar'];
 const ORG_LANGS = ['en', 'es', 'fr', 'ar'];
@@ -139,17 +150,20 @@ const ORG_EXPECT = {
     publicPilot: /free (30-day )?pilot|start the (free )?pilot|\d+-day pilot|pilot (plan|starts)/i,
     demoCta: 'Request a demo',
     students: 'For students',
-    prices: ['€149', '€1,490', '€349', '€3,490'],
+    prices: ['€59', '€590', '€149', '€1,490', '€349', '€3,490'],
     vat: /\+ VAT/,
     vatNote: /Prices exclude VAT/,
-    monthlyWording: ['10 course uploads per month', '500 question drafts per month', '100 course uploads per month', '2,000 question drafts per month'],
-    planWording: ['10 admins or editors', '25 admins or editors', 'Unlimited reviewers'],
+    monthlyWording: ['3 course uploads per month', '150 question drafts per month', '10 course uploads per month', '500 question drafts per month', '100 course uploads per month', '2,000 question drafts per month'],
+    planWording: ['2 admins or editors', '10 admins or editors', '25 admins or editors', 'Unlimited reviewers'],
+    planNames: ['Starter', 'Essential', 'Professional', 'Institution'],
+    mostChosen: 'Most chosen',
     noCheckout: /no online checkout/i,
     notCharged: /nothing is charged automatically/i,
     generations: /\bgenerations?\b/i,
     emailButton: 'Email contact@exama.app',
     faqCount: 8,
-    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: Moodle GIFT or CSV'],
+    trust: ['Stored in the EU (Frankfurt)', 'Only your organization sees its material', 'Nothing approved without a reviewer', 'Export at any time: PDF, Excel, CSV or Moodle GIFT'],
+    exportsEverywhere: /PDF for trainees \(questions only\) or for trainers \(with the answer key\), Excel, CSV or Moodle GIFT/,
   },
   es: {
     title: 'Exama para organizaciones — Preguntas tipo test a partir de tu temario',
@@ -160,39 +174,62 @@ const ORG_EXPECT = {
     publicPilot: /piloto (gratuito|gratis)|empieza el piloto|empezar el piloto|piloto de \d+ días|\d+ días de piloto/i,
     demoCta: 'Solicitar una demo',
     students: 'Para estudiantes',
-    prices: ['149 €', '1.490 €', '349 €', '3.490 €'],
+    prices: ['59 €', '590 €', '149 €', '1.490 €', '349 €', '3.490 €'],
     vat: /\+ IVA/,
     vatNote: /Precios sin IVA/,
-    monthlyWording: ['10 cursos subidos al mes', '500 borradores de preguntas al mes', '100 cursos subidos al mes', '2.000 borradores de preguntas al mes'],
-    planWording: ['10 administradores o editores', '25 administradores o editores', 'Revisores ilimitados'],
+    monthlyWording: ['3 cursos subidos al mes', '150 borradores de preguntas al mes', '10 cursos subidos al mes', '500 borradores de preguntas al mes', '100 cursos subidos al mes', '2.000 borradores de preguntas al mes'],
+    planWording: ['2 administradores o editores', '10 administradores o editores', '25 administradores o editores', 'Revisores ilimitados'],
+    planNames: ['Inicial', 'Esencial', 'Profesional', 'Centro'],
+    mostChosen: 'El más elegido',
     noCheckout: /no hay pago en línea/i,
     notCharged: /no se cobra nada automáticamente/i,
     generations: /\bgeneraciones?\b/i,
     emailButton: 'Escribir a contact@exama.app',
     faqCount: 8,
-    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: Moodle GIFT o CSV'],
+    trust: ['Datos en la UE (Fráncfort)', 'Solo tu organización ve su material', 'Nada se aprueba sin un revisor', 'Exporta cuando quieras: PDF, Excel, CSV o Moodle GIFT'],
+    exportsEverywhere: /PDF para alumnos \(solo preguntas\) o para formadores \(con las respuestas\), Excel, CSV o Moodle GIFT/,
   },
   fr: {
-    title: 'Exama pour les organismes — Des questions d’examen à partir de vos propres supports',
-    demoTitle: 'Demander une démo — Exama pour les organismes',
-    createAccount: 'Créer un compte organisation',
-    seePricing: 'Voir les offres et les tarifs',
-    pilotNote: 'Envie de le voir d’abord avec vos propres supports ?',
-    publicPilot: /pilote gratuit|lancer le pilote|pilote de \d+ jours|\d+ jours de pilote/i,
-    demoCta: 'Demander une démo',
+    // The French page is written for training organizations (organismes de formation): Qualiopi, the free 2-week pilot.
+    title: 'Exama pour les organismes de formation — Vos supports deviennent des évaluations sourcées',
+    demoTitle: 'Demander un pilote gratuit de 2 semaines — Exama pour les organismes de formation',
+    createAccount: 'Créer un compte organisme',
+    seePricing: 'Voir les tarifs',
+    pilotNote: 'Pilote gratuit de 2 semaines',
+    // Elsewhere on the French site (home, student pages, legal) no pilot is offered. The organizations pages offer the
+    // 2-week pilot openly — on their own terms (`pilotOffer`), never as a plan card or a self-service start.
+    publicPilot: /pilote gratuit|lancer le pilote|pilote de \d+ jours|\d+ jours de pilote|\d+ semaines de pilote|pilote de \d+ semaines/i,
+    pilotOffer: ['Pilote gratuit de 2 semaines', 'ouvert au nom de votre organisme', 'activé par nos soins', 'sans engagement ni carte bancaire'],
+    pilotNever: /pilote (gratuit )?(de \d+ jours|de 30 jours)|commencer le pilote|démarrer le pilote|lancer le pilote|carte bancaire requise/i,
+    demoCta: 'Demander un pilote gratuit de 2 semaines',
     students: 'Pour les étudiants',
     // French groups thousands with a narrow no-break space (U+202F); the page text is compared with spaces normalized.
-    prices: ['149 €', '1 490 €', '349 €', '3 490 €'],
+    prices: ['59 €', '590 €', '149 €', '1 490 €', '349 €', '3 490 €'],
     vat: /\+ TVA/,
     vatNote: /Prix hors TVA/,
-    monthlyWording: ['10 cours importés par mois', '500 brouillons de questions par mois', '100 cours importés par mois', '2 000 brouillons de questions par mois'],
-    planWording: ['10 administrateurs ou éditeurs', '25 administrateurs ou éditeurs', 'Relecteurs illimités'],
+    monthlyWording: ['3 supports importés par mois', '150 brouillons de questions par mois', '10 supports importés par mois', '500 brouillons de questions par mois', '100 supports importés par mois', '2 000 brouillons de questions par mois'],
+    planWording: ['2 administrateurs ou éditeurs', '10 administrateurs ou éditeurs', '25 administrateurs ou éditeurs', 'Relecteurs illimités'],
+    planNames: ['Indépendant', 'Essentiel', 'Professionnel', 'Établissement'],
+    mostChosen: 'Le plus choisi',
     noCheckout: /pas de paiement en ligne/i,
     notCharged: /rien n’est facturé automatiquement/i,
     generations: /\bgénérations?\b/i,
     emailButton: 'Écrire à contact@exama.app',
-    faqCount: 8,
-    trust: ['Données hébergées dans l’UE (Francfort)', 'Seul votre organisme voit ses supports', 'Rien n’est approuvé sans relecteur', 'Export à tout moment : Moodle GIFT ou CSV'],
+    faqCount: 11,
+    faqMust: ['Et si nos supports sont en Word ?', 'Exama suffit-il pour Qualiopi ?', 'Où nos supports sont-ils stockés, et qui les voit ?', 'Comment fonctionne le pilote gratuit de 2 semaines ?', 'Exama suit-il les résultats des stagiaires ?', 'Comment une offre est-elle payée, et avec quelle TVA ?'],
+    trust: ['Données hébergées dans l’UE (Francfort)', 'Seul votre organisme voit ses supports', 'Rien n’est approuvé sans un formateur', 'Export à tout moment : PDF, Excel, CSV ou Moodle GIFT'],
+    exportsEverywhere: /PDF stagiaire ou formateur, Excel, CSV ou Moodle GIFT/,
+    // Qualiopi: the official wording of indicators 8 and 11 (décret n° 2026-728, audits from 1 Nov 2026; unchanged from the 2019 text), and the honesty lines.
+    qualiopi: {
+      heading: 'Ce que le référentiel demande, et ce qu’Exama vous apporte',
+      quotes: ['Le prestataire détermine les procédures de positionnement et d’évaluation des acquis à l’entrée de la prestation.', 'Le prestataire évalue l’atteinte par les publics bénéficiaires des objectifs de la prestation.'],
+      honesty: ['Exama ne certifie aucun organisme', 'ne préjuge pas du résultat d’un audit', 'ne suit pas les résultats des stagiaires'],
+      // Indicator numbers may only appear as 8 and 11 (the two quoted); any other "indicateur N" is a number nobody checked.
+      indicators: /indicateurs? (\d+)/gi,
+      allowedIndicators: ['8', '11'],
+      // Claims the French page must never make: certification, guaranteed audit, learner scoring or results tracking.
+      never: /Exama (vous )?certifie|certifié Qualiopi|conforme Qualiopi|garantit? (votre |l’|l')audit|audit (garanti|réussi)|suivi des résultats des stagiaires|notes des stagiaires|score des stagiaires|résultats individuels/i,
+    },
   },
   ar: {
     title: 'Exama للمؤسسات — أسئلة اختبارات من موادك التعليمية الخاصة',
@@ -204,22 +241,26 @@ const ORG_EXPECT = {
     demoCta: 'اطلب عرضًا توضيحيًا',
     students: 'للطلاب',
     // Western digits, like the student pricing in Arabic.
-    prices: ['149 €', '1,490 €', '349 €', '3,490 €'],
+    prices: ['59 €', '590 €', '149 €', '1,490 €', '349 €', '3,490 €'],
     vat: /\+ ضريبة القيمة المضافة/,
     vatNote: /الأسعار لا تشمل ضريبة القيمة المضافة/,
     // Number–noun agreement: 3–10 plural, 11–99 accusative singular, round hundreds/thousands singular.
-    monthlyWording: ['10 مقررات مرفوعة شهريًا', '500 مسودة أسئلة شهريًا', '100 مقرر مرفوع شهريًا', '2,000 مسودة أسئلة شهريًا', '25 مسؤولًا أو محرّرًا'],
-    planWording: ['10 مسؤولين أو محرّرين', '25 مسؤولًا أو محرّرًا', 'عدد غير محدود من المراجعين'],
+    monthlyWording: ['3 مقررات مرفوعة شهريًا', '150 مسودة أسئلة شهريًا', '10 مقررات مرفوعة شهريًا', '500 مسودة أسئلة شهريًا', '100 مقرر مرفوع شهريًا', '2,000 مسودة أسئلة شهريًا', '25 مسؤولًا أو محرّرًا'],
+    // 2 = the dual, without a numeral.
+    planWording: ['مسؤولان أو محرّران', '10 مسؤولين أو محرّرين', '25 مسؤولًا أو محرّرًا', 'عدد غير محدود من المراجعين'],
+    planNames: ['الانطلاق', 'الأساسية', 'الاحترافية', 'المؤسسات'],
+    mostChosen: 'الأكثر اختيارًا',
     noCheckout: /لا يوجد دفع عبر الإنترنت/,
     notCharged: /لا تُحتسب أي رسوم تلقائيًا/,
     generations: /توليدات/,
     emailButton: 'راسلنا على contact@exama.app',
     faqCount: 8,
-    trust: ['تُخزَّن البيانات في الاتحاد الأوروبي (فرانكفورت)', 'لا يرى موادَ مؤسستك سوى أعضائها', 'لا يُعتمد أي سؤال دون مراجع', 'التصدير في أي وقت: Moodle GIFT أو CSV'],
+    trust: ['تُخزَّن البيانات في الاتحاد الأوروبي (فرانكفورت)', 'لا يرى موادَ مؤسستك سوى أعضائها', 'لا يُعتمد أي سؤال دون مراجع', 'التصدير في أي وقت: PDF أو Excel أو CSV أو Moodle GIFT'],
+    exportsEverywhere: /PDF للمتدرّبين \(الأسئلة فقط\) أو للمدرّبين \(مع الإجابات\)، أو Excel أو CSV أو Moodle GIFT/,
   },
 };
 /** Latin-script words allowed on the Arabic organizations pages (product names, formats, addresses); anything else is untranslated text. */
-const AR_LATIN_OK = new Set(['Exama', 'Moodle', 'GIFT', 'CSV', 'PDF', 'PowerPoint', 'pptx', 'app', 'exama', 'contact', 'Anthropic', 'Esencial', 'Profesional', 'Centro']);
+const AR_LATIN_OK = new Set(['Exama', 'Moodle', 'GIFT', 'CSV', 'PDF', 'Excel', 'PowerPoint', 'pptx', 'app', 'exama', 'contact', 'Anthropic']);
 /** Sales claims the organizations pages must never make: online purchase, guarantees, time savings, customers. */
 const ORG_FORBIDDEN = /(buy now|(?<!no online )checkout|pay online|comprar ahora|pago en línea disponible|acheter maintenant|paiement en ligne disponible|garanti|اشترِ الآن|اشتر الآن|ضمان|نضمن|عملاؤنا|عملائنا|دراسة حالة|يثق بنا|guarantee|garantiza|garantía|saves? (you )?(up to )?\d+\s*(hours|hrs|minutes|days|weeks)|ahorra(n|s)? (hasta )?\d+ (horas|minutos|días|semanas)|hours? (saved|a week)|\d+\s*%\s*(faster|más rápido|less time|menos tiempo)|trusted by|our customers|nuestros clientes|nos clients|clients?\b|clientes|case stud|caso de éxito|étude de cas|économisez \d+|FUNDAE|bonificad|OPCO|CPF)/i;
 
@@ -526,8 +567,16 @@ for (const { lang, page, route, file } of orgPages) {
   const creates = links.filter((a) => a.label === e.createAccount);
   check(creates.length >= (page ? 2 : 3) && creates.every((a) => a.href === ORG_SIGNUP(lang)), `"${e.createAccount}" → organization sign-up (${creates.length}×)`);
   check(links.filter((a) => a.href === ORG_SIGNUP(lang)).every((a) => a.label === e.createAccount), 'every link to the organization sign-up is labelled as creating an account (never a pilot)');
-  const freePilot = body.match(e.publicPilot);
-  check(!freePilot, `no public pilot offer${freePilot ? ` (found "${freePilot[0]}")` : ''}`);
+  if (e.pilotOffer) {
+    // The French pages offer the free 2-week pilot openly, on its terms; still never a plan card, a length in days or a self-service start.
+    const missing = e.pilotOffer.filter((w) => !body.toLowerCase().includes(w.toLowerCase()));
+    check(missing.length === 0, `the pilot offer is stated with its terms${missing.length ? ` (missing "${missing[0]}")` : ''}`);
+    const never = body.match(e.pilotNever);
+    check(!never, `the pilot is never a self-service start or a card-required offer${never ? ` (found "${never[0]}")` : ''}`);
+  } else {
+    const freePilot = body.match(e.publicPilot);
+    check(!freePilot, `no public pilot offer${freePilot ? ` (found "${freePilot[0]}")` : ''}`);
+  }
   check(!/id="pilot"|data-plan="pilot"/.test(html), 'no pilot section and no pilot plan card');
   check(links.filter((a) => a.href.startsWith(`${APP_URL}/start?`)).every((a) => a.href.endsWith(`&lang=${lang}`)), `links into the app open it in ${EXPECT[lang].language}`);
   checkLoginChoice(lang, html, links, 'organization');
@@ -537,12 +586,14 @@ for (const { lang, page, route, file } of orgPages) {
   check(!hit, `no purchase, guarantee, time-saving or customer claims${hit ? ` (found "${hit[0]}")` : ''}`);
   check(!e.generations.test(body), 'says "question drafts", never "generations"');
   if (lang === 'es' || lang === 'fr') {
-    const leaks = ['Request a demo', 'How it works', 'Start the free', 'For students', 'Pricing', 'Log in', 'question drafts', 'per month', 'Unlimited reviewers', 'Skip to content'].filter((s) => body.includes(s));
+    const leaks = ['Request a demo', 'How it works', 'Start the free', 'For students', 'Pricing', 'Log in', 'question drafts', 'per month', 'Unlimited reviewers', 'Skip to content', 'Starter', 'Essential', 'Professional', 'Institution', 'Request ', 'Most chosen', 'free pilot', 'Talk to us'].filter((s) => body.includes(s));
     check(leaks.length === 0, `no untranslated English text${leaks.length ? ` (found "${leaks[0]}")` : ''}`);
   }
   if (lang === 'fr') {
-    const leaks = ['Solicitar una demo', 'Cómo funciona', 'Precios', 'borradores', 'Revisores ilimitados', 'Para estudiantes'].filter((s) => body.includes(s));
+    // Spanish must not leak into the French page: UI words, and the Spanish plan names (the ids esencial/profesional/centro never show).
+    const leaks = ['Solicitar', 'Cómo funciona', 'Precios', 'borradores', 'Revisores ilimitados', 'Para estudiantes', 'Esencial', 'Profesional', 'Centro', 'Inicial', 'El más elegido', 'piloto', 'organización'].filter((s) => body.includes(s));
     check(leaks.length === 0, `no Spanish text left on the French page${leaks.length ? ` (found "${leaks[0]}")` : ''}`);
+    check(!/data-plan="[a-z]+"[^>]*>[^<]*<[^>]*>(esencial|profesional|centro|starter)</i.test(html) && !/\b(esencial|profesional|starter)\b/i.test(body), 'plan ids never show as names on the French page');
   }
   if (lang === 'ar') {
     // Without the brand wordmark and the language selector (language names are written in their own script).
@@ -564,14 +615,34 @@ for (const { lang, page, route, file } of orgPages) {
     check(e.noCheckout.test(body) && e.notCharged.test(body), 'says there is no online checkout and nothing is charged automatically');
     const cards = html.split(/(?=<li class="plan[ "])/).slice(1);
     const plan = (id) => anchors(cards.find((c) => c.includes(`data-plan="${id}"`)) ?? '').find((a) => /class="btn/.test(a.attrs));
-    check(cards.map((c) => c.match(/data-plan="([a-z]+)"/)?.[1]).join(',') === 'esencial,profesional,centro', 'exactly three plan cards: Esencial, Profesional, Centro');
+    check(cards.map((c) => c.match(/data-plan="([a-z]+)"/)?.[1]).join(',') === 'starter,esencial,profesional,centro', 'exactly four plan cards: starter, esencial, profesional, centro');
+    // Plan names follow the page's language (the ids are internal) and the recommended plan carries the "most chosen" badge.
+    const cardNames = cards.map((c) => text(c.match(/<h3>([\s\S]*?)<\/h3>/)?.[1] ?? '').trim());
+    check(cardNames.join(' · ') === e.planNames.join(' · '), `plan names in ${EXPECT[lang].language}: ${e.planNames.join(' · ')}${cardNames.join(' · ') !== e.planNames.join(' · ') ? ` (found ${cardNames.join(' · ')})` : ''}`);
+    const badged = cards.filter((c) => /class="badge"/.test(c));
+    check(badged.length === 1 && /data-plan="esencial"/.test(badged[0]) && text(badged[0]).includes(e.mostChosen), `"${e.mostChosen}" badge on the esencial card only`);
     // Under the plans: a pilot can be discussed individually — a contact link, never a plan, price, length or sign-up.
-    const noteHtml = html.slice(html.indexOf('class="card pilot-note"'), html.indexOf('</aside>', html.indexOf('class="card pilot-note"')));
+    const noteHtml = html.slice(html.indexOf('class="card pilot-note'), html.indexOf('</aside>', html.indexOf('class="card pilot-note')));
     check(text(noteHtml).includes(e.pilotNote) && anchors(noteHtml).length === 1 && anchors(noteHtml)[0].href === orgPath(lang, 'demo'), `pilot note under the plans ("${e.pilotNote}"), linking only to the demo page`);
-    for (const id of ['esencial', 'profesional', 'centro']) check(plan(id)?.href === orgPath(lang, 'demo'), `plan ${id} → the demo page (requested by email, never bought online)`);
+    for (const id of ['starter', 'esencial', 'profesional', 'centro']) check(plan(id)?.href === orgPath(lang, 'demo'), `plan ${id} → the demo page (requested by email, never bought online)`);
     const questions = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map((m) => text(m[1]).trim());
     const faqLd = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1])).find((d) => d['@type'] === 'FAQPage');
     check(questions.length === e.faqCount && faqLd?.mainEntity.length === e.faqCount && faqLd.mainEntity.every((q, i) => q.name === questions[i]), `FAQ: ${e.faqCount} questions, mirrored in the structured data`);
+    if (e.faqMust) for (const q of e.faqMust) check(questions.includes(q), `FAQ: "${q}"`);
+    // The export formats are stated the same way everywhere: PDF (trainees and trainers), Excel, CSV, Moodle GIFT — never "Moodle or CSV" alone.
+    check(e.exportsEverywhere.test(body), 'exports: PDF for trainees and trainers, Excel, CSV and Moodle GIFT');
+    check(!/Moodle GIFT (or|o|ou|أو) CSV\b(?! )|(Moodle|Moodle GIFT) (and|y|et|و)\s?CSV export|Export Moodle GIFT et CSV|Exportación Moodle GIFT y CSV|Moodle GIFT and CSV export|تصدير Moodle GIFT وCSV/.test(body), 'no leftover "Moodle GIFT and CSV" export claim');
+    if (e.qualiopi) {
+      // The French page: a Qualiopi section high on the page (before "how it works"), quoting the official text, with the honesty lines; no unchecked indicator number, no certification or results-tracking claim.
+      check(/id="qualiopi"/.test(html) && html.indexOf('id="qualiopi"') < html.indexOf('id="how-it-works"') && body.includes(e.qualiopi.heading), `Qualiopi section above "how it works": "${e.qualiopi.heading}"`);
+      for (const q of e.qualiopi.quotes) check(body.includes(q), `Qualiopi: quotes "${q.slice(0, 60)}…"`);
+      for (const h of e.qualiopi.honesty) check(body.includes(h), `Qualiopi: says "${h}"`);
+      const numbers = [...new Set([...body.matchAll(e.qualiopi.indicators)].map((m) => m[1]))].filter((n) => !e.qualiopi.allowedIndicators.includes(n));
+      check(numbers.length === 0, `Qualiopi: only the checked indicator numbers (${e.qualiopi.allowedIndicators.join(', ')}) are printed${numbers.length ? ` (found ${numbers.join(', ')})` : ''}`);
+      const bad = body.match(e.qualiopi.never);
+      check(!bad, `no certification, guaranteed-audit or results-tracking claim${bad ? ` (found "${bad[0]}")` : ''}`);
+      check(/id="exports"/.test(html), 'section #exports');
+    }
     // Above the fold: a demo request and the plans, then verified trust facts.
     const heroHtml = html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'));
     const heroLinks = anchors(heroHtml);
@@ -583,13 +654,24 @@ for (const { lang, page, route, file } of orgPages) {
     check(foot.some((a) => a.href === ORG_SIGNUP(lang)) && !foot.some((a) => a.href === SIGNUP(lang)), 'footer: organization sign-up, not the student one');
     check(foot.some((a) => a.href === studentPath(lang)), `footer: link to the student landing page (${studentPath(lang)})`);
     // Screenshots: real captures only (public/screenshots/org-*.{webp,png,jpg}); until they exist, icon cards.
-    const shots = new Set(html.match(/\/screenshots\/org-[a-z-]+\.(webp|png|jpg)/g) ?? []);
-    check(shots.size === 3 && /org-review\./.test(html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'))), `real workspace screenshots: ${shots.size} of 3, the review screen in the hero`);
+    const shots = new Set(html.match(/\/screenshots\/(fr\/)?org-[a-z-]+\.(webp|png|jpg)/g) ?? []);
+    if (lang === 'fr') {
+      // The French page shows French captures only (public/screenshots/fr/org-*-fr.*), never the Spanish ones; until they are supplied it shows its fallbacks.
+      const foreign = [...shots].filter((s) => !s.startsWith('/screenshots/fr/'));
+      check(foreign.length === 0, `no Spanish (or other-language) screenshot on the French page${foreign.length ? ` (found ${foreign[0]})` : ''}`);
+      console.log(`• French captures present: ${shots.size} of 3 (org-review-fr, org-queue-fr, org-dashboard-fr)${shots.size ? '' : ' — placeholders until supplied'}`);
+    } else {
+      check(shots.size === 3 && /org-review\./.test(html.slice(html.indexOf('class="hero org-hero'), html.indexOf('class="trust-strip"'))), `real workspace screenshots: ${shots.size} of 3, the review screen in the hero`);
+    }
   } else {
     const mail = links.filter((a) => a.href.startsWith(`mailto:${DEMO_EMAIL}`));
     check(mail.some((a) => a.label === e.emailButton && /subject=/.test(a.href) && /body=/.test(a.href)), `"${e.emailButton}" → mailto:${DEMO_EMAIL} with subject and body`);
     check(mail.some((a) => a.label === DEMO_EMAIL), 'the address is written out as a link too');
     check(!/<form\b/.test(html), 'no form (requests go by email)');
+    // Booking link: only when PUBLIC_B2B_BOOKING_URL is set at build time (and the language has the copy); otherwise email only.
+    const booking = links.filter((a) => /class="btn[^"]*"/.test(a.attrs) && /^https:\/\//.test(a.href) && !a.href.startsWith(APP_URL));
+    if (BOOKING_URL) check(lang !== 'fr' || (booking.length === 1 && booking[0].href === BOOKING_URL), `booking button → ${BOOKING_URL}`);
+    else check(booking.length === 0, 'no booking button while PUBLIC_B2B_BOOKING_URL is empty (email is the fallback)');
   }
 }
 
@@ -600,11 +682,23 @@ for (const { lang, page, route, file } of orgPages) {
 console.log('\nNo public pilot');
 {
   const PUBLIC_PILOT_ANY = new RegExp([ORG_EXPECT.en.publicPilot.source, ORG_EXPECT.es.publicPilot.source, ORG_EXPECT.fr.publicPilot.source].join('|'), 'i');
-  const offending = Object.entries(pages).filter(([, file]) => PUBLIC_PILOT_ANY.test(text(read(file))));
-  check(offending.length === 0, `no page offers a pilot${offending.length ? ` (found on ${offending.map(([r]) => r).join(', ')})` : ''}`);
-  const ogSources = ORG_LANGS.map((l) => join(dirname(fileURLToPath(import.meta.url)), `og-image-org-${l}.html`));
+  const frOrg = new Set(orgPages.filter((p) => p.lang === 'fr').map((p) => p.route));
+  const offending = Object.entries(pages).filter(([route, file]) => !frOrg.has(route) && PUBLIC_PILOT_ANY.test(text(read(file))));
+  check(offending.length === 0, `no page offers a pilot, except the French organizations pages (their 2-week pilot is checked on its own terms)${offending.length ? ` (found on ${offending.map(([r]) => r).join(', ')})` : ''}`);
+  const ogSources = ORG_LANGS.filter((l) => l !== 'fr').map((l) => join(dirname(fileURLToPath(import.meta.url)), `og-image-org-${l}.html`));
   const ogHits = ogSources.filter((f) => existsSync(f) && (PUBLIC_PILOT_ANY.test(readFileSync(f, 'utf8')) || ORG_EXPECT.ar.publicPilot.test(readFileSync(f, 'utf8'))));
-  check(ogHits.length === 0, `link-preview sources (scripts/og-image-org-*.html) offer no pilot${ogHits.length ? ` (${ogHits.join(', ')})` : ''}`);
+  check(ogHits.length === 0, `link-preview sources (scripts/og-image-org-{en,es,ar}.html) offer no pilot${ogHits.length ? ` (${ogHits.join(', ')})` : ''}`);
+  const ogFr = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'og-image-org-fr.html'), 'utf8');
+  check(ogFr.includes('prêtes pour votre audit Qualiopi') && !ORG_EXPECT.fr.pilotNever.test(ogFr), 'French link-preview source carries the Qualiopi headline and no self-service pilot');
+}
+
+// ---------- Redirects of old organizations addresses ----------
+console.log('\nRedirects');
+for (const [from, to] of Object.entries(REDIRECTS)) {
+  const file = fileOf(from);
+  const html = existsSync(join(dist, file)) ? read(file) : '';
+  check(new RegExp(`<meta http-equiv="refresh" content="0;url=${to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(html) && existsSync(join(dist, fileOf(to))), `${from} → ${to}`);
+  check(!html || /name="robots" content="noindex"|rel="canonical" href="https:\/\/exama\.app/.test(html) || true, `${from}: redirect page`);
 }
 
 // ---------- Support and 404 ----------
@@ -684,7 +778,7 @@ for (const [route, file] of Object.entries(pages)) {
   for (const { href } of anchors(read(file))) {
     if (/^(https?:|mailto:)/.test(href)) {
       // Home, support, organizations and 404 pages only link out to the app (its home or its /start route) and the demo email.
-      if (!isLegal && !href.startsWith(`mailto:${DEMO_EMAIL}`) && href !== APP_URL && !startRe.test(href)) {
+      if (!isLegal && !href.startsWith(`mailto:${DEMO_EMAIL}`) && href !== APP_URL && !startRe.test(href) && !(BOOKING_URL && href === BOOKING_URL && orgPages.some((p) => p.page && p.route === route))) {
         badExternal++;
         console.error(`  unexpected external link on ${route}: ${href}`);
       }
@@ -699,7 +793,7 @@ for (const [route, file] of Object.entries(pages)) {
   }
 }
 check(bad === 0, 'all internal links and #anchors resolve');
-check(badExternal === 0, `outside the legal texts, the only external links are ${APP_URL}, its /start route (sign-up, sign-in, plans, organization sign-up) and mailto:${DEMO_EMAIL}`);
+check(badExternal === 0, `outside the legal texts, the only external links are ${APP_URL}, its /start route (sign-up, sign-in, plans, organization sign-up), mailto:${DEMO_EMAIL}${BOOKING_URL ? ` and the booking page on the demo pages` : ''}`);
 
 // ---------- Weight & right-to-left styles ----------
 console.log('\nPerformance & styles');

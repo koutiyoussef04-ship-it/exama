@@ -1,12 +1,11 @@
 ---
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { Image } from 'astro:assets';
 import logoMark from '../../assets/brand/logo-mark.png';
 import Icon from '../Icon.astro';
 import { ORG_SECTIONS } from '../../data/b2b';
 import { orgPathFor, type OrgLang } from '../../i18n';
 import { orgCopy } from '../../i18n/b2b';
+import { orgHeroScreenshot } from '../../lib/org-screenshots';
 
 interface Props {
   lang: OrgLang;
@@ -16,13 +15,13 @@ const c = orgCopy(lang);
 const h = c.hero;
 const trustIcons = ['globe', 'users', 'graded', 'export'];
 const inputIcons = ['pdf', 'slides'];
-const outputIcons = ['check', 'export', 'export'];
+const outputIcons = ['check', 'pdf', 'export'];
 /**
- * The hero shows the REAL review screen as soon as public/screenshots/org-review.{webp,png,jpg} exists (a genuine
- * capture of app.exama.app/org — never a mock-up). Until then: the diagram of the workflow.
+ * The hero shows the REAL review screen as soon as its capture exists (src/lib/org-screenshots.ts: a genuine capture
+ * of app.exama.app/org in the page's language — never a mock-up, never the Spanish capture on the French page).
+ * Until then: the diagram of the workflow.
  */
-const shotExt = ['webp', 'png', 'jpg'].find((e) => existsSync(join(process.cwd(), 'public', 'screenshots', `org-review.${e}`)));
-const shot = shotExt ? `/screenshots/org-review.${shotExt}` : null;
+const shot = orgHeroScreenshot(lang);
 ---
 
 <section class:list={['hero', 'org-hero', { 'has-shot': !!shot }]} aria-labelledby="hero-title">
