@@ -1,0 +1,92 @@
+---
+/**
+ * Demo video (/fr/pour-les-organismes/video, /for-organizations/video, /ar/for-organizations/video): one page per
+ * language, linked from outreach emails and LinkedIn messages. A plain <video> element with controls: no script, no
+ * third-party player, no autoplay. The files live in public/videos (43 s, silent, captions burnt in). Not in the
+ * sitemap and noindex: these pages are for people who received the link.
+ */
+import Base from '../../layouts/Base.astro';
+import { orgOgImage, orgPathFor, type OrgLang } from '../../i18n';
+import { orgCopy } from '../../i18n/b2b';
+
+type VideoLang = 'fr' | 'en' | 'ar';
+interface Props {
+  lang: VideoLang;
+}
+const { lang } = Astro.props;
+const c = orgCopy(lang as OrgLang);
+
+const COPY: Record<VideoLang, { title: string; description: string; eyebrow: string; h1: string; lead: string; aria: string; fallback: string; note?: string; back: string }> = {
+  fr: {
+    title: 'Exama en 45 secondes : de votre support de cours à dix questions sourcées',
+    description: 'Une vidéo de 43 secondes : Exama rédige des questions à partir de vos supports, montre la phrase dont chacune vient et attend la validation d’un formateur.',
+    eyebrow: 'Démo en 45 secondes',
+    h1: 'De votre support de cours à dix questions sourcées',
+    lead: 'Exama rédige les questions à partir de vos propres supports, montre la phrase exacte dont chacune vient et attend la validation d’un formateur. La vidéo est muette : tout est écrit à l’écran.',
+    aria: 'Vidéo de démonstration d’Exama, 43 secondes, sans son',
+    fallback: 'Votre navigateur ne lit pas cette vidéo. Vous pouvez la télécharger :',
+    back: 'Voir la page pour les organismes',
+  },
+  en: {
+    title: 'Exama in 45 seconds: from your course material to ten sourced questions',
+    description: 'A 43-second video: Exama drafts questions from your own course material, shows the sentence each one comes from and waits for a reviewer’s approval.',
+    eyebrow: 'Demo in 45 seconds',
+    h1: 'From your course material to ten sourced questions',
+    lead: 'Exama drafts the questions from your own course material, shows the exact sentence each one comes from and waits for a reviewer’s approval. The video has no sound: everything is written on screen.',
+    aria: 'Exama demo video, 43 seconds, no sound',
+    fallback: 'Your browser cannot play this video. You can download it:',
+    note: 'The product screens in this video are shown in French. The Exama interface is also available in English.',
+    back: 'See the page for organizations',
+  },
+  ar: {
+    title: 'Exama في 45 ثانية: من موادكم التدريبية إلى عشرة أسئلة موثّقة المصدر',
+    description: 'فيديو مدته 43 ثانية: يكتب Exama الأسئلة من موادكم التدريبية نفسها، ويُظهر الجملة التي أُخذ منها كل سؤال، وينتظر اعتماد المراجع.',
+    eyebrow: 'عرض في 45 ثانية',
+    h1: 'من موادكم التدريبية إلى عشرة أسئلة موثّقة المصدر',
+    lead: 'يكتب Exama الأسئلة من موادكم التدريبية نفسها، ويُظهر الجملة التي أُخذ منها كل سؤال حرفيًا، وينتظر اعتماد المراجع. الفيديو بلا صوت: كل شيء مكتوب على الشاشة.',
+    aria: 'فيديو توضيحي لـ Exama، 43 ثانية، بلا صوت',
+    fallback: 'متصفحكم لا يشغّل هذا الفيديو. يمكنكم تنزيله:',
+    note: 'شاشات المنتج في هذا الفيديو معروضة بالفرنسية. واجهة Exama متاحة بالعربية أيضًا.',
+    back: 'صفحة المؤسسات',
+  },
+};
+const v = COPY[lang];
+const base = orgPathFor(lang as OrgLang);
+const src = `/videos/exama-demo-${lang}.mp4`;
+const alternates = (['en', 'fr', 'ar'] as const).map((l) => ({ lang: l, path: `${orgPathFor(l)}/video` }));
+---
+
+<Base title={v.title} description={v.description} path={`${base}/video`} lang={lang} alternates={alternates} nav="org" ogImage={orgOgImage(lang as OrgLang)} ogAlt={c.meta.ogAlt} noindex>
+  <section class="section demo-page">
+    <div class="container narrow">
+      <p class="eyebrow">{v.eyebrow}</p>
+      <h1>{v.h1}</h1>
+      <p class="lead">{v.lead}</p>
+
+      <video class="demo-video" controls playsinline preload="metadata" poster={`/videos/exama-demo-${lang}.jpg`} width="1920" height="1080" aria-label={v.aria}>
+        <source src={src} type="video/mp4" />
+        <p>{v.fallback} <a href={src}>exama-demo-{lang}.mp4</a></p>
+      </video>
+      {v.note && <p class="fineprint">{v.note}</p>}
+
+      <p class="demo-video-cta"><a class="btn btn-primary btn-lg" href={`${base}/demo`}>{c.cta.demo}</a></p>
+      <p class="back"><a href={base}>{v.back}</a></p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .demo-video {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    margin-block: 1.5rem 0.75rem;
+    border-radius: 14px;
+    border: 1px solid rgba(21, 23, 63, 0.12);
+    background: #f6f6fb;
+  }
+  .demo-video-cta {
+    margin-block: 1.5rem 1rem;
+  }
+</style>
